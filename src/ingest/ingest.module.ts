@@ -1,3 +1,4 @@
+import { PricingModule } from '../pricing/pricing.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatCompletionsController } from './chat-completions.controller';
@@ -18,6 +19,7 @@ import { CallLog, RouteDecisionLog, VideoJob } from '../database/entities';
 @Module({
   imports: [
     PipelineModule,
+    PricingModule,
     ConfigModule,
     AuthModule,
     AgentProfilesModule,

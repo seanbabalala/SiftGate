@@ -1,7 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { AuthProvider } from './contexts/AuthContext'
 import { App } from './App'
@@ -19,18 +19,14 @@ const queryClient = new QueryClient({
 })
 
 const root = createRoot(document.getElementById('root')!)
+// Keep the existing route tree while enabling supported SPA/history navigation blockers.
+const router = createBrowserRouter([{ path: '*', element: <ThemeProvider><AuthProvider><App /></AuthProvider></ThemeProvider> }])
 
 function renderApp() {
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <ThemeProvider>
-            <AuthProvider>
-              <App />
-            </AuthProvider>
-          </ThemeProvider>
-        </BrowserRouter>
+        <RouterProvider router={router} />
       </QueryClientProvider>
     </StrictMode>,
   )

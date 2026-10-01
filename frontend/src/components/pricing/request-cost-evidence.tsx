@@ -1,0 +1,38 @@
+import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { CardStatic } from '@/components/ui/card'
+import { PriceCostBreakdown, PricingDiagnostics } from './price-simulator'
+import { HistoricalPriceSource } from './historical-price-source'
+import { HistoricalFx } from './historical-fx'
+import { CostFacts, CostValue } from './cost-metadata'
+import { BatchCorrectionDialog } from './batch-correction-dialog'
+import type { CostLedgerSummary } from '@/types/pricing'
+
+export function RequestCostEvidence({ workspace, ledger, canManage, canInspect, onRefresh }: { workspace: string; ledger: CostLedgerSummary; canManage: boolean; canInspect: boolean; onRefresh: () => void }) {
+  const { t, i18n } = useTranslation('pricing')
+  const [correction, setCorrection] = useState<CostLedgerSummary['attempts'][number] | null>(null)
+  const date = (value: string | null) => value ? new Date(value).toLocaleString(i18n.resolvedLanguage) : '—'
+  return <div className="space-y-5">
+    <CardStatic className="space-y-4 p-5"><h2 className="font-semibold">{t('cost.attempts')}</h2>{!ledger.attempts.length && <p className="text-sm text-[var(--foreground-muted)]">{t('cost.noAttempts')}</p>}
+      {ledger.attempts.map((attempt, index) => {
+        const cost = attempt.effective_cost ?? attempt.cost
+        const dispatch = cost?.attribution ?? attempt.dispatch
+        return <details key={attempt.id} open={ledger.attempts.length === 1 || undefined} className="rounded-lg border border-[var(--border)] p-4"><summary className="cursor-pointer text-sm font-semibold"><span className="mr-2 font-mono">{index + 1}.</span>{attempt.node_id} / {attempt.model}<span className="ml-3 text-xs font-normal text-[var(--foreground-muted)]">{t(cost ? `status.${cost.status}` : 'status.pending')}</span></summary><div className="mt-5 space-y-5">
+          <CostFacts items={[[t('cost.attemptId'), <code>{attempt.id}</code>], [t('cost.feeSource'), t(`cost.fee.${attempt.fee_source}`)], [t('cost.dispatched'), date(attempt.dispatched_at)], [t('cost.completed'), date(attempt.completed_at)], [t('cost.failure'), <code>{attempt.error_code ?? '—'}</code>], [t('cost.hash'), <code>{attempt.effective_cost_hash ?? '—'}</code>], ...(dispatch ? [[t('cost.requestedModel'), <code>{dispatch.requested_model}</code>], [t('cost.wireModel'), <code>{dispatch.wire_model}</code>], [t('cost.responseModel'), <code>{cost?.attribution?.response_model ?? '—'}</code>], [t('cost.credential'), <code>{dispatch.credential_id} · {dispatch.credential_strategy}</code>], [t('cost.routeModel'), <code>{dispatch.route_model}</code>], [t('cost.dispatchProtocol'), <code>{dispatch.protocol}</code>], [t('cost.dispatchIndex'), dispatch.dispatch_index], [t('cost.compatibilityRetry'), dispatch.compatibility_retry_index], [t('cost.retry'), dispatch.credential_retry_index], [t('cost.invocation'), <code>{dispatch.invocation_id}</code>]] as Array<[string, ReactNode]> : [])]} />
+          {cost ? <><PriceCostBreakdown cost={cost} title={t('cost.effective')} /><HistoricalPriceSource workspace={workspace} cost={cost}/><HistoricalFx workspace={workspace} requestId={ledger.request_id} receiptHash={attempt.effective_cost_hash} cost={cost} /></> : <p className="text-sm text-[var(--foreground-muted)]">{t('cost.pendingHelp')}</p>}
+          {cost && !cost.batch && attempt.fee_source === 'provider' && canInspect && <Link className={buttonVariants({ variant: 'outline' })} to={`/pricing/attempts/${encodeURIComponent(attempt.id)}/correction`}>{t('attemptCorrection.title')}</Link>}
+          {cost?.batch && canManage && <Button variant="outline" onClick={() => setCorrection(attempt)}>{t('correction.open')}</Button>}
+          {attempt.adjustments.length > 0 && <details className="space-y-4"><summary className="cursor-pointer text-sm font-semibold">{t('cost.history', { count: attempt.adjustments.length })}</summary>{attempt.cost && <><PriceCostBreakdown cost={attempt.cost} title={t('cost.original')} /><HistoricalPriceSource workspace={workspace} cost={attempt.cost}/><HistoricalFx workspace={workspace} requestId={ledger.request_id} receiptHash={attempt.cost_hash} cost={attempt.cost} /></>}{attempt.adjustments.map((change) => <section key={change.id} className="space-y-3 border-t border-[var(--border)] pt-4"><div className="flex flex-wrap gap-2"><Badge variant="zinc">{t('revision', { revision: change.application.revision })}</Badge><span className="text-xs">{date(change.created_at)}</span></div><p className="break-words text-sm">{change.reason}</p><CostFacts items={[[t('cost.actor'), change.application.actor_id], [t('cost.source'), t(`cost.source.${change.application.source}`)], [t('cost.budgetEffect'), t(`cost.effect.${change.application.budget_state}`)], [t('cost.costDelta'), <CostValue value={change.application.cost_delta} currency="USD" />], [t('cost.tokenDelta'), <CostValue value={change.application.tokens_delta} />], [t('cost.previousHash'), <code>{change.previous_hash}</code>]]} /><PriceCostBreakdown cost={change.cost} title={t('cost.revisionCost')} /><HistoricalPriceSource workspace={workspace} cost={change.cost}/><HistoricalFx workspace={workspace} requestId={ledger.request_id} receiptHash={change.cost_hash} cost={change.cost} /></section>)}</details>}
+        </div></details>
+      })}
+    </CardStatic>
+    <CardStatic className="space-y-4 p-5"><h2 className="font-semibold">{t('cost.reservations')}</h2>{ledger.reservations.map((reservation) => <details key={reservation.id} className="rounded-lg border border-[var(--border)] p-4"><summary className="cursor-pointer text-sm"><code>{reservation.id.slice(0, 12)}</code> · {t(`cost.reservation.${reservation.state}`)}</summary><div className="mt-4 space-y-4"><CostFacts items={[[t('cost.budgetReserved'), <CostValue value={reservation.reserved_cost_usd} currency="USD" />], [t('cost.budgetCommitted'), <CostValue value={reservation.committed_cost_usd} currency="USD" />], [t('cost.reservedTokens'), <CostValue value={reservation.reserved_tokens} />], [t('cost.committedTokens'), <CostValue value={reservation.committed_tokens} />], [t('cost.basis'), <code>{reservation.budget_basis}</code>], [t('cost.settlement'), reservation.settlement_status ? t(`cost.settlement.${reservation.settlement_status}`) : '—'], [t('cost.overrun'), <CostValue value={reservation.known_cost_overrun_usd} currency="USD" />], [t('cost.failure'), <code>{reservation.settlement_error_code ?? '—'}</code>]]} />
+      {reservation.admission && <><p className="text-xs">{t(`admission.${reservation.admission.mode}`)} · {t(`cost.guarantee.${reservation.admission.guarantee}`)}</p><p className="text-xs leading-5 text-[var(--foreground-muted)]">{t('cost.boundHelp')}</p><ul className="space-y-2 text-xs">{Object.entries(reservation.admission.quantity_bounds).map(([dimension, bound]) => <li key={dimension}>{t(`dimension.${dimension}`)}: <CostValue value={bound?.value} /> · <code>{bound?.basis}</code></li>)}</ul><PricingDiagnostics diagnostics={reservation.admission.diagnostics} /></>}
+      {reservation.observed_limit_excesses.map((entry, index) => <p key={index} className="text-xs text-[var(--warning)]">{t(`dimension.${entry.dimension}`)}: {entry.observed} &gt; {entry.limit}</p>)}
+    </div></details>)}</CardStatic>
+    {correction && <BatchCorrectionDialog workspace={workspace} attempt={correction} onClose={() => { setCorrection(null); onRefresh() }} onApplied={() => { setCorrection(null); onRefresh() }} />}
+  </div>
+}

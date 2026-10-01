@@ -3,6 +3,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 import { CallLog } from '../database/entities/call-log.entity';
 
+type RoutingStatsLog = Pick<CallLog,
+  | 'timestamp' | 'tier' | 'node_id' | 'model' | 'status_code'
+  | 'is_fallback' | 'latency_ms' | 'cost_usd' | 'retry_count'
+>;
+
+const ROUTING_STATS_FIELDS = [
+  'timestamp', 'tier', 'node_id', 'model', 'status_code',
+  'is_fallback', 'latency_ms', 'cost_usd', 'retry_count',
+] as const satisfies ReadonlyArray<keyof RoutingStatsLog>;
+
 export interface AdaptiveRoutingStatsOptions {
   windowHours?: number;
   sampleLimit?: number;
@@ -64,11 +74,7 @@ export class AdaptiveRoutingStatsService {
     const minSamples = this.clampInt(options.minSamples ?? 5, 1, 1000);
     const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
 
-    const logs = await this.callLogRepo.find({
-      where: { timestamp: MoreThanOrEqual(since) },
-      order: { timestamp: 'DESC' },
-      take: sampleLimit,
-    });
+    const logs = await this.readWindow(since, sampleLimit);
 
     const globalGroups = this.groupLogs(logs, (log) =>
       this.targetKey(log.node_id, log.model),
@@ -108,9 +114,35 @@ export class AdaptiveRoutingStatsService {
     };
   }
 
+  private async readWindow(since: Date, sampleLimit: number): Promise<RoutingStatsLog[]> {
+    // Flat statistics need no entity identity map, relation processing or hidden
+    // primary-key selection. Preserve the driver's normal column conversions.
+    const query = this.callLogRepo.createQueryBuilder('log').select([]);
+    const columns = ROUTING_STATS_FIELDS.map((field) => {
+      const column = this.callLogRepo.metadata.findColumnWithPropertyName(field);
+      if (!column) throw new Error(`Missing routing statistics column: ${field}`);
+      query.addSelect(`log.${field}`, field);
+      return column;
+    });
+    const rows = await query
+      .where({ timestamp: MoreThanOrEqual(since) })
+      .orderBy('log.timestamp', 'DESC')
+      .take(sampleLimit)
+      .getRawMany<Record<keyof RoutingStatsLog, unknown>>();
+    const driver = this.callLogRepo.manager.connection.driver;
+    return rows.map((row) => {
+      const log = {} as RoutingStatsLog;
+      for (const column of columns) {
+        const value = row[column.propertyName as keyof RoutingStatsLog];
+        if (value !== undefined) column.setEntityValue(log, driver.prepareHydratedValue(value, column));
+      }
+      return log;
+    });
+  }
+
   private summarizeTarget(
     key: string,
-    logs: CallLog[],
+    logs: RoutingStatsLog[],
     tier?: string,
   ): RouteTargetStats {
     const [node, model] = this.splitTargetKey(key);
@@ -155,10 +187,10 @@ export class AdaptiveRoutingStatsService {
   }
 
   private groupLogs(
-    logs: CallLog[],
-    keyFn: (log: CallLog) => string,
-  ): Map<string, CallLog[]> {
-    const groups = new Map<string, CallLog[]>();
+    logs: RoutingStatsLog[],
+    keyFn: (log: RoutingStatsLog) => string,
+  ): Map<string, RoutingStatsLog[]> {
+    const groups = new Map<string, RoutingStatsLog[]>();
     for (const log of logs) {
       const key = keyFn(log);
       const group = groups.get(key);

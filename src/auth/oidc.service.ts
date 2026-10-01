@@ -136,12 +136,20 @@ export class OidcService {
       stored.inviteTokenHash,
       userId,
       identity.email,
+      async (invitation, manager) => {
+        await this.memberships.withTransaction((service) => service.ensureMembership({
+          userId,
+          organizationId: invitation.organizationId,
+          workspaceId: invitation.workspaceId,
+          role: invitation.role,
+        }), manager);
+      },
     );
     const oidc = this.config.dashboardOidc;
     const role = inviteMapping?.role || oidc.default_role;
     const workspaceId = inviteMapping?.workspaceId || oidc.default_workspace_id || DEFAULT_WORKSPACE_ID;
     const organizationId = inviteMapping?.organizationId || DEFAULT_ORGANIZATION_ID;
-    await this.memberships.ensureMembership({
+    if (!inviteMapping) await this.memberships.ensureMembership({
       userId,
       organizationId,
       workspaceId,

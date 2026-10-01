@@ -30,6 +30,7 @@ export function useWorkspaces() {
   }, [queryClient])
 
   const switchWorkspace = useCallback(async (workspaceId: string) => {
+    if (!window.dispatchEvent(new CustomEvent('siftgate:before-workspace-change', { cancelable: true, detail: { workspaceId } }))) return;
     const result = await apiPost<{ state: WorkspaceState }>(
       '/api/dashboard/workspaces/switch',
       { workspace_id: workspaceId },
@@ -90,6 +91,7 @@ export function useWorkspaces() {
 
   return {
     data: query.data ?? null,
+    error: query.error,
     isLoading: query.isLoading,
     refresh,
     switchWorkspace,

@@ -1,4 +1,7 @@
-import { Controller, Post, Req, Res, Logger, UseGuards } from '@nestjs/common';
+import { MediaTaskService } from '../pricing/media-task.service';
+import { sendMediaTaskResponse } from './media-task-response';
+import { sendPublicErrorResponse } from '../http/public-contract';
+import { Controller, Get, Param, Post, Req, Res, Logger, UseGuards, Optional } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -41,7 +44,21 @@ export class MediaController {
   private readonly logger = new Logger(MediaController.name);
   private readonly normalizer = new MediaNormalizer();
 
-  constructor(private readonly pipeline: PipelineService) {}
+  constructor(private readonly pipeline: PipelineService, @Optional() private readonly mediaTasks?: MediaTaskService) {}
+
+  @Get('images/jobs/:id')
+  async getImageJob(@Param('id') id: string, @Req() req: Request, @Res() res: Response) { await this.imageTask('status', id, req, res); }
+
+  @Post('images/jobs/:id/cancel')
+  async cancelImageJob(@Param('id') id: string, @Req() req: Request, @Res() res: Response) { await this.imageTask('cancel', id, req, res); }
+
+  @Get('images/jobs/:id/content')
+  async imageJobContent(@Param('id') id: string, @Req() req: Request, @Res() res: Response) { await this.imageTask('content', id, req, res); }
+
+  private async imageTask(action: 'status' | 'cancel' | 'content', id: string, req: Request, res: Response): Promise<void> {
+    if (this.mediaTasks && await sendMediaTaskResponse(this.mediaTasks, 'image', action, id, req, res)) return;
+    sendPublicErrorResponse(res, 404, 'openai', 'Image job not found', { type: 'not_found' });
+  }
 
   @Post('images/generations')
   @ApiOperation({
@@ -60,7 +77,7 @@ export class MediaController {
   @Post('images/edits')
   @ApiOperation({
     summary: 'OpenAI Images edits compatible ingress',
-    description: 'Passes OpenAI-compatible image edit requests through SiftGate image-capable nodes. Multipart file contents are not inspected or transformed.',
+    description: 'Passes OpenAI-compatible image edit requests through SiftGate image-capable nodes. Payload bytes pass through unchanged. Enabled pricing may inspect bounded PCM WAV headers; it does not retain media contents.',
   })
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({ type: ImageEditRequestDto })
@@ -74,7 +91,7 @@ export class MediaController {
   @Post('images/variations')
   @ApiOperation({
     summary: 'OpenAI Images variations compatible ingress',
-    description: 'Passes OpenAI-compatible image variation requests through SiftGate image-capable nodes. Multipart file contents are not inspected or transformed.',
+    description: 'Passes OpenAI-compatible image variation requests through SiftGate image-capable nodes. Payload bytes pass through unchanged. Enabled pricing may inspect bounded PCM WAV headers; it does not retain media contents.',
   })
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({ type: ImageVariationRequestDto })
@@ -88,7 +105,7 @@ export class MediaController {
   @Post('audio/transcriptions')
   @ApiOperation({
     summary: 'OpenAI Audio transcription compatible ingress',
-    description: 'Passes OpenAI-compatible audio transcription requests through SiftGate audio-capable nodes. Multipart file contents are not inspected or transformed.',
+    description: 'Passes OpenAI-compatible audio transcription requests through SiftGate audio-capable nodes. Payload bytes pass through unchanged. Enabled pricing may inspect bounded PCM WAV headers; it does not retain media contents.',
   })
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({ type: AudioTranscriptionRequestDto })
@@ -102,7 +119,7 @@ export class MediaController {
   @Post('audio/translations')
   @ApiOperation({
     summary: 'OpenAI Audio translation compatible ingress',
-    description: 'Passes OpenAI-compatible audio translation requests through SiftGate audio-capable nodes. Multipart file contents are not inspected or transformed.',
+    description: 'Passes OpenAI-compatible audio translation requests through SiftGate audio-capable nodes. Payload bytes pass through unchanged. Enabled pricing may inspect bounded PCM WAV headers; it does not retain media contents.',
   })
   @ApiConsumes('application/json', 'multipart/form-data')
   @ApiBody({ type: AudioTranslationRequestDto })

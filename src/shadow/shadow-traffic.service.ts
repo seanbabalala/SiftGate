@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, MoreThanOrEqual, Repository } from 'typeorm';
+import { withCoordinatedRepository } from '../database/coordinated-repository';
 import { ConfigService } from '../config/config.service';
 import { ModelPricing } from '../config/gateway.config';
 import {
@@ -356,16 +357,21 @@ export class ShadowTrafficService {
     }
   }
 
-  async recent(namespaceId?: string, limit = 50): Promise<ShadowTrafficResult[]> {
+  async recent(
+    namespaceId?: string,
+    limit = 50,
+  ): Promise<ShadowTrafficResult[]> {
     const safeLimit = Math.min(Math.max(limit, 1), 200);
-    return this.shadowRepo.find({
-      where: workspaceFindWhere(
-        this.workspaceContext.currentWorkspaceId(),
-        namespaceId ? { namespace_id: namespaceId } : {},
-      ),
-      order: { timestamp: 'DESC' },
-      take: safeLimit,
-    });
+    return withCoordinatedRepository(this.shadowRepo, false, (repo) =>
+      repo.find({
+        where: workspaceFindWhere(
+          this.workspaceContext.currentWorkspaceId(),
+          namespaceId ? { namespace_id: namespaceId } : {},
+        ),
+        order: { timestamp: 'DESC' },
+        take: safeLimit,
+      }),
+    );
   }
 
   async comparisonReport(filters: ShadowReportFilters = {}): Promise<ShadowComparisonReport> {
@@ -489,16 +495,35 @@ export class ShadowTrafficService {
     };
   }
 
-  async comparisonForResult(id: number): Promise<ShadowResultComparison | null> {
-    const row = await this.shadowRepo.findOne({
-      where: workspaceFindWhere(this.workspaceContext.currentWorkspaceId(), { id }),
-    });
+  async comparisonForResult(
+    id: number,
+  ): Promise<ShadowResultComparison | null> {
+    const row = await withCoordinatedRepository(
+      this.shadowRepo,
+      false,
+      (repo) =>
+        repo.findOne({
+          where: workspaceFindWhere(
+            this.workspaceContext.currentWorkspaceId(),
+            { id },
+          ),
+        }),
+    );
     if (!row) return null;
-    const primary = await this.callLogRepo.findOne({
-      where: workspaceFindWhere(row.workspace_id, { request_id: row.request_id }),
-    });
+    const primary = await withCoordinatedRepository(
+      this.callLogRepo,
+      false,
+      (repo) =>
+        repo.findOne({
+          where: workspaceFindWhere(row.workspace_id, {
+            request_id: row.request_id,
+          }),
+        }),
+    );
     const shadowCost = this.estimateShadowCost(row);
-    const primaryTokens = primary ? primary.input_tokens + primary.output_tokens : null;
+    const primaryTokens = primary
+      ? primary.input_tokens + primary.output_tokens
+      : null;
     const shadowTokens = row.input_tokens + row.output_tokens;
     const riskNotes = this.resultRiskNotes(row, primary, shadowCost);
 
@@ -535,16 +560,25 @@ export class ShadowTrafficService {
         error: row.error,
       },
       deltas: {
-        latency_ms: primary && row.latency_ms !== null ? this.round(row.latency_ms - primary.latency_ms, 2) : null,
-        cost_usd: primary ? this.round(shadowCost.cost - (primary.cost_usd || 0), 8) : null,
+        latency_ms:
+          primary && row.latency_ms !== null
+            ? this.round(row.latency_ms - primary.latency_ms, 2)
+            : null,
+        cost_usd: primary
+          ? this.round(shadowCost.cost - (primary.cost_usd || 0), 8)
+          : null,
         tokens: primaryTokens !== null ? shadowTokens - primaryTokens : null,
         fallback: primary ? (primary.is_fallback ? -1 : 0) : null,
       },
       samples: {
         prompt_stored: Boolean(row.prompt_sample),
         response_stored: Boolean(row.response_sample),
-        prompt_preview: row.prompt_sample ? this.sanitizeSample(row.prompt_sample) : null,
-        response_preview: row.response_sample ? this.sanitizeSample(row.response_sample) : null,
+        prompt_preview: row.prompt_sample
+          ? this.sanitizeSample(row.prompt_sample)
+          : null,
+        response_preview: row.response_sample
+          ? this.sanitizeSample(row.response_sample)
+          : null,
       },
       risk_notes: riskNotes,
       privacy: this.privacySummary(),
@@ -585,31 +619,62 @@ export class ShadowTrafficService {
     else if (filters.apiKeyName) where.api_key_name = filters.apiKeyName;
     if (filters.sourceFormat) where.source_format = filters.sourceFormat;
 
-    const rows = await this.shadowRepo.find({
-      where: workspaceFindWhere(this.workspaceContext.currentWorkspaceId(), where),
-      order: { timestamp: 'DESC' },
-      take: Math.min(Math.max(this.config.shadowTraffic.max_recent_results, 100), 5000),
-    });
+    const rows = await withCoordinatedRepository(
+      this.shadowRepo,
+      false,
+      (repo) =>
+        repo.find({
+          where: workspaceFindWhere(
+            this.workspaceContext.currentWorkspaceId(),
+            where,
+          ),
+          order: { timestamp: 'DESC' },
+          take: Math.min(
+            Math.max(this.config.shadowTraffic.max_recent_results, 100),
+            5000,
+          ),
+        }),
+    );
 
     return rows.filter((row) => {
-      if (filters.node && row.primary_node !== filters.node && row.shadow_node !== filters.node) {
+      if (
+        filters.node &&
+        row.primary_node !== filters.node &&
+        row.shadow_node !== filters.node
+      ) {
         return false;
       }
-      if (filters.model && row.primary_model !== filters.model && row.shadow_model !== filters.model) {
+      if (
+        filters.model &&
+        row.primary_model !== filters.model &&
+        row.shadow_model !== filters.model
+      ) {
         return false;
       }
       return true;
     });
   }
 
-  private async findPrimaryLogs(rows: ShadowTrafficResult[]): Promise<Map<string, CallLog>> {
-    const requestIds = Array.from(new Set(rows.map((row) => row.request_id).filter(Boolean)));
+  private async findPrimaryLogs(
+    rows: ShadowTrafficResult[],
+  ): Promise<Map<string, CallLog>> {
+    const requestIds = Array.from(
+      new Set(rows.map((row) => row.request_id).filter(Boolean)),
+    );
     if (requestIds.length === 0) return new Map();
-    const logs = await this.callLogRepo.find({
-      where: workspaceFindWhere(this.workspaceContext.currentWorkspaceId(), {
-        request_id: In(requestIds),
-      }),
-    });
+    const logs = await withCoordinatedRepository(
+      this.callLogRepo,
+      false,
+      (repo) =>
+        repo.find({
+          where: workspaceFindWhere(
+            this.workspaceContext.currentWorkspaceId(),
+            {
+              request_id: In(requestIds),
+            },
+          ),
+        }),
+    );
     return new Map(logs.map((log) => [log.request_id, log]));
   }
 
@@ -943,29 +1008,36 @@ export class ShadowTrafficService {
     promptSample: string | null;
     responseSample: string | null;
   }): Promise<void> {
-    const saved = await this.shadowRepo.save(this.shadowRepo.create({
-      request_id: params.context.requestId,
-      kind: params.kind,
-      workspace_id: params.context.workspaceId,
-      namespace_id: params.context.namespaceId || null,
-      api_key_id: params.context.apiKeyId || null,
-      api_key_name: params.context.apiKeyName || null,
-      session_id: params.context.sessionId || null,
-      trace_id: params.context.traceId || null,
-      source_format: params.context.sourceFormat,
-      primary_node: params.context.primaryNode,
-      primary_model: params.context.primaryModel,
-      shadow_node: params.shadowNode,
-      shadow_model: params.shadowModel,
-      status: params.status,
-      latency_ms: params.latencyMs,
-      status_code: params.statusCode,
-      error: params.error || null,
-      input_tokens: params.usage.input_tokens || 0,
-      output_tokens: params.usage.output_tokens || 0,
-      prompt_sample: params.promptSample,
-      response_sample: params.responseSample,
-    }));
+    const saved = await withCoordinatedRepository(
+      this.shadowRepo,
+      true,
+      (repo) =>
+        repo.save(
+          repo.create({
+            request_id: params.context.requestId,
+            kind: params.kind,
+            workspace_id: params.context.workspaceId,
+            namespace_id: params.context.namespaceId || null,
+            api_key_id: params.context.apiKeyId || null,
+            api_key_name: params.context.apiKeyName || null,
+            session_id: params.context.sessionId || null,
+            trace_id: params.context.traceId || null,
+            source_format: params.context.sourceFormat,
+            primary_node: params.context.primaryNode,
+            primary_model: params.context.primaryModel,
+            shadow_node: params.shadowNode,
+            shadow_model: params.shadowModel,
+            status: params.status,
+            latency_ms: params.latencyMs,
+            status_code: params.statusCode,
+            error: params.error || null,
+            input_tokens: params.usage.input_tokens || 0,
+            output_tokens: params.usage.output_tokens || 0,
+            prompt_sample: params.promptSample,
+            response_sample: params.responseSample,
+          }),
+        ),
+    );
 
     await this.enforceRetention(saved.id);
   }
@@ -975,19 +1047,23 @@ export class ShadowTrafficService {
     if (maxRecent <= 0) return;
 
     try {
-      const rows = await this.shadowRepo.find({
-        order: { timestamp: 'DESC' },
-        skip: maxRecent,
-        take: 200,
+      await withCoordinatedRepository(this.shadowRepo, true, async (repo) => {
+        const rows = await repo.find({
+          order: { timestamp: 'DESC' },
+          skip: maxRecent,
+          take: 200,
+        });
+        const staleIds = rows
+          .map((row) => row.id)
+          .filter((id) => id !== newestId);
+        if (staleIds.length > 0) {
+          await repo.delete({ id: In(staleIds) });
+        }
       });
-      const staleIds = rows
-        .map((row) => row.id)
-        .filter((id) => id !== newestId);
-      if (staleIds.length > 0) {
-        await this.shadowRepo.delete({ id: In(staleIds) });
-      }
     } catch (err) {
-      this.logger.debug(`Shadow retention cleanup skipped: ${(err as Error).message}`);
+      this.logger.debug(
+        `Shadow retention cleanup skipped: ${(err as Error).message}`,
+      );
     }
   }
 }

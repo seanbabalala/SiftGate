@@ -1,3 +1,13 @@
+import { nativeVideoRequestShape } from "../pricing/video-result-profile";
+import { PricedEmbeddingBatchingService } from "../pricing/priced-embedding-batching.service";
+import { PricingBatchClientError } from "../pricing/pricing-batch-runtime.types";
+import { getUsageEvidence } from '../canonical/usage-evidence';
+import type { ProviderAttemptObserver } from "../providers/provider-attempt.types";
+import { PricingAdmissionError } from "../pricing/pricing-admission-error";
+import { MediaDispatchUncertainError } from "../pricing/media-task.types";
+import { PricingRuntimeService } from '../pricing/pricing-runtime.service';
+import type { RuntimeSettlementLogs } from '../pricing/cost-ledger.service';
+import { serializeDatabaseAccess } from '../database/database-serialization';
 import {
   Injectable,
   BeforeApplicationShutdown,
@@ -93,6 +103,7 @@ import { SemanticPlatformService } from '../semantic-platform/semantic-platform.
 import { WorkspaceContextService } from '../workspaces/workspace-context.service';
 import { normalizeWorkspaceId } from '../workspaces/workspace-scope';
 import {
+  sendPublicErrorResponse,
   GATEWAY_REQUEST_ID_HEADER,
   LEGACY_REQUEST_ID_HEADER,
 } from '../http/public-contract';
@@ -122,6 +133,7 @@ export interface PipelineResult {
   requestId?: string;
   nodeId?: string;
   model?: string;
+  pricingReplayed?: boolean;
 }
 
 interface SmartRouteResolution {
@@ -178,6 +190,7 @@ interface MediaAttemptResult {
   retries: number;
   fallbackReason: FallbackReason | null;
   reservation?: BudgetReservation | null;
+  stopFallback?: boolean;
 }
 
 interface PrimaryAttemptResult extends NodeAttemptResult {
@@ -253,6 +266,8 @@ export class PipelineService implements BeforeApplicationShutdown {
     @Optional() private readonly agentProfiles?: AgentProfileService,
     @Optional() private readonly intelligenceLoop?: IntelligenceLoopService,
     @Optional() private readonly semanticPlatform?: SemanticPlatformService,
+    @Optional() private readonly pricingRuntime?: PricingRuntimeService,
+    @Optional() private readonly pricedEmbeddingBatching?: PricedEmbeddingBatchingService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -261,6 +276,11 @@ export class PipelineService implements BeforeApplicationShutdown {
 
   async process(canonical: CanonicalRequest): Promise<PipelineResult> {
     const requestId = uuidv4();
+    const run = () => this.processWithinPricing(canonical, requestId);
+    return this.pricingRuntime ? this.pricingRuntime.runRequest(requestId, canonical, this.workspaceIdForCanonical(canonical), run) : run();
+  }
+
+  private async processWithinPricing(canonical: CanonicalRequest, requestId: string): Promise<PipelineResult> {
     const startTime = Date.now();
 
     return this.telemetry.withSpan(
@@ -294,6 +314,7 @@ export class PipelineService implements BeforeApplicationShutdown {
 
         try {
           this.assertApiKeyRequestAllowed(canonical);
+      await this.pricingRuntime?.admit();
 
           // ── preRequest Hook ──
           if (!this.hooks.isEmpty()) {
@@ -778,13 +799,39 @@ export class PipelineService implements BeforeApplicationShutdown {
 
           // ── Budget Record ──
           currentPhase = 'budgetRecord';
-          const { costUsd, totalTokens } = await this.recordBudgetUsage(
-            canonical,
-            canonicalResponse.usage,
-            usedModel,
-            usedNodeId,
-            activeBudgetReservation,
-          );
+          const joinCandidate = this.config.database.type === 'postgres' &&
+            !this.config.database.route_trace_write_behind &&
+            this.pricingRuntime?.canJoinLogSettlement?.(requestId, this.workspaceIdForCanonical(canonical), { model: usedModel, node_id: usedNodeId }, activeBudgetReservation) === true &&
+            !this.config.intelligence.async_eval.enabled;
+          let joinedLogParams: Parameters<PipelineService['logCall']>[0] | null = null;
+          if (joinCandidate) {
+            try {
+              const resolvedExperimentGroup = this.resolveExperimentGroupForTarget(
+                experimentGroupsByTarget, usedNodeId, usedModel, experimentGroup,
+              );
+              // Enabled async evaluation keeps its original post-budget order.
+              // The disabled branch constructs pure metadata only.
+              const trace = this.intelligenceLoop
+                ? this.intelligenceLoop.withIntelligence(finalRouteTrace, {
+                    async_eval: this.intelligenceLoop.enqueueAsyncEval({ canonical, response: canonicalResponse,
+                      target: { node: usedNodeId, model: usedModel }, requestId, statusCode: 200,
+                      latencyMs: canonicalResponse.routing.latency_ms }),
+                  })
+                : finalRouteTrace;
+              joinedLogParams = { requestId, canonical, tier, score, nodeId: usedNodeId, model: usedModel,
+                statusCode: 200, isFallback, latencyMs: canonicalResponse.routing.latency_ms,
+                usage: canonicalResponse.usage, error: null, retryCount: totalRetries,
+                experimentGroup: resolvedExperimentGroup, domainHint, modalityHints,
+                fallbackReason, fallbackFromNode, routeTrace: trace };
+            } catch {
+              // Log/trace preparation cannot turn a completed provider expense
+              // into a release. Fall back to the original budget-first path.
+              joinedLogParams = null;
+            }
+          }
+          const { costUsd, totalTokens } = joinedLogParams
+            ? await this.recordBudgetAndLog(canonical, canonicalResponse.usage, usedModel, usedNodeId, activeBudgetReservation, joinedLogParams)
+            : await this.recordBudgetUsage(canonical, canonicalResponse.usage, usedModel, usedNodeId, activeBudgetReservation);
 
           // ── Telemetry Metrics ──
           const durationMs = Date.now() - startTime;
@@ -804,12 +851,10 @@ export class PipelineService implements BeforeApplicationShutdown {
             this.telemetry.costTotal.add(costUsd, { node: usedNodeId, model: usedModel });
           }
 
-          const resolvedExperimentGroup = this.resolveExperimentGroupForTarget(
-            experimentGroupsByTarget,
-            usedNodeId,
-            usedModel,
-            experimentGroup,
-          );
+          if (!joinedLogParams) {
+            const resolvedExperimentGroup = this.resolveExperimentGroupForTarget(
+              experimentGroupsByTarget, usedNodeId, usedModel, experimentGroup,
+            );
           if (this.intelligenceLoop) {
             finalRouteTrace = this.intelligenceLoop.withIntelligence(finalRouteTrace, {
               async_eval: this.intelligenceLoop.enqueueAsyncEval({
@@ -827,6 +872,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             usage: canonicalResponse.usage, error: null, retryCount: totalRetries,
             experimentGroup: resolvedExperimentGroup, domainHint, modalityHints,
             fallbackReason, fallbackFromNode, routeTrace: finalRouteTrace });
+          }
           this.shadowTraffic?.enqueueChat(
             requestId,
             canonical,
@@ -902,6 +948,13 @@ export class PipelineService implements BeforeApplicationShutdown {
     options: { signal?: AbortSignal } = {},
   ): Promise<PipelineResult> {
     const requestId = uuidv4();
+    const run = () => this.processEmbeddingsWithinPricing(canonical, options, requestId);
+    return this.pricingRuntime ? this.pricingRuntime.runRequest(requestId, canonical, this.workspaceIdForCanonical(canonical), run) : run();
+  }
+
+  private async processEmbeddingsWithinPricing(
+    canonical: CanonicalEmbeddingRequest,
+    options: { signal?: AbortSignal } = {}, requestId: string): Promise<PipelineResult> {
     const startTime = Date.now();
     const requestedModel = canonical.model || canonical.metadata.original_model || 'auto';
 
@@ -921,6 +974,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         let activeBudgetReservation: BudgetReservation | null = null;
         try {
           this.assertApiKeyRequestAllowed(canonical);
+      await this.pricingRuntime?.admit();
 
           const validationError = this.validateEmbeddingRequest(canonical);
           if (validationError) {
@@ -1035,7 +1089,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             };
           }
 
-          if (response.usage.input_tokens === 0) {
+          if (response.usage.input_tokens === 0 && getUsageEvidence(response.usage)?.usage.quantities.total_input_tokens?.value == null) {
             response.usage.input_tokens = this.estimateEmbeddingInputTokens(canonical.input);
           }
 
@@ -1125,6 +1179,13 @@ export class PipelineService implements BeforeApplicationShutdown {
     options: { signal?: AbortSignal } = {},
   ): Promise<PipelineResult> {
     const requestId = uuidv4();
+    const run = () => this.processRerankWithinPricing(canonical, options, requestId);
+    return this.pricingRuntime ? this.pricingRuntime.runRequest(requestId, canonical, this.workspaceIdForCanonical(canonical), run) : run();
+  }
+
+  private async processRerankWithinPricing(
+    canonical: CanonicalRerankRequest,
+    options: { signal?: AbortSignal } = {}, requestId: string): Promise<PipelineResult> {
     const startTime = Date.now();
     const requestedModel = canonical.model || canonical.metadata.original_model || 'auto';
 
@@ -1144,6 +1205,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         let activeBudgetReservation: BudgetReservation | null = null;
         try {
           this.assertApiKeyRequestAllowed(canonical);
+      await this.pricingRuntime?.admit();
 
           const validationError = this.validateRerankRequest(canonical);
           if (validationError) {
@@ -1341,6 +1403,13 @@ export class PipelineService implements BeforeApplicationShutdown {
     options: { signal?: AbortSignal } = {},
   ): Promise<PipelineResult> {
     const requestId = uuidv4();
+    const run = () => this.processMediaWithinPricing(canonical, options, requestId);
+    return this.pricingRuntime ? this.pricingRuntime.runRequest(requestId, canonical, this.workspaceIdForCanonical(canonical), run) : run();
+  }
+
+  private async processMediaWithinPricing(
+    canonical: CanonicalMediaRequest,
+    options: { signal?: AbortSignal } = {}, requestId: string): Promise<PipelineResult> {
     const startTime = Date.now();
     const requestedModel = canonical.model || canonical.metadata.original_model || 'auto';
 
@@ -1364,6 +1433,9 @@ export class PipelineService implements BeforeApplicationShutdown {
         let activeBudgetReservation: BudgetReservation | null = null;
         try {
           this.assertApiKeyRequestAllowed(canonical);
+      await this.pricingRuntime?.admit();
+          const replay = await this.pricingRuntime?.mediaReplay();
+          if (replay) return replay;
 
           const validationError = this.validateMediaRequest(canonical);
           if (validationError) {
@@ -1449,6 +1521,7 @@ export class PipelineService implements BeforeApplicationShutdown {
               break;
             }
             lastError = attempt.lastError;
+            if (attempt.stopFallback) break;
             fallbackReason = attempt.fallbackReason || fallbackReason;
           }
 
@@ -1476,6 +1549,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             return {
               body: this.formatError(canonical.source_format, failureStatus, errorMsg),
               statusCode: failureStatus,
+              requestId,
             };
           }
 
@@ -1893,6 +1967,7 @@ export class PipelineService implements BeforeApplicationShutdown {
     retryConfig: RetryConfig,
     options: { signal?: AbortSignal } = {},
   ): Promise<EmbeddingAttemptResult> {
+    if (options.signal?.aborted) throw new GatewayRequestRejectedError('Client canceled embedding request.', 499);
     const maxAttempts = 1 + retryConfig.max_retries;
     let lastError: Error | null = null;
     let retries = 0;
@@ -1906,6 +1981,7 @@ export class PipelineService implements BeforeApplicationShutdown {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const attemptStart = Date.now();
       try {
+        if (options.signal?.aborted) throw new GatewayRequestRejectedError('Client canceled embedding request.', 499);
         const response = await this.forwardEmbeddingsMaybeBatched(
           canonical,
           nodeId,
@@ -1928,6 +2004,14 @@ export class PipelineService implements BeforeApplicationShutdown {
           reservation,
         };
       } catch (err) {
+        if (err instanceof PricingBatchClientError) {
+          await this.releaseBudgetReservation(reservation);
+          throw new GatewayRequestRejectedError(err.message, err.statusCode);
+        }
+        if (options.signal?.aborted) {
+          await this.releaseBudgetReservation(reservation);
+          throw new GatewayRequestRejectedError('Client canceled embedding request.', 499);
+        }
         lastError = err as Error;
         const fallbackReason = this.resolveFallbackReason(lastError);
         if (lastError instanceof ConcurrencyLimitError) {
@@ -2139,7 +2223,7 @@ export class PipelineService implements BeforeApplicationShutdown {
     retryConfig: RetryConfig,
     options: { signal?: AbortSignal } = {},
   ): Promise<MediaAttemptResult> {
-    const maxAttempts = 1 + retryConfig.max_retries;
+    const maxAttempts = (canonical.source_format === "video_generation" || canonical.source_format.startsWith("image_")) && this.pricingRuntime?.active() ? 1 : 1 + retryConfig.max_retries;
     let lastError: Error | null = null;
     let retries = 0;
     const reservation = await this.reserveBudgetUsage(
@@ -2177,6 +2261,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         };
       } catch (err) {
         lastError = err as Error;
+        if (err instanceof MediaDispatchUncertainError) return { response: null, lastError, retries, fallbackReason: 'upstream_error', reservation: null, stopFallback: true };
         const fallbackReason = this.resolveFallbackReason(lastError);
         if (lastError instanceof ConcurrencyLimitError) {
           this.logger.warn(lastError.message);
@@ -2291,21 +2376,11 @@ export class PipelineService implements BeforeApplicationShutdown {
     },
   ): Promise<CanonicalResponse> {
     const timeoutMs = this.resolveFallbackTimeoutMs();
-    if (timeoutMs === undefined) {
-      return this.providerClient.forward(
-        canonical,
-        nodeId,
-        model,
-        routingMeta,
-      );
-    }
-    return this.providerClient.forward(
-      canonical,
-      nodeId,
-      model,
-      routingMeta,
-      { timeoutMs },
-    );
+    const credentialAttemptLimit = this.pricingRuntime?.credentialAttemptLimit?.({ node_id: nodeId, model });
+    const dispatch = (pricingAttempts?: ProviderAttemptObserver) => timeoutMs === undefined && credentialAttemptLimit === undefined && pricingAttempts === undefined
+      ? this.providerClient.forward(canonical, nodeId, model, routingMeta)
+      : this.providerClient.forward(canonical, nodeId, model, routingMeta, { ...(pricingAttempts ? { pricingAttempts } : {}), ...(timeoutMs !== undefined ? { timeoutMs } : {}), ...(credentialAttemptLimit !== undefined ? { credentialAttemptLimit } : {}) });
+    return this.pricingRuntime ? this.pricingRuntime.forward(canonical, { node_id: nodeId, model }, dispatch) : dispatch();
   }
 
   private forwardEmbeddingsWithFallbackTimeout(
@@ -2321,22 +2396,10 @@ export class PipelineService implements BeforeApplicationShutdown {
     options: { signal?: AbortSignal } = {},
   ): Promise<CanonicalEmbeddingResponse> {
     const timeoutMs = this.resolveFallbackTimeoutMs();
-    if (timeoutMs === undefined) {
-      return this.providerClient.forwardEmbeddings(
-        canonical,
-        nodeId,
-        model,
-        routingMeta,
-        { signal: options.signal },
-      );
-    }
-    return this.providerClient.forwardEmbeddings(
-      canonical,
-      nodeId,
-      model,
-      routingMeta,
-      { timeoutMs, signal: options.signal },
-    );
+    const credentialAttemptLimit = this.pricingRuntime?.credentialAttemptLimit?.({ node_id: nodeId, model });
+    const dispatch = (pricingAttempts?: ProviderAttemptObserver) => this.providerClient.forwardEmbeddings(canonical, nodeId, model, routingMeta,
+      { ...(pricingAttempts ? { pricingAttempts } : {}), ...(timeoutMs === undefined ? { signal: options.signal } : { timeoutMs, signal: options.signal }), ...(credentialAttemptLimit !== undefined ? { credentialAttemptLimit } : {}) });
+    return this.pricingRuntime ? this.pricingRuntime.forward(canonical, { node_id: nodeId, model }, dispatch) : dispatch();
   }
 
   private forwardRerankWithFallbackTimeout(
@@ -2352,22 +2415,10 @@ export class PipelineService implements BeforeApplicationShutdown {
     options: { signal?: AbortSignal } = {},
   ): Promise<CanonicalRerankResponse> {
     const timeoutMs = this.resolveFallbackTimeoutMs();
-    if (timeoutMs === undefined) {
-      return this.providerClient.forwardRerank(
-        canonical,
-        nodeId,
-        model,
-        routingMeta,
-        { signal: options.signal },
-      );
-    }
-    return this.providerClient.forwardRerank(
-      canonical,
-      nodeId,
-      model,
-      routingMeta,
-      { timeoutMs, signal: options.signal },
-    );
+    const credentialAttemptLimit = this.pricingRuntime?.credentialAttemptLimit?.({ node_id: nodeId, model });
+    const dispatch = (pricingAttempts?: ProviderAttemptObserver) => this.providerClient.forwardRerank(canonical, nodeId, model, routingMeta,
+      { ...(pricingAttempts ? { pricingAttempts } : {}), ...(timeoutMs === undefined ? { signal: options.signal } : { timeoutMs, signal: options.signal }), ...(credentialAttemptLimit !== undefined ? { credentialAttemptLimit } : {}) });
+    return this.pricingRuntime ? this.pricingRuntime.forward(canonical, { node_id: nodeId, model }, dispatch) : dispatch();
   }
 
   private forwardMediaWithFallbackTimeout(
@@ -2383,22 +2434,10 @@ export class PipelineService implements BeforeApplicationShutdown {
     options: { signal?: AbortSignal } = {},
   ): Promise<CanonicalMediaResponse> {
     const timeoutMs = this.resolveFallbackTimeoutMs();
-    if (timeoutMs === undefined) {
-      return this.providerClient.forwardMedia(
-        canonical,
-        nodeId,
-        model,
-        routingMeta,
-        { signal: options.signal },
-      );
-    }
-    return this.providerClient.forwardMedia(
-      canonical,
-      nodeId,
-      model,
-      routingMeta,
-      { timeoutMs, signal: options.signal },
-    );
+    const credentialAttemptLimit = this.pricingRuntime?.credentialAttemptLimit?.({ node_id: nodeId, model });
+    const dispatch = (pricingAttempts?: ProviderAttemptObserver) => this.providerClient.forwardMedia(canonical, nodeId, model, routingMeta,
+      { ...(pricingAttempts ? { pricingAttempts } : {}), timeoutMs, signal: options.signal, ...(credentialAttemptLimit !== undefined ? { credentialAttemptLimit } : {}), singleAttempt: !!this.pricingRuntime?.active() && (canonical.source_format === "video_generation" || canonical.source_format.startsWith("image_")) });
+    return this.pricingRuntime ? this.pricingRuntime.forward(canonical, { node_id: nodeId, model }, dispatch) : dispatch();
   }
 
   private forwardEmbeddingsMaybeBatched(
@@ -2423,6 +2462,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         is_fallback: boolean;
         fallback_reason?: string | null;
       },
+      dispatchOptions: { signal?: AbortSignal } = options,
     ) =>
       this.withConcurrencySlot(dispatchNodeId, dispatchModel, () =>
         this.forwardEmbeddingsWithFallbackTimeout(
@@ -2430,11 +2470,18 @@ export class PipelineService implements BeforeApplicationShutdown {
           dispatchNodeId,
           dispatchModel,
           dispatchRoutingMeta,
-          options,
+          dispatchOptions,
         ),
       );
 
-    if (!this.embeddingBatching) {
+    if (this.pricingRuntime?.active() && this.pricedEmbeddingBatching) {
+      return this.pricedEmbeddingBatching.enqueue(canonical, nodeId, model,
+        () => dispatch(canonical, nodeId, model, routingMeta),
+        (request, batchOptions) => this.withConcurrencySlot(nodeId, model, () => this.providerClient.forwardEmbeddings(request, nodeId, model, routingMeta, { ...batchOptions, timeoutMs: this.resolveFallbackTimeoutMs() })),
+        options.signal);
+    }
+
+    if (!this.embeddingBatching || this.pricingRuntime?.active()) {
       return dispatch(canonical, nodeId, model, routingMeta);
     }
 
@@ -2455,17 +2502,10 @@ export class PipelineService implements BeforeApplicationShutdown {
     options: { signal?: AbortSignal } = {},
   ): AsyncGenerator<CanonicalStreamEvent> {
     const timeoutMs = this.resolveFallbackTimeoutMs();
-    if (timeoutMs === undefined) {
-      return this.providerClient.forwardStream(canonical, nodeId, model, {
-        signal: options.signal,
-      });
-    }
-    return this.providerClient.forwardStream(
-      canonical,
-      nodeId,
-      model,
-      { timeoutMs, signal: options.signal },
-    );
+    const credentialAttemptLimit = this.pricingRuntime?.credentialAttemptLimit?.({ node_id: nodeId, model });
+    const dispatch = (pricingAttempts?: ProviderAttemptObserver) => this.providerClient.forwardStream(canonical, nodeId, model,
+      { ...(pricingAttempts ? { pricingAttempts } : {}), ...(timeoutMs === undefined ? { signal: options.signal } : { timeoutMs, signal: options.signal }), ...(credentialAttemptLimit !== undefined ? { credentialAttemptLimit } : {}) });
+    return this.pricingRuntime ? this.pricingRuntime.stream(canonical, { node_id: nodeId, model }, dispatch) : dispatch();
   }
 
   private assertStructuredOutputResponse(
@@ -2696,6 +2736,13 @@ export class PipelineService implements BeforeApplicationShutdown {
     res: ExpressResponse,
   ): Promise<void> {
     const requestId = uuidv4();
+    const run = () => this.processStreamWithinPricing(canonical, res, requestId);
+    return this.pricingRuntime ? this.pricingRuntime.runRequest(requestId, canonical, this.workspaceIdForCanonical(canonical), run) : run();
+  }
+
+  private async processStreamWithinPricing(
+    canonical: CanonicalRequest,
+    res: ExpressResponse, requestId: string): Promise<void> {
     const streamStartTime = Date.now();
     const store = new Map<string, unknown>([
       ['request_id', requestId],
@@ -2773,6 +2820,7 @@ export class PipelineService implements BeforeApplicationShutdown {
 
     try {
       this.assertApiKeyRequestAllowed(canonical);
+      await this.pricingRuntime?.admit();
 
       // ── preRequest Hook (stream) ──
       if (!this.hooks.isEmpty()) {
@@ -3658,6 +3706,11 @@ export class PipelineService implements BeforeApplicationShutdown {
         return;
       }
 
+      if (err instanceof PricingAdmissionError && !headersFlushed) {
+        sendPublicErrorResponse(res, err.statusCode, canonical.metadata.source_format === 'messages' ? 'anthropic' : 'openai', err.message, { type: err.type, code: err.code, details: err.details, requestId });
+        rootSpan.end(); return;
+      }
+
       if (err instanceof BudgetExceededError && !headersFlushed) {
         this.logger.warn(`Budget exceeded (stream reservation): ${err.message}`);
         res.status(429).json(
@@ -3915,9 +3968,11 @@ export class PipelineService implements BeforeApplicationShutdown {
     }
     if (
       canonical.source_format === 'video_generation' &&
-      typeof canonical.payload.prompt !== 'string'
+      typeof canonical.payload.prompt !== 'string' &&
+      !nativeVideoRequestShape('gemini-veo-rest-v1', canonical.payload) &&
+      !nativeVideoRequestShape('runway-task-v1', canonical.payload)
     ) {
-      return 'Video generation requests must include a string prompt.';
+      return 'Video generation requests must include a string prompt or a supported native video request envelope.';
     }
     return null;
   }
@@ -4358,7 +4413,8 @@ export class PipelineService implements BeforeApplicationShutdown {
             target.model,
           ) || {};
         const pricing = this.config.getModelPricing(target.model, target.node);
-        const estimatedCost =
+        const frozenEstimate = tokenEstimate ? this.pricingRuntime?.estimate({ node_id: target.node, model: target.model }, tokenEstimate.input_tokens, tokenEstimate.output_tokens) : null;
+        const estimatedCost = frozenEstimate ? (frozenEstimate.report_amount === null ? null : Number(frozenEstimate.report_amount)) :
           pricing && tokenEstimate
             ? this.calculateCost(
                 {
@@ -6026,6 +6082,10 @@ export class PipelineService implements BeforeApplicationShutdown {
   // ══════════════════════════════════════════════════════
 
   private async checkBudget(canonical: LoggableCanonicalRequest): Promise<void> {
+    // The legacy precheck evaluates every token rule, even for a captured non-token
+    // tariff. Its pricing-ledger reservation instead validates the frozen binding
+    // and atomically checks all applicable monetary scopes before provider IO.
+    if (this.pricingRuntime?.usesNonTokenBudget?.()) return;
     if (canonical.metadata.namespace_id) {
       if (canonical.metadata.team_id) {
         await this.budgetService.check(
@@ -6073,6 +6133,8 @@ export class PipelineService implements BeforeApplicationShutdown {
   ): Promise<BudgetReservation> {
     const usage = this.estimateBudgetReservationUsage(canonical);
     const multiplier = Math.max(1, attemptMultiplier);
+    const priced = await this.pricingRuntime?.reserve(canonical, { model, node_id: nodeId }, usage, multiplier);
+    if (priced) return priced;
     const estimatedUsage: TokenUsage = {
       input_tokens: usage.input_tokens * multiplier,
       output_tokens: usage.output_tokens * multiplier,
@@ -6182,6 +6244,8 @@ export class PipelineService implements BeforeApplicationShutdown {
     nodeId?: string,
     reservation?: BudgetReservation | null,
   ): Promise<{ totalTokens: number; costUsd: number }> {
+    const priced = await this.pricingRuntime?.budgetResult(canonical, usage, { model, node_id: nodeId }, reservation);
+    if (priced) return priced;
     const pricing = this.config.getModelPricing(model, nodeId);
     const costUsd = this.calculateCost(usage, pricing);
     const totalTokens = (usage.input_tokens || 0) + (usage.output_tokens || 0);
@@ -6235,6 +6299,25 @@ export class PipelineService implements BeforeApplicationShutdown {
     }
 
     return { totalTokens, costUsd };
+  }
+
+  private async recordBudgetAndLog(
+    canonical: LoggableCanonicalRequest, usage: TokenUsage, model: string, nodeId: string,
+    reservation: BudgetReservation | null | undefined, params: Parameters<PipelineService['logCall']>[0],
+  ): Promise<{ costUsd: number; totalTokens: number }> {
+    let budget: { costUsd: number; totalTokens: number } | undefined;
+    await this.logCall(params, async logs => {
+      try {
+        const joined = await this.pricingRuntime?.budgetResultWithLogs(canonical, usage, { model, node_id: nodeId }, reservation, logs);
+        if (joined) { budget = joined.budget; return joined.saved; }
+        return null;
+      } finally {
+        if (!budget) budget = await this.recordBudgetUsage(canonical, usage, model, nodeId, reservation);
+      }
+    });
+    // Pure log preparation/observers may fail before the callback is reached.
+    // Accounting must still run; no priced dispatch may be lost to logging.
+    return budget ?? this.recordBudgetUsage(canonical, usage, model, nodeId, reservation);
   }
 
   private async recordSyntheticSuccess(params: {
@@ -6340,14 +6423,16 @@ export class PipelineService implements BeforeApplicationShutdown {
     mediaProviderResponseType?: string | null;
     firstTokenLatencyMs?: number | null;
     tokensPerSecond?: number | null;
-  }): Promise<void> {
+  }, settleWithLogs?: (logs: RuntimeSettlementLogs) => Promise<CallLog | null>): Promise<void> {
+    let deferredMetrics: (() => Promise<void>) | undefined;
     try {
       const pricing = this.config.getModelPricing(params.model, params.nodeId);
-      const costUsd = this.calculateCost(params.usage, pricing);
-      const costWithoutCacheUsd = this.calculateCostWithoutCache(
-        params.usage,
-        pricing,
-      );
+      const projectLogCost = this.config.database?.type === 'postgres' &&
+        !this.shouldWriteCallLogsBehind() &&
+        this.pricingRuntime?.ownsLogContext?.(params.requestId, this.workspaceIdForCanonical(params.canonical)) === true;
+      const ledgerSummary = projectLogCost ? null : await this.pricingRuntime?.logSummary();
+      const costUsd = this.pricingRuntime?.active() ? Number(ledgerSummary?.known_subtotal ?? '0') : this.calculateCost(params.usage, pricing);
+      const costWithoutCacheUsd = this.pricingRuntime?.active() ? null : this.calculateCostWithoutCache(params.usage, pricing);
       const structuredOutput = this.resolveStructuredOutputLogFields(
         params.canonical,
         params.nodeId,
@@ -6436,7 +6521,10 @@ export class PipelineService implements BeforeApplicationShutdown {
         experiment_group: params.experimentGroup || null,
         ...intelligenceMetadata,
       });
-      this.telemetry.recordCallMetrics({
+      let joinedLog: CallLog | null = null;
+      let joinedRoute: RouteDecisionLog | undefined;
+      let routePreparationFailed = false;
+      const recordMetrics = (amount: number) => this.telemetry.recordCallMetrics({
         tier: params.tier,
         node: params.nodeId,
         model: this.metricModelLabel(params.nodeId, params.model),
@@ -6446,11 +6534,32 @@ export class PipelineService implements BeforeApplicationShutdown {
         outputTokens: params.usage.output_tokens || 0,
         cacheCreationInputTokens: params.usage.cache_creation_input_tokens || 0,
         cacheReadInputTokens: params.usage.cache_read_input_tokens || 0,
-        costUsd,
+        costUsd: amount,
         isFallback: params.isFallback,
         fallbackReason: params.fallbackReason || null,
         fallbackFromNode: params.fallbackFromNode || null,
       });
+      if (projectLogCost) {
+        // Only the synchronous owned PostgreSQL path can reuse the projection
+        // computed under persistCallLogs' request lock. SQLite queued logs still
+        // need their preliminary summary before publishing a write-behind entry.
+        deferredMetrics = async () => {
+          deferredMetrics = undefined;
+          const summary = await this.pricingRuntime!.logSummary();
+          log.cost_usd = Number(summary?.known_subtotal ?? '0');
+          recordMetrics(log.cost_usd);
+        };
+      } else recordMetrics(costUsd);
+      if (settleWithLogs && projectLogCost && !this.config.database.route_trace_write_behind) {
+        try { joinedRoute = this.createRouteDecisionTraceLog(params); }
+        catch (error) {
+          // A missing optional trace must not prevent the call log or expense
+          // settlement. Preserve the original per-trace failure boundary.
+          routePreparationFailed = true;
+          this.logger.warn(`Failed to prepare route decision trace: ${(error as Error).message}`);
+        }
+        joinedLog = await settleWithLogs({ call: log, route: joinedRoute });
+      }
       if (
         params.statusCode >= 200 &&
         params.statusCode < 400 &&
@@ -6473,11 +6582,19 @@ export class PipelineService implements BeforeApplicationShutdown {
           this.workspaceIdForCanonical(params.canonical),
         );
       }
-      if (this.config.database.route_trace_write_behind) {
+      if (joinedLog || routePreparationFailed) {
+        // The call (and any prepared route) is committed, or trace preparation
+        // already failed independently. Never retry a failed pure trace build.
+      } else if (this.config.database.route_trace_write_behind) {
         this.enqueueRouteDecisionTrace(this.createRouteDecisionTraceLog(params));
       } else {
         try {
-          await this.saveRouteDecisionTrace(params);
+          if (joinedRoute) {
+            const route = joinedRoute;
+            await (this.routeDecisionRepo.manager?.connection
+              ? serializeDatabaseAccess(this.routeDecisionRepo.manager.connection, () => this.routeDecisionRepo.save(route))
+              : this.routeDecisionRepo.save(route));
+          } else await this.saveRouteDecisionTrace(params);
         } catch (err) {
           this.logger.warn(`Failed to save route decision trace: ${(err as Error).message}`);
         }
@@ -6485,6 +6602,7 @@ export class PipelineService implements BeforeApplicationShutdown {
 
       const modalities = params.modalityHints || this.modalitiesForLog(params.canonical);
       if (this.shouldWriteCallLogsBehind()) {
+        if (deferredMetrics) await deferredMetrics();
         if (!log.timestamp) log.timestamp = new Date();
         this.enqueueCallLogWrite(log);
         this.publishCallLog(log, params.domainHint, modalities, {
@@ -6492,15 +6610,40 @@ export class PipelineService implements BeforeApplicationShutdown {
           tokensPerSecond: params.tokensPerSecond,
         });
       } else {
-        const saved = await this.callLogRepo.save(log);
+        const saved = joinedLog ?? (projectLogCost
+          ? await this.persistCallLogRows(log, true)
+          : await this.persistCallLogRows(log));
+        if (deferredMetrics) {
+          deferredMetrics = undefined;
+          recordMetrics(saved.cost_usd);
+        }
         this.publishCallLog(saved, params.domainHint, modalities, {
           firstTokenLatencyMs: params.firstTokenLatencyMs,
           tokensPerSecond: params.tokensPerSecond,
         });
       }
     } catch (err) {
+      // A log-write failure must not hide the completed provider call from
+      // metrics. Read the ordinary summary on this exceptional path only.
+      if (deferredMetrics) {
+        try { await deferredMetrics(); }
+        catch (metricError) { this.logger.error(`Failed to record call metrics: ${(metricError as Error).message}`); }
+      }
       this.logger.error(`Failed to log call: ${(err as Error).message}`);
     }
+  }
+
+  private persistCallLogRows(log: CallLog, requireOwnedSnapshot?: boolean): Promise<CallLog>;
+  private persistCallLogRows(logs: CallLog[], requireOwnedSnapshot?: boolean): Promise<CallLog[]>;
+  private async persistCallLogRows(value: CallLog | CallLog[], requireOwnedSnapshot = false): Promise<CallLog | CallLog[]> {
+    const array = Array.isArray(value) ? value : [value];
+    const priced = requireOwnedSnapshot
+      ? await this.pricingRuntime?.persistCallLogs(array, true)
+      : await this.pricingRuntime?.persistCallLogs(array);
+    if (priced) return Array.isArray(value) ? priced : priced[0];
+    if (requireOwnedSnapshot) throw new Error('Owned call log projection is unavailable');
+    const save = () => Array.isArray(value) ? this.callLogRepo.save(value) : this.callLogRepo.save(value);
+    return this.callLogRepo.manager?.connection ? serializeDatabaseAccess<CallLog | CallLog[]>(this.callLogRepo.manager.connection, save) : save();
   }
 
   private shouldWriteCallLogsBehind(): boolean {
@@ -6538,7 +6681,7 @@ export class PipelineService implements BeforeApplicationShutdown {
     while (this.callLogWriteQueue.length > 0) {
       const batch = this.callLogWriteQueue.splice(0, CALL_LOG_WRITE_BATCH_SIZE);
       try {
-        await this.callLogRepo.save(batch);
+        await this.persistCallLogRows(batch);
       } catch (error) {
         this.logger.warn(
           `Failed to save call log batch (${batch.length}): ${(error as Error).message}`,
@@ -6824,7 +6967,7 @@ export class PipelineService implements BeforeApplicationShutdown {
       routeTrace?: RouteDecisionTrace;
     },
   ): Promise<void> {
-    await this.routeDecisionRepo.save(this.createRouteDecisionTraceLog(params));
+    await (this.routeDecisionRepo.manager?.connection ? serializeDatabaseAccess(this.routeDecisionRepo.manager.connection, () => this.routeDecisionRepo.save(this.createRouteDecisionTraceLog(params))) : this.routeDecisionRepo.save(this.createRouteDecisionTraceLog(params)));
   }
 
   private createRouteDecisionTraceLog(
@@ -6906,7 +7049,7 @@ export class PipelineService implements BeforeApplicationShutdown {
       const log = this.routeTraceWriteQueue.shift();
       if (!log) continue;
       try {
-        await this.routeDecisionRepo.save(log);
+        await (this.routeDecisionRepo.manager?.connection ? serializeDatabaseAccess(this.routeDecisionRepo.manager.connection, () => this.routeDecisionRepo.save(log)) : this.routeDecisionRepo.save(log));
       } catch (err) {
         this.logger.warn(`Failed to save route decision trace: ${(err as Error).message}`);
       }
@@ -6915,6 +7058,11 @@ export class PipelineService implements BeforeApplicationShutdown {
   }
 
   async beforeApplicationShutdown(): Promise<void> {
+    await this.drainPendingLogWrites();
+  }
+
+  /** Requests may enqueue logs after Nest's before-shutdown hook has run. */
+  async drainPendingLogWrites(): Promise<void> {
     while (this.callLogWriteQueue.length > 0 || this.callLogWritePromise) {
       this.startCallLogWriteDrain();
       const currentDrain = this.callLogWritePromise;

@@ -22,6 +22,9 @@ import { normalizeWorkspaceId } from '../workspaces/workspace-scope';
 import { TelemetryService } from '../telemetry/telemetry.service';
 import type { ErrorRedactionTelemetry } from '../security/error-redaction';
 import { redactErrorText } from '../security/error-redaction';
+import { RealtimePricingService, type RealtimePricingHandle } from '../pricing/realtime-pricing.service';
+import { realtimePricingEvent } from '../pricing/realtime-metering';
+import { BudgetExceededError } from '../budget/budget.service';
 
 type RealtimeCloseReason =
   | 'client_closed'
@@ -65,6 +68,9 @@ interface RealtimeSession {
   pendingClientMessages: Array<{ opcode: number; payload: Buffer }>;
   idleTimer?: NodeJS.Timeout;
   sessionTimer?: NodeJS.Timeout;
+  pricing?: RealtimePricingHandle | null;
+  pricingWork?: Promise<void>;
+  pricingPending?: number;
 }
 
 export interface RealtimeConnectionSummary {
@@ -136,15 +142,20 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
   private readonly nodeLastConnectedAt = new Map<string, string>();
   private readonly nodeLastClosedAt = new Map<string, string>();
   private readonly nodeLastError = new Map<string, string>();
+  private readonly pricingCloses = new Set<Promise<void>>();
+  private readonly upgrades = new Set<Promise<void>>();
+  private stopping = false;
   private readonly upgradeHandler = (
     req: IncomingMessage,
     socket: Socket,
     head: Buffer,
   ) => {
-    void this.handleUpgrade(req, socket, head).catch((err) => {
+    const running = this.handleUpgrade(req, socket, head).catch((err) => {
       this.logger.warn(`Realtime upgrade failed: ${this.sanitizeError(err)}`);
       this.rejectUpgrade(socket, 500, 'Realtime upgrade failed');
     });
+    this.upgrades.add(running);
+    void running.finally(() => this.upgrades.delete(running));
   };
 
   constructor(
@@ -155,6 +166,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     private readonly stateBackend?: StateBackendService,
     @Optional()
     private readonly telemetry?: TelemetryService,
+    @Optional() private readonly pricing?: RealtimePricingService,
   ) {}
 
   onModuleInit(): void {
@@ -169,11 +181,15 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     server.on('upgrade', this.upgradeHandler);
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
+    this.stopping = true;
     this.server?.off?.('upgrade', this.upgradeHandler);
     for (const session of [...this.sessions.values()]) {
       this.closeSession(session, 'gateway_shutdown', 1001);
     }
+    await Promise.allSettled([...this.upgrades]);
+    await Promise.allSettled([...this.pricingCloses]);
+    await this.pricing?.flush();
   }
 
   getStatus(workspaceId?: string | null): RealtimeStatus {
@@ -218,6 +234,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     socket: Socket,
     head: Buffer,
   ): Promise<void> {
+    if (this.stopping) { this.rejectUpgrade(socket, 503, 'Gateway is shutting down'); return; }
     const requestUrl = new URL(req.url || '/', 'http://localhost');
     const realtime = this.config.realtime;
     if (requestUrl.pathname !== realtime.path) {
@@ -230,6 +247,12 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     }
     if (!this.isWebSocketUpgrade(req)) {
       this.rejectUpgrade(socket, 400, 'Invalid WebSocket upgrade request');
+      return;
+    }
+    // Closed transports may still own pending admission/settlement work. Keep
+    // those bounded too instead of freeing every slot before accounting drains.
+    if (this.sessions.size + this.pricingCloses.size >= realtime.max_connections || this.upgrades.size >= realtime.max_connections) {
+      this.rejectUpgrade(socket, 429, 'Realtime connection or accounting limit exceeded');
       return;
     }
 
@@ -253,7 +276,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    if (this.sessions.size >= realtime.max_connections) {
+    if (this.sessions.size + this.pricingCloses.size >= realtime.max_connections) {
       this.rejectUpgrade(socket, 429, 'Realtime connection limit exceeded');
       return;
     }
@@ -268,9 +291,24 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    this.acceptUpgrade(req, socket);
     const session = this.createSession(socket, target, apiKey);
     this.sessions.set(session.id, session);
+    this.attachClientSocket(session);
+    try {
+      session.pricing = await this.pricing?.begin(session.requestId, apiKey, target.node.id, target.model, realtime.max_session_ms);
+      if (session.closed || socket.destroyed || this.stopping) {
+        await session.pricing?.close(false);
+        this.sessions.delete(session.id);
+        if (!socket.destroyed) this.rejectUpgrade(socket, 503, 'Gateway is shutting down');
+        return;
+      }
+    } catch (error) {
+      this.sessions.delete(session.id);
+      const status = error instanceof BudgetExceededError ? 429 : error && typeof error === 'object' && 'status' in error ? Number(error.status) : error && typeof error === 'object' && 'statusCode' in error ? Number(error.statusCode) : 503;
+      this.rejectUpgrade(socket, [400, 403, 409, 422, 429, 503].includes(status) ? status : 503, 'Realtime pricing admission unavailable; review the configured tariff and limits', status === 429 ? 'realtime_budget_exceeded' : 'realtime_pricing_admission_failed');
+      return;
+    }
+    this.acceptUpgrade(req, socket);
     this.nodeLastConnectedAt.set(
       this.nodeWorkspaceKey(target.node.id, session.workspaceId),
       new Date().toISOString(),
@@ -278,11 +316,11 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     this.recordRecent(session, 'open', null, null);
     this.persistRealtimeSummary(session, 'open', null, null);
     this.scheduleTimers(session);
-    this.attachClientSocket(session);
 
     if (head.length > 0) {
       this.handleClientData(session, head);
     }
+    if (session.closed) return;
 
     try {
       const upstream = await this.openUpstream(session);
@@ -291,7 +329,6 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       session.upstream = upstream;
-      this.attachUpstreamSocket(session, upstream);
       this.flushPendingClientMessages(session);
       this.logger.log(
         `Realtime connected request=${session.requestId} node=${target.node.id} model=${target.model}`,
@@ -461,6 +498,9 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     const realtime = this.config.realtime;
     const url = this.buildUpstreamUrl(session.target.node, session.target.model);
     const headers = await this.buildUpstreamHeaders(session.target.node);
+    if (session.closed || this.stopping) throw new Error('Realtime connection cancelled before dispatch');
+    await session.pricing?.dispatched();
+    if (session.closed || this.stopping) throw new Error('Realtime connection cancelled before transport dispatch');
     const ws = new UpstreamWebSocket(url, { headers });
     (ws as unknown as { binaryType: string }).binaryType = 'arraybuffer';
 
@@ -482,6 +522,8 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
       };
       const onOpen = () => {
         cleanup();
+        session.pricing?.opened();
+        this.attachUpstreamSocket(session, ws);
         resolve(ws);
       };
       const onError = (event: unknown) => {
@@ -506,7 +548,9 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     session.socket.on('data', (chunk) => this.handleClientData(session, chunk));
     session.socket.on('close', () => {
       if (!session.closed) {
-        this.closeSession(session, 'client_closed', 1000);
+        // No valid protocol close frame was received. A TCP disconnect is not
+        // evidence that all supplier work completed without further charges.
+        this.closeSession(session, 'client_error', 1006);
       }
     });
     session.socket.on('error', (err) => {
@@ -519,10 +563,32 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     upstream: InstanceType<typeof UpstreamWebSocket>,
   ): void {
     upstream.addEventListener('message', (event: unknown) => {
+      if (session.closed) return;
       const data =
         event && typeof event === 'object' && 'data' in event
           ? (event as { data: unknown }).data
           : undefined;
+      if (session.pricing && typeof data === 'string') {
+        const metering = realtimePricingEvent(data);
+        if (metering) {
+          const observed = session.pricing.observation(metering);
+          // Configuration admission is transport-ordered; queued audio may only
+          // resume after its acknowledged, already-reserved ASR model is known.
+          if (metering.kind === 'session_mode') this.flushPendingClientMessages(session);
+          session.pricingPending = (session.pricingPending ?? 0) + 1;
+          if (session.pricingPending > 128) {
+            this.closeSession(session, 'upstream_error', 1013, 'realtime accounting backpressure');
+            return;
+          }
+          session.pricingWork = (session.pricingWork ?? Promise.resolve()).then(async () => {
+            try {
+              if (!(await session.pricing!.observe(metering, observed))) this.closeSession(session, 'upstream_error', 1013, 'realtime metering requires reconciliation');
+            } catch {
+              this.closeSession(session, 'upstream_error', 1013, 'realtime accounting remains pending');
+            } finally { session.pricingPending!--; }
+          });
+        }
+      }
       void this.forwardUpstreamMessage(session, data);
     });
     upstream.addEventListener('close', (event: unknown) => {
@@ -568,6 +634,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
       }
 
       const message = this.assembleClientMessage(session, frame);
+      if (session.closed) return;
       if (!message) continue;
       session.clientMessages += 1;
       session.clientBytes += message.payload.length;
@@ -580,6 +647,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     frame: ParsedFrame,
   ): { opcode: number; payload: Buffer } | null {
     if (frame.opcode === 0x1 || frame.opcode === 0x2) {
+      if (session.fragmentOpcode !== null) { this.closeSession(session, 'client_error', 1002, 'interleaved websocket fragments'); return null; }
       if (frame.fin) {
         return { opcode: frame.opcode, payload: frame.payload };
       }
@@ -588,6 +656,9 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
       return null;
     }
     if (frame.opcode === 0x0 && session.fragmentOpcode !== null) {
+      if (session.fragments.length >= 4096 || session.fragments.reduce((sum, value) => sum + value.length, frame.payload.length) > MAX_FRAME_BYTES) {
+        this.closeSession(session, 'client_error', 1009, 'realtime fragmented message too large'); return null;
+      }
       session.fragments.push(frame.payload);
       if (!frame.fin) return null;
       const payload = Buffer.concat(session.fragments);
@@ -607,7 +678,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     payload: Buffer,
   ): void {
     const upstream = session.upstream;
-    if (!upstream || upstream.readyState !== 1) {
+    if (!upstream || upstream.readyState !== 1 || session.pendingClientMessages.length > 0 || session.pricing?.clientReady?.(opcode === 0x1 ? payload.toString('utf8') : undefined) === false) {
       const pendingBytes = session.pendingClientMessages.reduce(
         (sum, item) => sum + item.payload.length,
         0,
@@ -620,6 +691,11 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       session.pendingClientMessages.push({ opcode, payload });
+      if (upstream?.readyState === 1) this.flushPendingClientMessages(session);
+      return;
+    }
+    if (session.pricing?.clientActivity(opcode === 0x1 ? payload.toString('utf8') : undefined) === false) {
+      this.closeSession(session, 'client_error', 1008, 'realtime generation allowance exhausted');
       return;
     }
     this.sendToUpstream(upstream, opcode, payload);
@@ -628,7 +704,14 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
   private flushPendingClientMessages(session: RealtimeSession): void {
     const upstream = session.upstream;
     if (!upstream || upstream.readyState !== 1) return;
-    for (const item of session.pendingClientMessages.splice(0)) {
+    while (session.pendingClientMessages.length > 0 && !session.closed) {
+      const item = session.pendingClientMessages[0];
+      if (session.pricing?.clientReady?.(item.opcode === 0x1 ? item.payload.toString('utf8') : undefined) === false) return;
+      session.pendingClientMessages.shift();
+      if (session.pricing?.clientActivity(item.opcode === 0x1 ? item.payload.toString('utf8') : undefined) === false) {
+        this.closeSession(session, 'client_error', 1008, 'realtime generation allowance exhausted');
+        return;
+      }
       this.sendToUpstream(upstream, item.opcode, item.payload);
     }
   }
@@ -772,6 +855,11 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     );
     this.recordRecent(session, 'closed', reason, sanitizedError);
     this.persistRealtimeSummary(session, 'closed', reason, sanitizedError);
+    if (session.pricing) {
+      const closing = session.pricing.close(reason !== 'client_closed' || code !== 1000, session.pricingWork);
+      this.pricingCloses.add(closing);
+      void closing.catch(() => this.logger.warn('Realtime accounting remains pending for review.')).finally(() => this.pricingCloses.delete(closing));
+    }
 
     try {
       if (session.upstream && session.upstream.readyState <= 1) {
@@ -806,7 +894,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     }, realtime.idle_timeout_ms);
     session.sessionTimer = setTimeout(() => {
       this.closeSession(session, 'session_timeout', 1001, 'realtime session timeout');
-    }, realtime.max_session_ms);
+    }, session.pricing?.maximumMs ?? realtime.max_session_ms);
     (session as unknown as { refreshIdle: () => void }).refreshIdle = refreshIdle;
   }
 
@@ -830,13 +918,14 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private rejectUpgrade(socket: Socket, statusCode: number, message: string): void {
+  private rejectUpgrade(socket: Socket, statusCode: number, message: string, code?: string): void {
     if (socket.destroyed) return;
     const statusText = this.statusText(statusCode);
     const body = JSON.stringify({
       error: {
         message,
         type: statusCode === 429 ? 'rate_limit_exceeded' : 'realtime_error',
+        ...(code ? { code } : {}),
       },
     });
     socket.write(

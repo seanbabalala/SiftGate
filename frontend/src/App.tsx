@@ -10,6 +10,19 @@ const AlertConnectorsPage = lazy(() => import('@/pages/AlertConnectorsPage').the
 const LogsPage = lazy(() => import('@/pages/LogsPage').then((m) => ({ default: m.LogsPage })))
 const NodesPage = lazy(() => import('@/pages/NodesPage').then((m) => ({ default: m.NodesPage })))
 const RoutingPage = lazy(() => import('@/pages/RoutingPage').then((m) => ({ default: m.RoutingPage })))
+const RequestCostPage = lazy(() => import('@/pages/request-cost-page').then((m) => ({ default: m.RequestCostPage })))
+const RecoveryPage = lazy(() => import('@/pages/recovery-page').then((m) => ({ default: m.RecoveryPage })))
+const GroupDispositionPage = lazy(() => import('@/pages/group-disposition-page').then((m) => ({ default: m.GroupDispositionPage })))
+const OutcomeDispositionPage = lazy(() => import('@/pages/outcome-disposition-page').then((m) => ({ default: m.OutcomeDispositionPage })))
+const AttemptCorrectionPage = lazy(() => import('@/pages/attempt-correction-page').then((m) => ({ default: m.AttemptCorrectionPage })))
+const UsageRecoveryPage = lazy(() => import('@/pages/usage-recovery-page').then((m) => ({ default: m.UsageRecoveryPage })))
+const MediaDispositionPage = lazy(() => import('@/pages/media-disposition-page').then(m => ({default:m.MediaDispositionPage})))
+const CostReportPage = lazy(() => import('@/pages/cost-report-page').then(m => ({default:m.CostReportPageView})))
+const AdmissionPreviewPage = lazy(() => import('@/pages/admission-preview-page').then(m => ({default:m.AdmissionPreviewPage})))
+const MediaTasksPage = lazy(() => import('@/pages/media-tasks-page').then(m => ({default:m.MediaTasksPage})))
+const MediaTaskPage = lazy(() => import('@/pages/media-task-page').then(m => ({default:m.MediaTaskPage})))
+const MediaSourcesPage = lazy(() => import('@/pages/media-sources-page').then(m => ({default:m.MediaSourcesPage})))
+const PricingPage = lazy(() => import('@/pages/pricing-page').then((m) => ({ default: m.PricingPage })))
 const BudgetPage = lazy(() => import('@/pages/BudgetPage').then((m) => ({ default: m.BudgetPage })))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })))
 const ExperimentPage = lazy(() => import('@/pages/ExperimentPage').then((m) => ({ default: m.ExperimentPage })))
@@ -163,9 +176,27 @@ export function App() {
         <Route path="/dashboard" element={page(<DashboardPage />)} />
         <Route path="/alerts" element={page(<AlertConnectorsPage />)} />
         <Route path="/logs" element={page(<LogsPage />)} />
+        <Route path="/logs/:id/cost" element={page(<RequestCostPage />)} />
         <Route path="/nodes" element={page(<NodesPage />)} />
         <Route path="/catalog" element={page(<ProviderCatalogPage />)} />
         <Route path="/routing" element={page(<RoutingPage />)} />
+        <Route path="/pricing" element={page(<PricingPage />)} />
+        <Route path="/pricing/cost-report" element={page(<CostReportPage />)} />
+        <Route path="/pricing/admission-preview" element={page(<AdmissionPreviewPage />)} />
+        <Route path="/pricing/media" element={page(<MediaTasksPage />)} />
+        <Route path="/pricing/media/:id" element={page(<MediaTaskPage />)} />
+        <Route path="/pricing/media/:id/events/:eventId" element={page(<MediaDispositionPage />)} />
+        <Route path="/pricing/media-sources" element={page(<MediaSourcesPage />)} />
+        <Route path="/pricing/media-sources/new/register" element={page(<MediaSourcesPage create />)} />
+        <Route path="/pricing/media-sources/:id" element={page(<MediaSourcesPage />)} />
+        <Route path="/pricing/group-outcomes" element={page(<GroupDispositionPage />)} />
+        <Route path="/pricing/group-outcomes/:id" element={page(<GroupDispositionPage />)} />
+        <Route path="/pricing/outcomes" element={page(<OutcomeDispositionPage />)} />
+        <Route path="/pricing/outcomes/:id" element={page(<OutcomeDispositionPage />)} />
+        <Route path="/pricing/recovery" element={page(<RecoveryPage />)} />
+        <Route path="/pricing/recovery/:id" element={page(<RecoveryPage />)} />
+        <Route path="/pricing/attempts/:id/correction" element={page(<AttemptCorrectionPage />)} />
+        <Route path="/pricing/recovery/:id/usage" element={page(<UsageRecoveryPage />)} />
         <Route path="/budget" element={page(<BudgetPage />)} />
         <Route path="/api-keys" element={page(<ApiKeysPage />)} />
         <Route path="/analytics" element={page(<AnalyticsPage />)} />

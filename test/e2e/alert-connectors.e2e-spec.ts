@@ -55,6 +55,8 @@ describe('Alert connector management (e2e, mocked outbound only)', () => {
 
   it('does not let a viewer read or change global connector credentials', async () => {
     const memberships = harness.app.get(WorkspaceMembershipService);
+    // Keep a separate fixture admin before testing a downgraded Dashboard identity.
+    await memberships.ensureMembership({ userId: 'synthetic-fixture-admin', organizationId: DEFAULT_ORGANIZATION_ID, workspaceId: DEFAULT_WORKSPACE_ID, role: 'admin' });
     await memberships.ensureMembership({ userId: 'dashboard', organizationId: DEFAULT_ORGANIZATION_ID, workspaceId: DEFAULT_WORKSPACE_ID, role: 'viewer' });
     try {
       expect((await harness.agent.get(endpoint)).status).toBe(403);
@@ -67,6 +69,8 @@ describe('Alert connector management (e2e, mocked outbound only)', () => {
   it('rejects a workspace administrator without default-workspace administration', async () => {
     // Exercise the additional global-scope check independently of current role.
     const memberships = harness.app.get(WorkspaceMembershipService);
+    // Keep a separate fixture admin before testing a downgraded Dashboard identity.
+    await memberships.ensureMembership({ userId: 'synthetic-fixture-admin', organizationId: DEFAULT_ORGANIZATION_ID, workspaceId: DEFAULT_WORKSPACE_ID, role: 'admin' });
     const lookup = jest.spyOn(memberships, 'findActiveRole')
       .mockResolvedValueOnce('admin').mockResolvedValueOnce('viewer');
     try { expect((await harness.agent.get(endpoint)).status).toBe(403); }

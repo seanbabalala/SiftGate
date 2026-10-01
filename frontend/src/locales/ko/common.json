@@ -252,5 +252,6 @@
   "concepts.providerCatalog.description": "카탈로그는 기본적으로 활성 상태의 정규 공급자 투영을 보여 줍니다. 레거시, transport-only, 검토 필요 공급자는 존재할 수 있지만 명시적으로 표시하거나 설정하기 전까지 숨겨집니다.",
   "setupGuide.copy": "YAML 복사",
   "setupGuide.copied": "복사됨",
-  "nav.alertConnectors": "알림 커넥터"
+  "nav.alertConnectors": "알림 커넥터",
+  "nav.pricing": "요금 관리"
 }

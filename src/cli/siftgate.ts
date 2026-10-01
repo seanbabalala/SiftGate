@@ -176,6 +176,16 @@ export async function runCli(
     return runBackupDbCommand(args, cli);
   }
 
+  if (command === "pricing-migrate") {
+    const { runPricingMigrationCommand } = await import("./pricing-migrate");
+    return runPricingMigrationCommand(args, cli);
+  }
+
+  if (command === "pricing-import") {
+    const { runPricingImportCommand } = await import("./pricing-import");
+    return runPricingImportCommand(args, cli);
+  }
+
   if (command === "migrate-v2") {
     return runMigrateV2Command(args, cli);
   }
@@ -1677,6 +1687,8 @@ function formatUsage(): string {
     "  siftgate migrate --to litellm|newapi|oneapi --config gateway.config.yaml [--out target.generated.yaml]",
     "  siftgate migrate-db --from sqlite --to postgres [--sqlite-path ./data/gateway.db] [--postgres-url postgresql://...]",
     "  siftgate migrate-v2 --dry-run [--config gateway.config.yaml] [--sqlite-path ./data/gateway.db] [--output report.json] [--json]",
+    "  siftgate pricing-migrate (--sqlite-path FILE | --postgres-url-env NAME) [--dry-run | --apply]",
+    "  siftgate pricing-import --config FILE [--catalog-file FILE] [--at ISO_INSTANT] [--dry-run]",
     "",
     "Commands:",
     "  validate   Validate a SiftGate gateway.config.yaml file",

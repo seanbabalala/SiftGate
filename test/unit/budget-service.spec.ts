@@ -566,6 +566,24 @@ describe('BudgetService', () => {
     it('should lock budget rows inside PostgreSQL reservation transactions', async () => {
       const { svc, repo } = makeService();
       const postgres = enablePostgresTransactions(repo);
+      let inTransaction = false;
+      Object.assign((repo as unknown as { manager: object }).manager, { queryRunner: { get isTransactionActive() { return inTransaction; } } });
+      postgres.transaction.mockImplementation(async (_isolation, run) => {
+        inTransaction = true;
+        try { return await run({ getRepository: postgres.getRepository }); }
+        finally { inTransaction = false; }
+      });
+      const lockedQuery = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        setLock: jest.fn().mockReturnThis(),
+        getMany: jest.fn(async () => {
+          expect(inTransaction).toBe(true);
+          return [...repo._store].sort((a, b) => a.id - b.id);
+        }),
+      };
+      repo.createQueryBuilder.mockReturnValue(lockedQuery);
       repo._store.push({
         id: 1,
         type: 'daily_tokens',
@@ -576,6 +594,8 @@ describe('BudgetService', () => {
         is_active: true,
         api_key_name: null,
         api_key_id: null,
+        namespace_id: null,
+        team_id: null,
       });
 
       const reservation = await svc.reserve(40, 0);
@@ -584,11 +604,15 @@ describe('BudgetService', () => {
       expect(postgres.transaction).toHaveBeenCalledWith('READ COMMITTED', expect.any(Function));
       expect(postgres.transaction).toHaveBeenCalledTimes(2);
       expect(postgres.getRepository).toHaveBeenCalled();
-      expect(repo.findOne).toHaveBeenCalledWith(
-        expect.objectContaining({
-          lock: { mode: 'pessimistic_write' },
-        }),
-      );
+      const branches = lockedQuery.where.mock.calls[0][0];
+      expect(branches).toHaveLength(2);
+      expect(branches[0]).toMatchObject({ workspace_id: 'default-workspace', is_active: true });
+      expect(branches[1].workspace_id.type).toBe('isNull');
+      for (const branch of branches) for (const key of ['api_key_name', 'api_key_id', 'namespace_id', 'team_id'])
+        expect(branch[key].type).toBe('isNull');
+      expect(lockedQuery.orderBy).toHaveBeenCalledWith('rule.id', 'ASC');
+      expect(lockedQuery.setLock).toHaveBeenCalledWith('pessimistic_write');
+      expect(lockedQuery.getMany).toHaveBeenCalledTimes(2);
       expect(repo._store[0].current_value).toBe(0);
     });
 

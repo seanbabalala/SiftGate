@@ -303,14 +303,16 @@ export class AuthController {
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
-    const accepted = await this.invitations.acceptForUser(token, 'dashboard');
-    if (!accepted) return null;
-    await this.memberships.ensureMembership({
-      userId: 'dashboard',
-      organizationId: accepted.organizationId,
-      workspaceId: accepted.workspaceId,
-      role: accepted.role,
+    const memberships = this.memberships;
+    const accepted = await this.invitations.acceptForUser(token, 'dashboard', undefined, async (invitation, manager) => {
+      await memberships.withTransaction((service) => service.ensureMembership({
+        userId: 'dashboard',
+        organizationId: invitation.organizationId,
+        workspaceId: invitation.workspaceId,
+        role: invitation.role,
+      }), manager);
     });
+    if (!accepted) return null;
     return {
       workspaceId: accepted.workspaceId,
       organizationId: accepted.organizationId,

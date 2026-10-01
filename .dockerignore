@@ -21,6 +21,7 @@ data
 gateway.config.yaml
 
 .playwright-cli
+.local-dev
 .docker-smoke
 test-results
 playwright-report

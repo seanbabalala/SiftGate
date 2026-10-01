@@ -252,5 +252,6 @@
   "concepts.providerCatalog.description": "El catálogo muestra por defecto proyecciones activas y canónicas de proveedores. Los proveedores legacy, transport-only o pendientes de revisión pueden existir, pero permanecen ocultos hasta mostrarlos o configurarlos explícitamente.",
   "setupGuide.copy": "Copiar YAML",
   "setupGuide.copied": "Copiado",
-  "nav.alertConnectors": "Conectores de alertas"
+  "nav.alertConnectors": "Conectores de alertas",
+  "nav.pricing": "Precios"
 }

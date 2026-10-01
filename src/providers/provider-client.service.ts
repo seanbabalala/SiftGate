@@ -1,3 +1,11 @@
+import { videoResultProfile, translateNativeVideoResult, nativeVideoRequestShape, nativeVideoGenerationPath } from "../pricing/video-result-profile";
+import { providerFailureUsage } from "./provider-failure-evidence";
+import type { ProviderAttemptObserver, ProviderAttemptReceipt } from "./provider-attempt.types";
+import { mediaJobId } from "../pricing/media-task-metering";
+import { isMeteredRequest, meterMediaUsage, meterRerankProviderUsage, mediaPricingContext } from "../pricing/media-metering";
+import { attachUsageEvidence, getUsageEvidence } from '../canonical/usage-evidence';
+import { attachTokenPricingEvidence } from './pricing-usage-evidence';
+import { geminiCompatibilityUsage, isNativeGeminiUsageSchema } from './gemini-pricing-usage';
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { SpanKind } from '@opentelemetry/api';
 import { ConfigService } from '../config/config.service';
@@ -96,6 +104,9 @@ function describeErrorCause(cause: unknown): string {
 }
 
 interface ProviderRequestOptions {
+  pricingAttempts?: ProviderAttemptObserver;
+  credentialAttemptLimit?: number;
+  singleAttempt?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -121,6 +132,7 @@ export class ProviderClientService {
   private readonly msgDenorm = new MessagesDenormalizer();
   private readonly geminiDenorm = new GeminiDenormalizer();
   private readonly responseCredentials = new WeakMap<Response, ResponseCredentialMetadata>();
+  private readonly responsePricingReceipts = new WeakMap<Response, ProviderAttemptReceipt>();
   private readonly responseAbortCleanups = new WeakMap<Response, () => void>();
   private readonly completedCredentialResponses = new WeakSet<Response>();
 
@@ -181,6 +193,8 @@ export class ProviderClientService {
           options.timeoutMs,
           options.signal,
           this.resolveRequestEndpoint(node, upstreamModel, false),
+          false, 0, options.credentialAttemptLimit, options.pricingAttempts,
+          canonical.metadata.source_format, upstreamModel,
         );
         const latencyMs = Date.now() - startTime;
 
@@ -197,6 +211,7 @@ export class ProviderClientService {
           latencyMs,
           usageSchema,
         );
+        attachTokenPricingEvidence(responseBody, canonical_resp.usage, usageSchema);
         this.applyCredentialRoutingMetadata(canonical_resp.routing, response);
         this.recordResponseCredentialUsage(response, canonical_resp.usage, canonical.metadata);
 
@@ -247,6 +262,8 @@ export class ProviderClientService {
           options.timeoutMs,
           options.signal,
           node.embeddings_endpoint || '/v1/embeddings',
+          false, 0, options.credentialAttemptLimit, options.pricingAttempts,
+          canonical.metadata.source_format, targetModel,
         );
         const latencyMs = Date.now() - startTime;
 
@@ -260,6 +277,7 @@ export class ProviderClientService {
           targetModel,
           latencyMs,
         );
+        attachTokenPricingEvidence(responseBody, canonicalResp.usage, undefined, 'embeddings');
         this.applyCredentialRoutingMetadata(canonicalResp.routing, response);
         this.recordResponseCredentialUsage(response, canonicalResp.usage, canonical.metadata);
         span.setAttributes({
@@ -307,6 +325,8 @@ export class ProviderClientService {
           options.timeoutMs,
           options.signal,
           node.rerank_endpoint || '/v1/rerank',
+          false, 0, options.credentialAttemptLimit, options.pricingAttempts,
+          canonical.metadata.source_format, targetModel,
         );
         const latencyMs = Date.now() - startTime;
 
@@ -321,6 +341,15 @@ export class ProviderClientService {
           targetModel,
           latencyMs,
         );
+        attachTokenPricingEvidence(responseBody.usage === undefined && responseBody.meta ? { usage: responseBody.meta } : responseBody, canonicalResp.usage, undefined, 'rerank');
+        const billing = getUsageEvidence(canonicalResp.usage);
+        // A 2xx job acknowledgement is not final billed work. There is no rerank
+        // job adapter yet: retain the dispatch/hold instead of settling a fee from
+        // a locally inferred invocation count or provisional document counters.
+        const pending = response.status === 202 || responseBody.done === false ||
+          ['queued', 'pending', 'processing', 'in_progress', 'submitted', 'running'].includes(String(responseBody.status ?? responseBody.state ?? responseBody.phase ?? '').toLowerCase());
+        attachUsageEvidence(canonicalResp.usage, { ...billing, usage: meterRerankProviderUsage(canonical, canonicalResp, responseBody, billing?.usage), mediaContext: mediaPricingContext(canonical, canonicalResp),
+          ...(pending ? { pendingJob: { providerJobId: mediaJobId(responseBody) ?? undefined } } : {}) });
         this.applyCredentialRoutingMetadata(canonicalResp.routing, response);
         this.recordResponseCredentialUsage(response, canonicalResp.usage, canonical.metadata);
         span.setAttributes({
@@ -364,14 +393,26 @@ export class ProviderClientService {
         if (!node) throw new Error(`Node not found: ${nodeId}`);
 
         const startTime = Date.now();
-        const endpoint = this.mediaEndpointFor(node, canonical.source_format);
-        const request = this.buildMediaRequest(canonical, targetModel);
+        const profile = canonical.source_format === 'video_generation' ? videoResultProfile(node.video_result_profile) : 'generic-v1';
+        const upstreamModel = profile === 'generic-v1' ? targetModel : this.resolveUpstreamModel(node, targetModel);
+        if (canonical.source_format === 'video_generation' &&
+          (profile === 'generic-v1' ? !Buffer.isBuffer(canonical.payload) && typeof canonical.payload.prompt !== 'string' : !nativeVideoRequestShape(profile, canonical.payload)))
+          throw new ProviderError('Video request envelope does not match the explicitly selected node profile', 400, nodeId, 'http_error');
+        const configuredEndpoint = this.mediaEndpointFor(node, canonical.source_format);
+        const endpoint = profile === 'generic-v1' ? configuredEndpoint : nativeVideoGenerationPath(profile, configuredEndpoint, upstreamModel);
+        const request = this.buildMediaRequest(canonical, upstreamModel);
+        if (profile === 'gemini-veo-rest-v1' && !Buffer.isBuffer(request.body)) delete request.body.model;
         const response = await this.sendMediaRequest(
           node,
           request,
           endpoint,
           options.timeoutMs,
           options.signal,
+          options.singleAttempt,
+          options.credentialAttemptLimit,
+          options.pricingAttempts,
+          upstreamModel,
+          canonical.source_format,
         );
         const latencyMs = Date.now() - startTime;
 
@@ -386,6 +427,16 @@ export class ProviderClientService {
             targetModel,
             latencyMs,
           );
+          if (isMeteredRequest(canonical)) {
+            const billingBody = canonicalResp.body && typeof canonicalResp.body === 'object' && !Buffer.isBuffer(canonicalResp.body) && !Array.isArray(canonicalResp.body) ? canonicalResp.body : {};
+            const native = profile !== 'generic-v1' ? translateNativeVideoResult(profile, billingBody) : null;
+            if (!native) attachTokenPricingEvidence(billingBody, canonicalResp.usage, undefined, canonical.source_format);
+            const billing = getUsageEvidence(canonicalResp.usage);
+            const safeJobId = native?.provider_job_id ?? mediaJobId(billingBody) ?? undefined;
+            const jobStatus = String(billingBody.status ?? billingBody.state ?? billingBody.phase ?? '').toLowerCase();
+            const pending = !!native || response.status === 202 || billingBody.done === false || ['queued', 'pending', 'processing', 'in_progress', 'submitted', 'running'].includes(jobStatus) || !!safeJobId && (typeof billingBody.done === 'boolean' || ['completed', 'succeeded', 'success', 'done', 'partially_completed', 'failed', 'cancelled', 'canceled', 'rejected'].includes(jobStatus));
+            attachUsageEvidence(canonicalResp.usage, { ...billing, usage: meterMediaUsage(canonical, canonicalResp, 'result', billing?.usage, profile), mediaContext: mediaPricingContext(canonical, canonicalResp, profile), ...(pending ? { pendingJob: { providerJobId: safeJobId } } : {}) });
+          }
           this.applyCredentialRoutingMetadata(canonicalResp.routing, response);
           this.recordResponseCredentialUsage(response, canonicalResp.usage, canonical.metadata);
           this.completeResponseCredential(response, {
@@ -449,7 +500,8 @@ export class ProviderClientService {
       options.timeoutMs,
       options.signal,
       this.resolveRequestEndpoint(node, upstreamModel, true),
-      true,
+      true, 0, options.credentialAttemptLimit, options.pricingAttempts,
+      canonical.metadata.source_format, upstreamModel,
     );
 
     if (!response.body) {
@@ -462,6 +514,8 @@ export class ProviderClientService {
       this.resolveUsageSchemaForNode(node),
     );
     let latestUsage: TokenUsage | undefined;
+    let pricingFailure: string | undefined;
+    let pricingResponseModel: string | undefined;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const streamBodyIdleTimeoutMs = this.resolveStreamBodyIdleTimeoutMs(
@@ -473,9 +527,11 @@ export class ProviderClientService {
     const parseChunk = (chunk: string): CanonicalStreamEvent[] => {
       const parsedEvents = [...parser.parse(chunk)];
       for (const event of parsedEvents) {
+        if (event.type === 'start') pricingResponseModel = event.model;
         if (event.type === 'stop') {
           latestUsage = event.usage;
         } else if (event.type === 'error') {
+          pricingFailure = 'stream_failure';
           const classification = classifyStreamError(event);
           this.completeResponseCredential(response, {
             statusCode: classification.statusCode,
@@ -561,9 +617,11 @@ export class ProviderClientService {
           ...(parser as { flush: () => Generator<CanonicalStreamEvent> }).flush(),
         ];
         for (const event of flushedEvents) {
-          if (event.type === 'stop') {
+          if (event.type === 'start') pricingResponseModel = event.model;
+        if (event.type === 'stop') {
             latestUsage = event.usage;
           } else if (event.type === 'error') {
+          pricingFailure = 'stream_failure';
             const classification = classifyStreamError(event);
             this.completeResponseCredential(response, {
               statusCode: classification.statusCode,
@@ -583,6 +641,7 @@ export class ProviderClientService {
         }
       }
     } catch (err) {
+      pricingFailure = "stream_failure";
       const message = err instanceof Error ? err.message : String(err);
       const redactedMessage = redactProviderErrorText(
         message,
@@ -627,14 +686,28 @@ export class ProviderClientService {
       }
       yield errorEvent;
     } finally {
-      this.recordResponseCredentialUsage(response, latestUsage, canonical.metadata);
-      this.completeResponseCredential(response, {
-        statusCode: options.signal?.aborted ? 499 : response.status,
-      });
-      this.responseAbortCleanups.get(response)?.();
-      this.responseAbortCleanups.delete(response);
-      options.signal?.removeEventListener('abort', cancelReader);
-      reader.releaseLock();
+      const finalUsage = parser.getPricingUsage() ?? latestUsage;
+      const finalEvidence = finalUsage && getUsageEvidence(finalUsage);
+      // Cumulative reports can arrive after a protocol stop event. Update only the
+      // private billing evidence; never append duplicate client-visible stop frames.
+      if (latestUsage && finalEvidence) attachUsageEvidence(latestUsage, finalEvidence);
+      try {
+        await this.responsePricingReceipts.get(response)?.streamFinished?.(
+          finalUsage,
+          options.signal?.aborted ? 'client_aborted' : pricingFailure ?? (finalUsage ? undefined : 'stream_incomplete'),
+          pricingResponseModel,
+        );
+      } finally {
+        this.responsePricingReceipts.delete(response);
+        this.recordResponseCredentialUsage(response, finalUsage, canonical.metadata);
+        this.completeResponseCredential(response, {
+          statusCode: options.signal?.aborted ? 499 : response.status,
+        });
+        this.responseAbortCleanups.get(response)?.();
+        this.responseAbortCleanups.delete(response);
+        options.signal?.removeEventListener('abort', cancelReader);
+        reader.releaseLock();
+      }
     }
   }
 
@@ -813,16 +886,22 @@ export class ProviderClientService {
     endpointOverride?: string,
     preserveAbortAfterResponse = false,
     reservedToolSchemaRetryCount = 0,
+    credentialAttemptLimit?: number,
+    pricingAttempts?: ProviderAttemptObserver,
+    operation = "chat",
+    wireModel?: string,
+    dispatchBudget = { remaining: credentialAttemptLimit ?? Infinity, sequence: 0 },
   ): Promise<Response> {
     const url = `${node.base_url}${endpointOverride || node.endpoint}`;
     const nodeHeaders = await this.resolveNodeHeaders(node);
     const effectiveTimeoutMs = timeoutMs ?? node.timeout_ms ?? 60000;
 
     const triedCredentialIds = new Set<string>();
-    const attemptLimit = this.credentialPool?.attemptLimit(node) ?? 1;
+    const attemptLimit = Math.min(this.credentialPool?.attemptLimit(node) ?? 1, credentialAttemptLimit ?? Infinity);
     let lastError: ProviderError | null = null;
 
-    for (let attempt = 0; attempt < attemptLimit; attempt++) {
+    for (let attempt = 0; attempt < attemptLimit && dispatchBudget.remaining > 0; attempt++) {
+      if (signal?.aborted) throw new ProviderError(`Provider ${node.id} request cancelled before dispatch`, 499, node.id, "http_error");
       const credential = await this.selectCredential(node, canonical?.metadata, triedCredentialIds);
       triedCredentialIds.add(credential.credential.id);
       const headers = await this.buildHeaders(
@@ -840,6 +919,17 @@ export class ProviderClientService {
       this.logger.debug(
         `Forwarding to ${node.id} (${node.protocol}) → ${url} model=${requestBody.model} stream=${requestBody.stream} credential=${credential.credential.id}`,
       );
+
+      let pricingReceipt: ProviderAttemptReceipt | undefined;
+      try {
+        pricingReceipt = await pricingAttempts?.begin({
+          node_id: node.id, wire_model: typeof requestBody.model === 'string' ? requestBody.model : wireModel ?? null,
+          credential_id: credential.credential.id, credential_strategy: credential.strategy,
+          credential_retry_index: attempt, compatibility_retry_index: reservedToolSchemaRetryCount,
+          dispatch_index: dispatchBudget.sequence++, protocol: node.protocol, dispatched_at: new Date(Date.now()).toISOString(),
+        });
+      } catch (error) { this.completeCredential(credential, {}); throw error; }
+      dispatchBudget.remaining--;
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
@@ -894,9 +984,10 @@ export class ProviderClientService {
           failureType: providerError.failureType,
           error: providerError.message,
         });
+        await pricingReceipt?.failed(signal?.aborted ? "client_aborted" : providerError.failureType);
         lastError = providerError;
         if (
-          attempt < attemptLimit - 1 &&
+          !signal?.aborted && dispatchBudget.remaining > 0 && attempt < attemptLimit - 1 &&
           this.credentialPool?.shouldRetry(node, providerError.statusCode, providerError.failureType)
         ) {
           continue;
@@ -909,6 +1000,7 @@ export class ProviderClientService {
 
       if (response.ok) {
         this.responseCredentials.set(response, { selection: credential, retryCount: attempt });
+        if (pricingReceipt) this.responsePricingReceipts.set(response, pricingReceipt);
         if (preserveAbortAfterResponse && signal) {
           const abortAfterResponse = () => controller.abort();
           if (signal.aborted) {
@@ -926,6 +1018,7 @@ export class ProviderClientService {
 
       let errorBody: string;
       try { errorBody = await response.text(); } catch { errorBody = 'Unable to read error body'; }
+      await pricingReceipt?.failed(response.status === 429 ? 'rate_limited' : 'http_error', providerFailureUsage(errorBody, this.resolveUsageSchemaForNode(node), operation));
       if (process.env.GATEWAY_DEBUG_MESSAGES_BODY === '1' && node.protocol === 'messages') {
         this.logger.debug(
           `Failed messages request body preview: ${JSON.stringify(requestBody).substring(0, 2000)}`,
@@ -941,7 +1034,7 @@ export class ProviderClientService {
       // 400 occurs before model execution, so replay the unchanged request
       // once without making unrelated client-shape errors retryable.
       if (
-        reservedToolSchemaRetryCount < 1 &&
+        reservedToolSchemaRetryCount < 1 && dispatchBudget.remaining > 0 &&
         !signal?.aborted &&
         this.isReservedCollaborationToolSchemaMismatch(
           node,
@@ -967,6 +1060,11 @@ export class ProviderClientService {
           endpointOverride,
           preserveAbortAfterResponse,
           reservedToolSchemaRetryCount + 1,
+          credentialAttemptLimit,
+          pricingAttempts,
+          operation,
+          wireModel,
+          dispatchBudget,
         );
       }
       const retryAfter = response.headers?.get?.('retry-after');
@@ -988,7 +1086,7 @@ export class ProviderClientService {
       });
       lastError = providerError;
       if (
-        attempt < attemptLimit - 1 &&
+        !signal?.aborted && dispatchBudget.remaining > 0 && attempt < attemptLimit - 1 &&
         this.credentialPool?.shouldRetry(node, response.status, providerError.failureType)
       ) {
         continue;
@@ -1046,16 +1144,22 @@ export class ProviderClientService {
     endpoint: string,
     timeoutMs?: number,
     signal?: AbortSignal,
+    singleAttempt = false,
+    credentialAttemptLimit?: number,
+    pricingAttempts?: ProviderAttemptObserver,
+    wireModel?: string,
+    operation = "media",
   ): Promise<Response> {
     const url = `${node.base_url}${endpoint}`;
     const nodeHeaders = await this.resolveNodeHeaders(node);
     const effectiveTimeoutMs = timeoutMs ?? node.timeout_ms ?? 60000;
 
     const triedCredentialIds = new Set<string>();
-    const attemptLimit = this.credentialPool?.attemptLimit(node) ?? 1;
+    const attemptLimit = singleAttempt ? 1 : Math.min(this.credentialPool?.attemptLimit(node) ?? 1, credentialAttemptLimit ?? Infinity);
     let lastError: ProviderError | null = null;
 
     for (let attempt = 0; attempt < attemptLimit; attempt++) {
+      if (signal?.aborted) throw new ProviderError(`Provider ${node.id} request cancelled before dispatch`, 499, node.id, "http_error");
       const credential = await this.selectCredential(node, undefined, triedCredentialIds);
       triedCredentialIds.add(credential.credential.id);
       const headers = await this.buildHeaders(
@@ -1065,6 +1169,15 @@ export class ProviderClientService {
         credential,
       );
 
+      let pricingReceipt: ProviderAttemptReceipt | undefined;
+      try {
+        pricingReceipt = await pricingAttempts?.begin({
+          node_id: node.id, wire_model: wireModel ?? null,
+          credential_id: credential.credential.id, credential_strategy: credential.strategy,
+          credential_retry_index: attempt, compatibility_retry_index: 0, dispatch_index: attempt,
+          protocol: node.protocol, dispatched_at: new Date(Date.now()).toISOString(),
+        });
+      } catch (error) { this.completeCredential(credential, {}); throw error; }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
       const abortFromExternal = () => controller.abort();
@@ -1091,6 +1204,7 @@ export class ProviderClientService {
         const response = await fetch(url, fetchOptions);
         if (response.ok) {
           this.responseCredentials.set(response, { selection: credential, retryCount: attempt });
+        if (pricingReceipt) this.responsePricingReceipts.set(response, pricingReceipt);
           return response;
         }
 
@@ -1118,9 +1232,10 @@ export class ProviderClientService {
           error: providerError.message,
           retryAfter,
         });
+        await pricingReceipt?.failed(providerError.failureType, providerFailureUsage(errorBody, this.resolveUsageSchemaForNode(node), operation));
         lastError = providerError;
         if (
-          attempt < attemptLimit - 1 &&
+          !signal?.aborted && attempt < attemptLimit - 1 &&
           this.credentialPool?.shouldRetry(node, response.status, providerError.failureType)
         ) {
           continue;
@@ -1155,9 +1270,10 @@ export class ProviderClientService {
           failureType: providerError.failureType,
           error: providerError.message,
         });
+        await pricingReceipt?.failed(signal?.aborted ? "client_aborted" : providerError.failureType);
         lastError = providerError;
         if (
-          attempt < attemptLimit - 1 &&
+          !signal?.aborted && attempt < attemptLimit - 1 &&
           this.credentialPool?.shouldRetry(node, providerError.statusCode, providerError.failureType)
         ) {
           continue;
@@ -2822,7 +2938,7 @@ export class ProviderClientService {
       id: (body.responseId as string) || `gemini_${Date.now()}`,
       content,
       stop_reason: this.mapGeminiFinishReason(candidate.finishReason as string),
-      usage: this.resolveNormalizedUsage(body, usageSchema, fallbackUsage),
+      usage: isNativeGeminiUsageSchema(usageSchema) ? geminiCompatibilityUsage(usageMetadata) : this.resolveNormalizedUsage(body, usageSchema, fallbackUsage),
       model: (body.modelVersion as string) || model,
       routing: { ...routingMeta, node: nodeId, latency_ms: latencyMs },
     };

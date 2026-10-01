@@ -1,3 +1,5 @@
+import { CacheReferenceNotice } from '@/components/pricing/cache-reference-notice'
+import { cacheComparisonAmount, formatCacheMoney } from '@/lib/cache-reference-display'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -494,7 +496,9 @@ function BudgetEditDialog({
 }
 
 export function BudgetPage() {
-  const { t } = useTranslation('budget')
+  const { t, i18n } = useTranslation('budget')
+  const formatCacheCost = (value: number | string | null | undefined) => formatCacheMoney(value, i18n.resolvedLanguage ?? i18n.language)
+
   const { data: budgetKeysData } = useBudgetKeys()
   const { data: apiKeysData } = useApiKeys()
   const { data: namespacesData } = useNamespaces()
@@ -516,6 +520,7 @@ export function BudgetPage() {
     namespaceId: selectedScope.kind === 'namespace' ? selectedScope.id || selectedScope.name : undefined,
     teamId: selectedScope.kind === 'team' ? selectedScope.id : undefined,
   })
+  const cacheSavingsAmount = cacheComparisonAmount(cacheSavings?.summary, 'savings')
 
   const scopeOptions = useMemo<ScopeOption[]>(() => {
     const options: ScopeOption[] = [
@@ -742,22 +747,26 @@ export function BudgetPage() {
             <CardTitle>{t('cache.title')}</CardTitle>
           </CardHeader>
           <CardContent>
+            <CacheReferenceNotice data={cacheSavings} />
             <div className="grid gap-3">
               <InfoTile
                 label={t('cache.withoutCacheLabel')}
-                value={formatCost(cacheSavings?.summary.hypothetical_no_cache_cost_usd || 0)}
+                value={formatCacheCost(cacheComparisonAmount(cacheSavings?.summary, 'reference'))}
               />
               <InfoTile
                 label={t('cache.withCacheLabel')}
-                value={formatCost(cacheSavings?.summary.actual_cost_usd || 0)}
+                value={formatCacheCost(cacheComparisonAmount(cacheSavings?.summary, 'actual'))}
               />
-              <div className="rounded-lg border border-emerald-500/12 bg-emerald-500/5 p-3">
-                <div className="flex items-center gap-2 text-[13px] font-bold text-emerald-700 dark:text-emerald-300">
+              <div className={`rounded-lg border p-3 ${
+                cacheSavingsAmount === null
+                  ? 'border-[var(--border)] text-[var(--foreground-muted)]'
+                  : cacheSavingsAmount.startsWith('-')
+                    ? 'border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-300'
+                    : 'border-emerald-500/12 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300'
+              }`}>
+                <div className="flex items-center gap-2 text-[13px] font-bold">
                   <CircleDollarSign className="h-4 w-4" />
-                  {t('cache.saved', { value: formatCost(cacheSavings?.summary.savings_usd || 0) })}
-                </div>
-                <div className="mt-1 text-[11px] leading-5 text-[var(--foreground-dim)]">
-                  {t('cache.note')}
+                  {t('cache.saved', { value: formatCacheCost(cacheSavingsAmount) })}
                 </div>
               </div>
             </div>

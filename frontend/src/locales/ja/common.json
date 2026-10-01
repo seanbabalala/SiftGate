@@ -252,5 +252,6 @@
   "concepts.providerCatalog.description": "カタログは既定で有効かつ正規化済みのプロバイダ投影を表示します。レガシー、transport-only、レビュー待ちのプロバイダは存在しても、明示的に表示または設定されるまで隠れます。",
   "setupGuide.copy": "YAML をコピー",
   "setupGuide.copied": "コピー済み",
-  "nav.alertConnectors": "アラート連携"
+  "nav.alertConnectors": "アラート連携",
+  "nav.pricing": "料金管理"
 }

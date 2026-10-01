@@ -24,6 +24,7 @@ import { CostPlatformModule } from './cost-platform/cost-platform.module';
 import { SemanticPlatformModule } from './semantic-platform/semantic-platform.module';
 import { PublicGatewayExceptionFilter } from './http/public-gateway-exception.filter';
 import { HttpListenerWatchdogService } from './http/http-listener-watchdog.service';
+import { PricingModule } from './pricing/pricing.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { HttpListenerWatchdogService } from './http/http-listener-watchdog.servi
     EvaluationModule,
     IntelligenceModule,
     CostPlatformModule,
+    PricingModule,
     SemanticPlatformModule,
     PluginModule,
     AuthModule,

@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomUUID } from 'crypto';
-import { IsNull, Repository } from 'typeorm';
+import { IsNull, Repository, type EntityManager } from 'typeorm';
+import { coordinatedRepositoryOperation, requireRepositoryTransaction } from '../database/coordinated-repository';
 import {
   ManagementAuditEvent,
   ManagementAuditResult,
@@ -54,17 +55,39 @@ export class ManagementAuditService {
     private readonly eventRepo: Repository<ManagementAuditEvent>,
   ) {}
 
+  resolveActor(input?: ManagementAuditActor): { type: string; id: string } {
+    const context = this.requestContext.current();
+    return { type: input?.type || context?.actorType || 'system', id: input?.id || context?.actorId || 'system' };
+  }
+
   async record(
     input: RecordManagementAuditInput,
+    manager?: EntityManager,
   ): Promise<ManagementAuditEvent | null> {
+    if (manager) {
+      requireRepositoryTransaction(this.eventRepo, manager);
+      // A caller that couples its mutation and audit must roll back on audit failure.
+      return this.persist(input, manager.getRepository(ManagementAuditEvent));
+    }
     try {
+      return await coordinatedRepositoryOperation(this.eventRepo, true, (scoped) => this.persist(input, scoped?.getRepository(ManagementAuditEvent) ?? this.eventRepo));
+    } catch {
+      this.logger.warn('Management audit event was not persisted.');
+      return null;
+    }
+  }
+
+  private async persist(input: RecordManagementAuditInput, repo: Repository<ManagementAuditEvent>): Promise<ManagementAuditEvent> {
       const context = this.requestContext.current();
-      const actor = {
-        type: input.actor?.type || context?.actorType || 'system',
-        id: input.actor?.id || context?.actorId || 'system',
-      };
+      const actor = this.resolveActor(input.actor);
       const workspaceId = input.workspaceId ?? this.workspaceContext.currentWorkspaceId();
-      const previous = await this.latestEventHash(workspaceId);
+      if (repo.manager?.connection.options.type === 'postgres') {
+        if (!repo.manager.queryRunner?.isTransactionActive) throw new Error('Audit append requires a transaction');
+        // There is no existing head row to lock for a workspace's first event.
+        await repo.manager.query('SELECT pg_advisory_xact_lock(hashtext($1::text), hashtext($2::text))', ['siftgate.management-audit', `${repo.metadata.tablePath}:${workspaceId ?? ''}`]);
+      }
+      const previous = await this.latestEventHash(workspaceId, repo);
+      const failureReason = this.redactString(input.failureReason ?? null);
       const eventId = `mgmt_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
       const beforeSummary = this.stringifySummary(input.beforeSummary);
       const afterSummary = this.stringifySummary(input.afterSummary);
@@ -85,13 +108,13 @@ export class ManagementAuditService {
         beforeSummary,
         afterSummary,
         result: input.result ?? 'success',
-        failureReason: input.failureReason ?? null,
+        failureReason,
         requestId: input.requestId ?? context?.requestId ?? null,
         source: input.source ?? context?.source ?? 'dashboard',
         metadata,
       });
 
-      const event = this.eventRepo.create({
+      const event = repo.create({
         event_id: eventId,
         organization_id: input.organizationId ?? null,
         workspace_id: workspaceId,
@@ -103,7 +126,7 @@ export class ManagementAuditService {
         before_summary_json: beforeSummary,
         after_summary_json: afterSummary,
         result: input.result ?? 'success',
-        failure_reason: this.redactString(input.failureReason ?? null),
+        failure_reason: failureReason,
         request_id: input.requestId ?? context?.requestId ?? null,
         source: input.source ?? context?.source ?? 'dashboard',
         metadata_json: metadata,
@@ -111,13 +134,7 @@ export class ManagementAuditService {
         event_hash: eventHash,
         schema_version: 1,
       });
-      return await this.eventRepo.save(event);
-    } catch (err) {
-      this.logger.warn(
-        `Management audit event was not persisted: ${(err as Error).message}`,
-      );
-      return null;
-    }
+      return repo.save(event);
   }
 
   async recordDenied(input: {
@@ -141,8 +158,12 @@ export class ManagementAuditService {
   }
 
   async list(options: ListManagementAuditOptions = {}) {
+    return coordinatedRepositoryOperation(this.eventRepo, false, (manager) => this.listFromRepository(manager?.getRepository(ManagementAuditEvent) ?? this.eventRepo, options));
+  }
+
+  private async listFromRepository(repo: Repository<ManagementAuditEvent>, options: ListManagementAuditOptions) {
     const limit = clampLimit(options.limit);
-    const qb = this.eventRepo
+    const qb = repo
       .createQueryBuilder('event')
       .where(
         this.workspaceContext.currentWorkspaceId() === DEFAULT_WORKSPACE_ID
@@ -195,8 +216,8 @@ export class ManagementAuditService {
     return this.sanitizeValue(value);
   }
 
-  private async latestEventHash(workspaceId: string | null): Promise<string | null> {
-    const latest = await this.eventRepo.findOne({
+  private async latestEventHash(workspaceId: string | null, repo: Repository<ManagementAuditEvent>): Promise<string | null> {
+    const latest = await repo.findOne({
       where: workspaceId
         ? { workspace_id: workspaceId }
         : { workspace_id: IsNull() },

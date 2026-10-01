@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { randomUUID } from 'node:crypto';
 import { ensureCallLogPerformanceIndexes } from './call-log-schema-patch.service';
 import {
   DEFAULT_ORGANIZATION_ID,
@@ -446,7 +447,10 @@ export async function bootstrapDefaultWorkspaceMembership(
              role = 'admin',
              status = 'active',
              updated_at = CURRENT_TIMESTAMP`,
-      ['membership-default-dashboard-admin', DEFAULT_ORGANIZATION_ID, DEFAULT_WORKSPACE_ID],
+      // Native TypeORM PostgreSQL tables use UUID ids; older patch-created
+      // tables use varchar. A UUID works for both. The conflict branch leaves
+      // an existing membership id (including the legacy text id) unchanged.
+      [randomUUID(), DEFAULT_ORGANIZATION_ID, DEFAULT_WORKSPACE_ID],
     );
     return;
   }

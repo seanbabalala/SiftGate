@@ -1,5 +1,5 @@
 import './config/register-local-env';
-import './telemetry/instrumentation'; // OTel SDK — must run before NestJS imports
+import { shutdownTelemetry } from './telemetry/instrumentation'; // OTel SDK — must run before NestJS imports
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
@@ -9,9 +9,13 @@ import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
 import { setupOpenApi } from './openapi/setup-openapi';
 import { HttpListenerWatchdogService } from './http/http-listener-watchdog.service';
+import { PricingRuntimeService } from './pricing/pricing-runtime.service';
+import { PipelineService } from './pipeline/pipeline.service';
+import { RequestDrainingExpressAdapter } from './http/graceful-shutdown';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const adapter = new RequestDrainingExpressAdapter();
+  const app = await NestFactory.create(AppModule, adapter);
   const logger = new Logger('Bootstrap');
   const config = app.get(ConfigService);
 
@@ -111,17 +115,37 @@ async function bootstrap() {
 
   // Graceful shutdown
   const listenerWatchdog = app.get(HttpListenerWatchdogService);
-  // Mark an intentional stop before Nest's signal handlers can close the socket.
-  process.once('SIGTERM', () => listenerWatchdog.stop());
-  process.once('SIGINT', () => listenerWatchdog.stop());
-  app.enableShutdownHooks();
-  const shutdownTimeout = config.server.shutdown_timeout_ms ?? 5000;
-  process.on('SIGTERM', async () => {
-    logger.log(`Graceful shutdown initiated (timeout: ${shutdownTimeout}ms)...`);
-    setTimeout(() => process.exit(1), shutdownTimeout);
-    await app.close();
-    process.exit(0);
+  adapter.setRequestDrain(async () => {
+    await app.get(PricingRuntimeService).waitForRequests();
+    // A request can finish its accounting and enqueue a write-behind log after
+    // beforeApplicationShutdown already flushed the then-empty queues.
+    // Drain those final writes before Nest disposes the database connection.
+    await app.get(PipelineService).drainPendingLogWrites();
   });
+  // Do not also enable Nest's signal handlers: they would race this drain and
+  // close database providers while the final SSE requests are still settling.
+  const shutdownTimeout = config.server.shutdown_timeout_ms ?? 5000;
+  let shutdownStarted = false;
+  const handleShutdown = async () => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
+    logger.log(`Graceful shutdown initiated (timeout: ${shutdownTimeout}ms)...`);
+    const deadline = setTimeout(() => process.exit(1), shutdownTimeout);
+    try {
+      listenerWatchdog.stop();
+      adapter.stopAccepting();
+      await app.close();
+      await shutdownTelemetry();
+      clearTimeout(deadline);
+      process.exit(0);
+    } catch {
+      logger.error('Graceful shutdown did not complete; retained accounting requires recovery.');
+      clearTimeout(deadline);
+      process.exit(1);
+    }
+  };
+  process.on('SIGTERM', handleShutdown);
+  process.on('SIGINT', handleShutdown);
 
   await app.listen(port, host);
   listenerWatchdog.start(app.getHttpServer());

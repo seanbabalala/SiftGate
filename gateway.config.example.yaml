@@ -42,6 +42,17 @@ server:
   #   origin: false              # false = same-origin only; use ["https://example.com"] for browser clients
   #   credentials: false
 
+# Optional host-wide pricing-management ceilings. These do not activate pricing.
+# Limits apply to new publications/actions, not frozen requests or historical prices.
+# pricing_limits:
+#   max_published_rules: 20000     # Unique current/scheduled version rules; range 1..100000
+#   max_request_body_bytes: 1048576 # Parsed JSON UTF-8 bytes; range 1024..1048576
+#   max_replay_rows: 4096          # Cumulative selected rows; range 1..20000
+#   max_replay_source_bytes: 67108864 # Field UTF-8 bytes + 64 bytes/field/read; max 134217728
+#   max_replay_result_bytes: 8388608 # Complete JSON response bytes; max 16777216
+#   max_replay_work: 250000        # Compilation/calculation/serialization units; max 2000000
+#   max_replay_ms: 2000            # Cooperative deadline (ms), including read queues; max 30000
+
 database:
   type: sqlite
   path: ./data/gateway.db

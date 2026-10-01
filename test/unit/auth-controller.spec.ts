@@ -52,16 +52,19 @@ describe('AuthController', () => {
     it('should accept a workspace invitation during local login', async () => {
       const authService = mockAuthService();
       const config = mockConfigService();
+      const transaction = { syntheticTransaction: true };
       const invitations = {
-        acceptForUser: jest.fn(async () => ({
-          workspaceId: 'workspace-a',
-          organizationId: 'org-a',
-          role: 'operator',
-        })),
+        acceptForUser: jest.fn(async (_token, _user, _email, effect) => {
+          const accepted = { workspaceId: 'workspace-a', organizationId: 'org-a', role: 'operator' };
+          await effect(accepted, transaction);
+          return accepted;
+        }),
       };
       const memberships = {
+        withTransaction: jest.fn(),
         ensureMembership: jest.fn(async () => ({})),
       };
+      memberships.withTransaction.mockImplementation((action, manager) => { expect(manager).toBe(transaction); return action(memberships); });
       const controller = new AuthController(
         authService,
         config,
@@ -77,7 +80,7 @@ describe('AuthController', () => {
       });
 
       expect(result).toEqual({ token: 'jwt-token-123' });
-      expect(invitations.acceptForUser).toHaveBeenCalledWith('sg_inv_local', 'dashboard');
+      expect(invitations.acceptForUser).toHaveBeenCalledWith('sg_inv_local', 'dashboard', undefined, expect.any(Function));
       expect(memberships.ensureMembership).toHaveBeenCalledWith({
         userId: 'dashboard',
         organizationId: 'org-a',

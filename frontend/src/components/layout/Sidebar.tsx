@@ -28,6 +28,7 @@ import {
   FileSearch,
   BrainCircuit,
   ReceiptText,
+  BookOpen,
   BellRing,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -64,6 +65,7 @@ const navGroups = [
     items: [
       { to: '/semantic-platform', icon: BrainCircuit, labelKey: 'nav.semanticPlatform' },
       { to: '/cost-platform', icon: ReceiptText, labelKey: 'nav.costPlatform' },
+      { to: '/pricing', icon: BookOpen, labelKey: 'nav.pricing' },
       { to: '/budget', icon: Wallet, labelKey: 'nav.budget' },
       { to: '/experiments', icon: FlaskConical, labelKey: 'nav.experiments' },
       { to: '/shadow', icon: GitCompareArrows, labelKey: 'nav.shadow' },

@@ -1,3 +1,5 @@
+import { attachTokenPricingEvidence } from '../pricing-usage-evidence';
+import { geminiCompatibilityUsage, isNativeGeminiUsageSchema } from '../gemini-pricing-usage';
 import { CanonicalStreamEvent, TokenUsage } from '../../canonical/canonical.types';
 import {
   extractUsageByKnownFields,
@@ -7,6 +9,9 @@ import {
 
 export class GeminiStreamParser {
   private buffer = '';
+  private pricingUsage?: TokenUsage;
+
+  getPricingUsage(): TokenUsage | undefined { return this.pricingUsage; }
   private currentEvent = '';
   private hasStarted = false;
   private hasStopped = false;
@@ -61,6 +66,7 @@ export class GeminiStreamParser {
   private *processEvent(
     data: Record<string, unknown>,
   ): Generator<CanonicalStreamEvent> {
+    if (data.usageMetadata) this.resolveUsage(data);
     if (!this.hasStarted) {
       this.hasStarted = true;
       yield {
@@ -111,7 +117,7 @@ export class GeminiStreamParser {
     yield {
       type: 'stop',
       stop_reason: this.mapFinishReason(finishReason),
-      usage: this.resolveUsage(data),
+      usage: data.usageMetadata ? this.resolveUsage(data) : this.pricingUsage ?? this.resolveUsage({}),
     };
   }
 
@@ -127,7 +133,7 @@ export class GeminiStreamParser {
       ? extractUsageBySchema(data, this.usageSchema)
       : { input_tokens: 0, output_tokens: 0 };
     const knownUsage = extractUsageByKnownFields(data);
-    return {
+    const result: TokenUsage = isNativeGeminiUsageSchema(this.usageSchema) ? geminiCompatibilityUsage(usageMetadata) : {
       input_tokens:
         schemaUsage.input_tokens ||
         knownUsage.input_tokens ||
@@ -144,6 +150,9 @@ export class GeminiStreamParser {
         fallbackUsage.cache_read_input_tokens ||
         0,
     };
+    attachTokenPricingEvidence(data, result, this.usageSchema);
+    this.pricingUsage = result;
+    return result;
   }
 
   private mapFinishReason(reason?: string): string {

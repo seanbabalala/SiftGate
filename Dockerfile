@@ -8,16 +8,22 @@
 # Run:    docker run -p 2099:2099 -v $(pwd)/gateway.config.yaml:/app/gateway.config.yaml siftgate
 # ============================================================
 
+# Match the tested Node 22 runtime. Candidate builds can pin the resolved image
+# digest with --build-arg NODE_IMAGE=node@sha256:... for reproducibility.
+ARG NODE_IMAGE=node:22-alpine
+
 # ── Stage 1: Build frontend ──
-FROM node:20-alpine AS frontend-build
+FROM ${NODE_IMAGE} AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+# The Dashboard imports shared pricing contracts and browser-safe helpers.
+COPY src/ /app/src/
 RUN npm run build
 
 # ── Stage 2: Build backend ──
-FROM node:20-alpine AS backend-build
+FROM ${NODE_IMAGE} AS backend-build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -29,7 +35,7 @@ COPY scripts/copy-runtime-assets.js ./scripts/copy-runtime-assets.js
 RUN npm run build
 
 # ── Stage 3: Production image ──
-FROM node:20-alpine AS production
+FROM ${NODE_IMAGE} AS production
 WORKDIR /app
 
 # Install production dependencies only
@@ -48,11 +54,13 @@ RUN mkdir -p /app/data
 
 # Default config (user should mount their own)
 COPY gateway.config.example.yaml ./gateway.config.yaml
+COPY scripts/docker-healthcheck.js ./scripts/docker-healthcheck.js
 
 EXPOSE 2099
 
-# Health check. Use Node's built-in fetch so the image does not rely on curl/wget.
+# Probe port defaults to 2099. Set SIFTGATE_HEALTHCHECK_PORT when server.port differs.
+# This changes only the probe, not the gateway's configured listener or host mapping.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:2099/live',{signal:AbortSignal.timeout(4000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["node", "scripts/docker-healthcheck.js"]
 
 CMD ["node", "dist/main.js"]

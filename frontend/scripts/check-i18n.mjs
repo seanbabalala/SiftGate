@@ -12,6 +12,7 @@ const namespaces = [
   'common',
   'dashboard',
   'alerts',
+  'pricing',
   'logs',
   'nodes',
   'routing',

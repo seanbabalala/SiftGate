@@ -1,3 +1,6 @@
+import { VIDEO_RESULT_PROFILES, type VideoResultProfile } from "../../../../src/pricing/video-result-profile.types";
+import { collectLegacyPricingUpdates, legacyPriceNumber } from "@/lib/node-pricing-form";
+import { Link } from "react-router-dom";
 import {
   useState,
   useEffect,
@@ -259,6 +262,7 @@ interface KeyValueRow {
 }
 
 interface PricingRow {
+  dirty?: boolean;
   model: string;
   input: string;
   output: string;
@@ -306,6 +310,7 @@ interface FormState {
   audio_speech_endpoint: string;
   video_generations_endpoint: string;
   video_status_endpoint: string;
+  video_result_profile: VideoResultProfile;
   realtime_endpoint: string;
   model_prefixes: string[];
   capabilities: string[];
@@ -380,6 +385,7 @@ const EMPTY_FORM: FormState = {
   audio_speech_endpoint: DEFAULT_ENDPOINTS.audio_speech_endpoint,
   video_generations_endpoint: DEFAULT_ENDPOINTS.video_generations_endpoint,
   video_status_endpoint: DEFAULT_ENDPOINTS.video_status_endpoint,
+  video_result_profile: "generic-v1",
   realtime_endpoint: DEFAULT_ENDPOINTS.realtime_endpoint,
   model_prefixes: [],
   capabilities: [],
@@ -844,6 +850,7 @@ export function NodeFormModal({
   initialPresetId,
 }: NodeFormModalProps) {
   const { t } = useTranslation("nodes");
+  const { t: priceText } = useTranslation("pricing");
   const isEdit = !!editNode;
   const [step, setStep] = useState<WizardStep>("provider");
   const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
@@ -852,6 +859,7 @@ export function NodeFormModal({
   const [showLegacyProviders, setShowLegacyProviders] = useState(false);
   const [providerSearch, setProviderSearch] = useState("");
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [removedPrices, setRemovedPrices] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<TestNodeResponse | null>(null);
@@ -898,6 +906,7 @@ export function NodeFormModal({
     setShowLegacyProviders(false);
     setProviderSearch("");
     setErrors({});
+    setRemovedPrices([]);
 
     if (editNode) {
       const selectedCapabilities: WizardCapability[] = [
@@ -949,6 +958,7 @@ export function NodeFormModal({
         video_status_endpoint:
           editNode.endpoints?.video_status ||
           DEFAULT_ENDPOINTS.video_status_endpoint,
+        video_result_profile: editNode.video_result_profile ?? "generic-v1",
         realtime_endpoint:
           editNode.endpoints?.realtime || DEFAULT_ENDPOINTS.realtime_endpoint,
         model_prefixes: editNode.model_prefixes || [],
@@ -1123,6 +1133,8 @@ export function NodeFormModal({
       video_status_endpoint:
         preset.endpoints.video_status ||
         DEFAULT_ENDPOINTS.video_status_endpoint,
+      // A provider preset must not silently retarget an existing task-result interpreter.
+      video_result_profile: isEdit ? form.video_result_profile : "generic-v1",
       realtime_endpoint:
         preset.endpoints.realtime || DEFAULT_ENDPOINTS.realtime_endpoint,
       model_prefixes: [...preset.model_prefixes],
@@ -1312,11 +1324,14 @@ export function NodeFormModal({
       ...form.pricing,
       { model: "", input: "", output: "" },
     ]);
-  const removePricing = (index: number) =>
-    setField(
-      "pricing",
-      form.pricing.filter((_, idx) => idx !== index),
-    );
+  const removePricing = (index: number) => {
+    const model = form.pricing[index].model;
+    if (isEdit && editNode?.configured_pricing_models?.includes(model)) {
+      if (!window.confirm(t('pricing:legacy.removeConfirm', { model }))) return;
+      setRemovedPrices((current) => [...new Set([...current, model])]);
+    }
+    setField('pricing', form.pricing.filter((_, idx) => idx !== index));
+  };
   const updatePricing = (
     index: number,
     field: keyof PricingRow,
@@ -1325,7 +1340,7 @@ export function NodeFormModal({
     setField(
       "pricing",
       form.pricing.map((row, idx) =>
-        idx === index ? { ...row, [field]: value } : row,
+        idx === index ? { ...row, [field]: value, dirty: true } : row,
       ),
     );
 
@@ -1356,6 +1371,10 @@ export function NodeFormModal({
       }
     }
     if (targetStep === "settings" || targetStep === "test") {
+      const editedPrices = form.pricing.filter((row) => row.dirty && (row.input.trim() || row.output.trim()));
+      if (editedPrices.some((row) => !row.model.trim() || !row.input.trim() || !row.output.trim() || legacyPriceNumber(row.input) === undefined || legacyPriceNumber(row.output) === undefined)) errs.pricing = t('pricing:legacy.invalid');
+      if (new Set(editedPrices.map((row) => row.model.trim())).size !== editedPrices.length) errs.pricing = t('pricing:legacy.invalid');
+
       const credentialRows = form.credentials.filter(
         (credential) => credential.id.trim() || credential.api_key.trim(),
       );
@@ -1445,6 +1464,7 @@ export function NodeFormModal({
       ),
     );
     for (const row of form.pricing) {
+      if (!row.dirty || !row.input.trim() || !row.output.trim()) continue;
       const model = row.model.trim();
       if (!model) continue;
       if (!activeModels.has(model)) continue;
@@ -1541,6 +1561,8 @@ export function NodeFormModal({
       video_generations_endpoint: active.includes("video_models")
         ? form.video_generations_endpoint.trim()
         : undefined,
+      ...(form.video_result_profile !== (editNode?.video_result_profile ?? "generic-v1")
+        ? { video_result_profile: form.video_result_profile } : {}),
       video_status_endpoint: active.includes("video_models")
         ? form.video_status_endpoint.trim()
         : undefined,
@@ -1586,7 +1608,8 @@ export function NodeFormModal({
                 retryStatuses.length > 0 ? retryStatuses : undefined,
             }
           : undefined,
-      model_capabilities: modelCapabilities,
+      model_capabilities: isEdit ? undefined : modelCapabilities,
+      ...(isEdit ? { model_pricing_updates: collectLegacyPricingUpdates(form.pricing, removedPrices) } : {}),
       auth_type: form.auth_type
         ? (form.auth_type as "bearer" | "x-api-key" | "custom-header")
         : undefined,
@@ -1605,6 +1628,7 @@ export function NodeFormModal({
           : undefined,
     };
 
+    if (basePayload.model_pricing_updates?.length === 0) delete basePayload.model_pricing_updates;
     if (form.api_key.trim()) basePayload.api_key = form.api_key.trim();
     if (isEdit) return basePayload;
 
@@ -2477,6 +2501,12 @@ export function NodeFormModal({
                       )}
                       {activeBuckets.includes("video_models") && (
                         <>
+                          <FieldGroup label={priceText("nativeVideo.profile")}>
+                            <NativeSelect aria-label={priceText("nativeVideo.profile")} value={form.video_result_profile}
+                              onChange={event => setField("video_result_profile", event.target.value as VideoResultProfile)}
+                              options={VIDEO_RESULT_PROFILES.map(value => ({ value, label: priceText(`nativeVideo.${value}`) }))} />
+                            <p className="mt-2 text-xs leading-5 text-[var(--foreground-muted)]">{priceText("nativeVideo.help")}</p>
+                          </FieldGroup>
                           <FieldGroup
                             label={t("form.labels.videoGenerationsEndpoint")}
                           >
@@ -2568,6 +2598,8 @@ export function NodeFormModal({
                     title={t("form.panels.pricing")}
                     icon={BadgeDollarSign}
                   >
+                    <p className="mb-3 text-xs leading-5 text-[var(--foreground-muted)]">{t('pricing:legacy.help')} <Link className="font-semibold text-[var(--accent)] underline" to={`/pricing${editNode ? `?node=${encodeURIComponent(editNode.id)}` : ''}`} onClick={onClose}>{t('pricing:legacy.open')}</Link></p>
+                    {errors.pricing && <p role="alert" className="mb-3 text-xs text-[var(--destructive)]">{errors.pricing}</p>}
                     <PricingEditor
                       rows={form.pricing}
                       onAdd={addPricing}

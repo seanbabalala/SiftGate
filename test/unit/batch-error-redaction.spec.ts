@@ -49,7 +49,7 @@ function makeBatchProxy() {
     createFromProvider: jest.fn(),
     updateFromProvider: jest.fn(),
     findAccessible: jest.fn(),
-    save: jest.fn(),
+    markCancelled: jest.fn(),
   };
   const callLogs = {
     create: jest.fn((entity) => entity),

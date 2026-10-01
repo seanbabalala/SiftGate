@@ -1,3 +1,6 @@
+import { formatCacheMoney } from '@/lib/cache-reference-display'
+import { useLogCostSummaries } from '@/hooks/use-log-cost-summaries'
+import { ReportCostCell } from '@/components/pricing/report-cost-cell'
 import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -70,6 +73,7 @@ function LogsSummaryPanel({
   periodLabel: string
 }) {
   const { t } = useTranslation('logs')
+  const { t: pricingT } = useTranslation('pricing')
 
   if (isLoading) {
     return (
@@ -115,11 +119,12 @@ function LogsSummaryPanel({
       <div className="grid sm:grid-cols-3 xl:grid-cols-5">
         <SummaryMetric label={t('summary.requests')} value={total.requests.toLocaleString()} icon={Activity} />
         <SummaryMetric label={t('summary.tokens')} value={formatTokens(total.tokens)} icon={Braces} />
-        <SummaryMetric label={t('summary.cost')} value={formatCost(total.cost_usd)} icon={CircleDollarSign} />
+        <SummaryMetric label={pricingT('report.compatibilityCost')} value={formatCost(total.cost_usd)} icon={CircleDollarSign} />
         <SummaryMetric label={t('summary.successRate')} value={`${total.success_rate.toFixed(1)}%`} icon={Gauge} />
         <SummaryMetric label={t('summary.cacheRate')} value={`${total.cache_rate.toFixed(1)}%`} icon={Database} />
       </div>
 
+      <p className="border-t border-[var(--border)] px-4 py-3 text-xs leading-6">{pricingT('report.compatibilityHelp')} <Link to="/pricing/cost-report" className="underline">{pricingT('report.title')}</Link></p>
       <div className="border-t border-[var(--border)]">
         <div className="flex items-center gap-2 px-4 py-3">
           <KeyRound className="h-4 w-4 text-[var(--foreground-dim)]" />
@@ -132,7 +137,7 @@ function LogsSummaryPanel({
               <TableHead>{t('summary.key')}</TableHead>
               <TableHead className="text-right">{t('summary.requests')}</TableHead>
               <TableHead className="text-right">{t('summary.tokens')}</TableHead>
-              <TableHead className="text-right">{t('summary.cost')}</TableHead>
+              <TableHead className="text-right">{pricingT('report.compatibilityCost')}</TableHead>
               <TableHead className="text-right">{t('summary.successRate')}</TableHead>
               <TableHead className="text-right">{t('summary.cacheRate')}</TableHead>
             </TableRow>
@@ -190,7 +195,7 @@ function LogRouteBadge({ log }: { log: CallLog }) {
 }
 
 function ProviderCacheBadge({ log }: { log: CallLog }) {
-  const { t } = useTranslation('logs')
+  const { t, i18n } = useTranslation('logs')
   if (!isProviderCacheLog(log)) return null
   const cacheCost = providerCacheCostBreakdown(log)
 
@@ -201,10 +206,10 @@ function ProviderCacheBadge({ log }: { log: CallLog }) {
           ? t('cache.tooltip', {
               cached: formatTokens(cacheCost.cachedInputTokens),
               total: formatTokens(log.input_tokens || 0),
-              saved: formatCost(cacheCost.savedCostUsd),
+              saved: formatCacheMoney(cacheCost.savedCostUsdExact, i18n.resolvedLanguage ?? i18n.language),
             })
           : t('cache.tooltipUnpriced', {
-              defaultValue: '{{cached}} / {{total}} tokens cached; configure cache pricing to estimate savings',
+              defaultValue: '{{cached}} / {{total}} tokens cached; no comparable baseline was retained',
               cached: formatTokens(cacheCost.cachedInputTokens),
               total: formatTokens(log.input_tokens || 0),
             })
@@ -358,7 +363,8 @@ function LogDetailRow({
   log: CallLog
   upstreamProtocol?: string | null
 }) {
-  const { t } = useTranslation('logs')
+  const { t, i18n } = useTranslation('logs')
+  const { t: pricingT } = useTranslation('pricing')
   const mediaByteSize = formatBytes(log.media_byte_size)
   const isSemanticCache = isSemanticCacheLog(log)
   const isCache = isPromptCacheLog(log) || isSemanticCache
@@ -610,17 +616,17 @@ function LogDetailRow({
                   </div>
                   <div>
                     <span className="text-[var(--foreground-dim)]">
-                      {t('cache.actualCost', { defaultValue: 'actual cost' })}:{' '}
+                      {t('cache.actualCost', { defaultValue: 'recorded comparison cost' })}:{' '}
                     </span>
                     <span className="font-mono text-[var(--foreground-muted)]">
-                      {formatCost(cacheCost.actualCostUsd)}
+                      {formatCacheMoney(cacheCost.actualCostUsd, i18n.resolvedLanguage ?? i18n.language)}
                     </span>
                   </div>
                   <div>
                     <span className="text-[var(--foreground-dim)]">{t('cache.withoutCacheCost')}: </span>
                     <span className="font-mono text-[var(--foreground-muted)]">
                       {cacheCost.hasNoCacheEstimate
-                        ? formatCost(cacheCost.withoutCacheCostUsd)
+                        ? formatCacheMoney(cacheCost.withoutCacheCostUsd, i18n.resolvedLanguage ?? i18n.language)
                         : t('common.na')}
                     </span>
                   </div>
@@ -628,15 +634,15 @@ function LogDetailRow({
                     <span className="text-[var(--foreground-dim)]">{t('cache.savedCost')}: </span>
                     <span
                       className={
-                        cacheCost.hasSavingsEstimate
+                        cacheCost.savedCostUsd !== null && cacheCost.savedCostUsd >= 0
                           ? 'font-mono text-emerald-700 dark:text-emerald-300'
                           : 'font-mono text-amber-700 dark:text-amber-300'
                       }
                     >
                       {cacheCost.hasSavingsEstimate
-                        ? formatCost(cacheCost.savedCostUsd)
+                        ? formatCacheMoney(cacheCost.savedCostUsdExact, i18n.resolvedLanguage ?? i18n.language)
                         : t('cache.savingsUnpriced', {
-                            defaultValue: 'cache pricing not configured',
+                            defaultValue: 'no comparable baseline recorded',
                           })}
                     </span>
                   </div>
@@ -678,7 +684,8 @@ function LogDetailRow({
               </span>
             </div>
           )}
-          <div className="md:col-span-2 xl:col-span-3">
+          <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-3">
+            <Link to={`/logs/${log.id}/cost`} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mt-1' })}><CircleDollarSign className="h-3.5 w-3.5" />{pricingT('cost.view')}</Link>
             <Link
               to={`/route-decisions/${encodeURIComponent(log.request_id)}`}
               className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mt-1' })}
@@ -695,6 +702,7 @@ function LogDetailRow({
 
 export function LogsPage() {
   const { t } = useTranslation('logs')
+  const { t: pricingT } = useTranslation('pricing')
   const [page, setPage] = useState(1)
   const [tierFilter, setTierFilter] = useState('')
   const [nodeFilter, setNodeFilter] = useState('')
@@ -768,12 +776,15 @@ export function LogsPage() {
     refetch: refetchSummary,
   } = useLogsSummary(logFilters)
 
+  const costs = useLogCostSummaries(logsData?.data.map(log => log.id) ?? [])
+  const costById = new Map(costs.data?.rows.map(row => [row.log_id, row]) ?? [])
   const { newCount, clearNewCount } = useSSELogs(100)
 
   const handleRefresh = () => {
     clearNewCount()
     refetch()
     refetchSummary()
+    void costs.refetch()
   }
 
   const handleTimeRangeChange = (value: string) => {
@@ -822,6 +833,7 @@ export function LogsPage() {
             onChange={(v) => setExportFormat(v)}
             className="w-20 h-8 text-[11px]"
           />
+          <Link to="/pricing/cost-report" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{pricingT('report.title')}</Link>
           <Button variant="outline" size="sm" onClick={handleExport}>
             <Download className="h-3.5 w-3.5" />
             {t('export.button')}
@@ -982,7 +994,7 @@ export function LogsPage() {
                         {formatTokens(log.input_tokens + log.output_tokens)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] text-[var(--foreground-muted)]">
-                        {formatCost(log.cost_usd)}
+                        <ReportCostCell row={costById.get(log.id)} failed={costs.isError} />
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] text-[var(--foreground-muted)]">
                         {formatLatency(log.latency_ms)}

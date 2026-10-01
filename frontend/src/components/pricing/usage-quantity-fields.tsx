@@ -1,0 +1,17 @@
+import { useTranslation } from 'react-i18next'
+import { X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { CardStatic } from '@/components/ui/card'
+import { PriceInput, PriceSelect } from './pricing-fields'
+import { DIMENSION_UNITS, MEDIA_ATTRIBUTES, type MeterDimension } from '@/types/pricing'
+import type { UsageDraft } from '@/lib/usage-recovery-form'
+
+export function UsageQuantityFields({ draft, locked, edit }: { draft: UsageDraft; locked: boolean; edit: (next: UsageDraft) => void }) {
+  const { t } = useTranslation('pricing')
+  const remaining = (Object.keys(DIMENSION_UNITS) as MeterDimension[]).filter((dimension) => !draft.quantities.some((row) => row.dimension === dimension))
+  return <CardStatic className="space-y-5 p-5"><div><h2 className="font-semibold">{t('usageRecovery.quantities')}</h2><p className="mt-2 text-sm leading-6 text-[var(--foreground-muted)]">{t('usageRecovery.quantityHelp')}</p><p className="mt-2 text-xs leading-6 text-[var(--foreground-muted)]">{t('usageRecovery.partitions')}</p></div>
+    <div className="grid gap-4 sm:grid-cols-2">{draft.quantities.map((row) => <div className="flex min-w-0 items-end gap-2" key={row.dimension}><div className="min-w-0 flex-1"><PriceInput label={`${t(`dimension.${row.dimension}`)} · ${t(`unit.${DIMENSION_UNITS[row.dimension]}`)}`} className="font-mono" inputMode="decimal" placeholder={t('simulation.missing')} maxLength={49} disabled={locked} value={row.value} onChange={(event) => edit({ ...draft, quantities: draft.quantities.map((item) => item.dimension === row.dimension ? { ...item, value: event.target.value } : item) })} /></div><Button size="icon" variant="ghost" disabled={locked} aria-label={t('usageRecovery.remove', { dimension: t(`dimension.${row.dimension}`) })} onClick={() => edit({ ...draft, quantities: draft.quantities.filter((item) => item.dimension !== row.dimension) })}><X className="h-4 w-4" /></Button></div>)}</div>
+    {remaining.length > 0 && <PriceSelect label={t('usageRecovery.add')} value="" disabled={locked} options={[{ value: '', label: t('usageRecovery.add') }, ...remaining.map((value) => ({ value, label: t(`dimension.${value}`) }))]} onChange={(value) => { if (value) edit({ ...draft, quantities: [...draft.quantities, { dimension: value as MeterDimension, value: '' }] }) }} />}
+    <details className="space-y-4"><summary className="cursor-pointer text-sm font-semibold">{t('usageRecovery.conditions')}</summary><p className="text-xs leading-6 text-[var(--foreground-muted)]">{t('usageRecovery.conditionsHelp')}</p><div className="grid gap-4 sm:grid-cols-2"><PriceInput label={t('simulation.resolvedTier')} value={draft.tier} maxLength={128} disabled={locked} onChange={(event) => edit({ ...draft, tier: event.target.value })} /><PriceInput label={t('usageRecovery.acceptedAt')} value={draft.acceptedAt} disabled={locked} placeholder="2026-01-01T12:00:00+08:00" onChange={(event) => edit({ ...draft, acceptedAt: event.target.value })} /><PriceInput label={t('usageRecovery.completedAt')} value={draft.completedAt} disabled={locked} placeholder="2026-01-01T12:00:01+08:00" onChange={(event) => edit({ ...draft, completedAt: event.target.value })} />{MEDIA_ATTRIBUTES.filter((attribute) => attribute !== 'operation').map((attribute) => <PriceInput key={attribute} label={t(`media.${attribute}`)} disabled={locked} maxLength={128} value={draft.media[attribute] ?? ''} onChange={(event) => edit({ ...draft, media: { ...draft.media, [attribute]: event.target.value } })} />)}</div></details>
+  </CardStatic>
+}

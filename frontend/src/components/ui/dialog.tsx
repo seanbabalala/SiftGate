@@ -22,19 +22,15 @@ interface DialogProps {
 }
 
 export function Dialog({ open, onOpenChange, children }: DialogProps) {
-  const previousFocus = useRef<HTMLElement | null>(null)
-
-  // Save the currently focused element when opening
+  // Cleanup also runs when a conditionally rendered dialog is unmounted.
   useEffect(() => {
-    if (open) {
-      previousFocus.current = document.activeElement as HTMLElement
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      previousFocus.current?.focus()
-    }
+    if (!open) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
-      document.body.style.overflow = ''
+      document.body.style.overflow = previousOverflow
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
     }
   }, [open])
 

@@ -34,6 +34,9 @@ export class BudgetRule {
   @Column({ type: 'real', default: 0 })
   current_value!: number;
 
+  /** Read-only transient exact balance; never an implicit schema synchronization change. */
+  current_value_exact?: string;
+
   @CreateDateColumn()
   period_start!: Date;
 

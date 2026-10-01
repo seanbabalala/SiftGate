@@ -7,7 +7,9 @@ function makeRepo<T extends { id?: any }>(initial: T[] = []) {
   const store = [...initial];
   let nextId = 1;
 
-  const matchesValue = (itemValue: unknown, whereValue: any) => {
+  const matchesValue = (itemValue: unknown, whereValue: any): boolean => {
+    if (whereValue?._type === 'or') return whereValue._value.some((part: unknown) => matchesValue(itemValue, part));
+    if (whereValue?._type === 'lessThanOrEqual') return itemValue != null && Number(itemValue) <= Number(whereValue._value);
     if (whereValue && typeof whereValue === 'object' && whereValue._type === 'isNull') {
       return itemValue === null || itemValue === undefined;
     }
@@ -197,11 +199,11 @@ describe('GatewayApiKeyService', () => {
     const created = await service.create({ name: 'Worker' });
 
     await service.findContextByPlainKey(created.key, '10.0.0.1');
-    const writesAfterFirstUse = apiKeyRepo.save.mock.calls.length;
+    const writesAfterFirstUse = apiKeyRepo.update.mock.calls.length;
 
     await service.findContextByPlainKey(created.key, '10.0.0.1');
 
-    expect(apiKeyRepo.save).toHaveBeenCalledTimes(writesAfterFirstUse);
+    expect(apiKeyRepo.update).toHaveBeenCalledTimes(writesAfterFirstUse);
     expect(apiKeyRepo._store[0].last_used_ip).toBe('10.0.0.1');
   });
 
@@ -210,11 +212,11 @@ describe('GatewayApiKeyService', () => {
     const created = await service.create({ name: 'Worker' });
 
     await service.findContextByPlainKey(created.key, '10.0.0.1');
-    const writesAfterFirstUse = apiKeyRepo.save.mock.calls.length;
+    const writesAfterFirstUse = apiKeyRepo.update.mock.calls.length;
 
     await service.findContextByPlainKey(created.key, '10.0.0.2');
 
-    expect(apiKeyRepo.save).toHaveBeenCalledTimes(writesAfterFirstUse + 1);
+    expect(apiKeyRepo.update).toHaveBeenCalledTimes(writesAfterFirstUse + 1);
     expect(apiKeyRepo._store[0].last_used_ip).toBe('10.0.0.2');
   });
 
@@ -400,7 +402,7 @@ describe('GatewayApiKeyService', () => {
     });
 
     expect(budgetRepo.update).toHaveBeenCalledWith(
-      { api_key_id: created.item.id, workspace_id: 'default-workspace' },
+      expect.arrayContaining([{ api_key_id: created.item.id, workspace_id: 'default-workspace' }]),
       { api_key_name: 'Renamed' },
     );
     expect(budgetRepo._store).toEqual(expect.arrayContaining([
@@ -421,7 +423,7 @@ describe('GatewayApiKeyService', () => {
 
     await service.remove(created.item.id);
     expect(budgetRepo.update).toHaveBeenCalledWith(
-      { api_key_id: created.item.id, workspace_id: 'default-workspace' },
+      expect.arrayContaining([{ api_key_id: created.item.id, workspace_id: 'default-workspace' }]),
       { is_active: false },
     );
   });

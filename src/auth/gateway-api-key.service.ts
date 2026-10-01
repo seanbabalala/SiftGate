@@ -5,7 +5,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { Repository } from 'typeorm';
+import { Repository, IsNull, LessThanOrEqual, Or, type EntityManager } from 'typeorm';
+import {
+  coordinatedRepositoryOperation,
+  isUniqueNameConflict,
+  requireRepositoryTransaction,
+} from '../database/coordinated-repository';
+import { lockBudgetConfiguration } from '../budget/budget-config-writer';
 import {
   GatewayApiKey,
   GatewayApiKeyStatus,
@@ -85,6 +91,8 @@ const LAST_USED_WRITE_INTERVAL_MS = 5 * 60_000;
 
 @Injectable()
 export class GatewayApiKeyService {
+  private databaseScope: { manager: EntityManager; write: boolean } | null = null;
+  private checkedName?: string;
   constructor(
     private readonly config: ConfigService,
     private readonly workspaceContext: WorkspaceContextService,
@@ -98,7 +106,35 @@ export class GatewayApiKeyService {
     private readonly callLogRepo: Repository<CallLog>,
   ) {}
 
+  /** The callback may append audit records using the same transaction manager. */
+  withTransaction<T>(action: (service: GatewayApiKeyService, manager?: EntityManager) => Promise<T>): Promise<T> {
+    if (this.databaseScope) {
+      if (!this.databaseScope.write) throw new Error('Cannot promote a read scope to a write transaction');
+      return action(this, this.databaseScope.manager);
+    }
+    return coordinatedRepositoryOperation(this.apiKeyRepo, true, async (manager) => {
+      const service = manager ? this.scoped(manager, true) : this;
+      try { return await action(service, manager); }
+      catch (error) {
+        if (service.checkedName && isUniqueNameConflict(this.apiKeyRepo, error)) throw new BadRequestException(`API key name already exists: ${service.checkedName}`);
+        throw error;
+      }
+    });
+  }
+
+  private scoped(manager: EntityManager, write: boolean): GatewayApiKeyService {
+    const service = new GatewayApiKeyService(this.config, this.workspaceContext, manager.getRepository(GatewayApiKey), manager.getRepository(LocalTeam), manager.getRepository(BudgetRule), manager.getRepository(CallLog));
+    service.databaseScope = { manager, write };
+    return service;
+  }
+
+  private needsDatabaseScope(): boolean { return !this.databaseScope && Boolean(this.apiKeyRepo.manager?.connection); }
+  private read<T>(action: (service: GatewayApiKeyService) => Promise<T>): Promise<T> {
+    return coordinatedRepositoryOperation(this.apiKeyRepo, false, (manager) => action(manager ? this.scoped(manager, false) : this));
+  }
+
   async create(dto: CreateGatewayApiKeyDto): Promise<CreatedGatewayApiKey> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.create(dto));
     const normalized = this.normalizeCreateDto(dto);
     const workspaceId = this.workspaceId();
     normalized.workspace_id = workspaceId;
@@ -123,6 +159,7 @@ export class GatewayApiKeyService {
   }
 
   async list(): Promise<GatewayApiKeySummary[]> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.list());
     const keys = await this.apiKeyRepo.find({
       where: workspaceFindWhere(this.workspaceId(), {}),
       order: { created_at: 'DESC' },
@@ -130,11 +167,21 @@ export class GatewayApiKeyService {
     return Promise.all(keys.map((key) => this.toSummary(key)));
   }
 
+  getSummaryInTransaction(
+    id: string,
+    manager: EntityManager,
+  ): Promise<GatewayApiKeySummary> {
+    requireRepositoryTransaction(this.apiKeyRepo, manager);
+    return this.scoped(manager, false).getSummary(id);
+  }
+
   async getSummary(id: string): Promise<GatewayApiKeySummary> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.getSummary(id));
     return this.toSummary(await this.getById(id));
   }
 
   async getContextById(id: string): Promise<GatewayApiKeyContext> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.getContextById(id));
     const entity = await this.getById(id);
     if (entity.status !== 'active') {
       throw new BadRequestException(`API key is not active: ${entity.name}`);
@@ -155,6 +202,7 @@ export class GatewayApiKeyService {
     plainKey: string,
     ip?: string,
   ): Promise<GatewayApiKeyContext | null> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.findContextByPlainKey(plainKey, ip));
     const keyHash = this.hashKey(plainKey);
     const entity = await this.apiKeyRepo.findOne({ where: { key_hash: keyHash } });
     if (!entity || entity.status !== 'active') {
@@ -182,14 +230,14 @@ export class GatewayApiKeyService {
     now: Date,
   ): Promise<void> {
     if (this.shouldUpdateApiKeyUsage(entity, ip, now)) {
-      entity.last_used_at = now;
-      entity.last_used_ip = ip;
-      await this.apiKeyRepo.save(entity);
+      await this.apiKeyRepo.update(
+        workspaceFindWhere(this.entityWorkspaceId(entity), { id: entity.id, key_hash: entity.key_hash, status: 'active' as const, last_used_at: Or(IsNull(), LessThanOrEqual(now)) }),
+        { last_used_at: now, last_used_ip: ip },
+      );
     }
 
     if (team && this.isStaleLastUsed(team.last_used_at, now)) {
-      team.last_used_at = now;
-      await this.teamRepo.save(team);
+      await this.teamRepo.update(workspaceFindWhere(this.entityWorkspaceId(team), { id: team.id, last_used_at: Or(IsNull(), LessThanOrEqual(now)) }), { last_used_at: now });
     }
   }
 
@@ -219,12 +267,12 @@ export class GatewayApiKeyService {
     id: string,
     dto: UpdateGatewayApiKeyDto,
   ): Promise<GatewayApiKeySummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.update(id, dto));
     const entity = await this.getById(id);
     const normalized = this.normalizeUpdateDto(dto);
 
     if (normalized.name && normalized.name !== entity.name) {
       await this.assertUniqueName(normalized.name, id, this.entityWorkspaceId(entity));
-      await this.renameBudgetRules(id, normalized.name);
     }
     if (normalized.team_id !== undefined) {
       await this.assertTeamAvailable(normalized.team_id, this.entityWorkspaceId(entity));
@@ -237,15 +285,18 @@ export class GatewayApiKeyService {
   }
 
   async remove(id: string): Promise<void> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.remove(id));
     const entity = await this.getById(id);
+    await lockBudgetConfiguration(this.budgetRepo, this.entityWorkspaceId(entity), { api_key_id: id });
     await this.budgetRepo.update(
-      { api_key_id: id, workspace_id: this.entityWorkspaceId(entity) },
+      workspaceFindWhere(this.entityWorkspaceId(entity), { api_key_id: id }),
       { is_active: false },
     );
     await this.apiKeyRepo.remove(entity);
   }
 
   async rotate(id: string): Promise<CreatedGatewayApiKey> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.rotate(id));
     const entity = await this.getById(id);
     const key = this.generatePlainKey();
     entity.key_hash = this.hashKey(key);
@@ -488,6 +539,7 @@ export class GatewayApiKeyService {
     exceptId?: string,
     workspaceId = this.workspaceId(),
   ): Promise<void> {
+    this.checkedName = name;
     const existing = await this.apiKeyRepo.findOne({
       where: workspaceFindWhere(workspaceId, { name }),
     });
@@ -499,6 +551,7 @@ export class GatewayApiKeyService {
   private async getById(id: string): Promise<GatewayApiKey> {
     const entity = await this.apiKeyRepo.findOne({
       where: workspaceFindWhere(this.workspaceId(), { id }),
+      ...(this.databaseScope?.write && this.apiKeyRepo.manager.connection.options.type === 'postgres' ? { lock: { mode: 'pessimistic_write' as const } } : {}),
     });
     if (!entity) {
       throw new NotFoundException(`API key not found: ${id}`);
@@ -542,44 +595,42 @@ export class GatewayApiKeyService {
   }
 
   private async syncBudgetRules(entity: GatewayApiKey): Promise<void> {
-    await this.upsertBudgetRule(entity, 'daily_tokens', entity.daily_token_limit);
-    await this.upsertBudgetRule(entity, 'daily_cost', entity.daily_cost_limit);
+    await lockBudgetConfiguration(this.budgetRepo, this.entityWorkspaceId(entity), { api_key_id: entity.id });
+    await this.renameBudgetRules(entity.id, entity.name);
+    const threshold = this.config.budget.alert_threshold;
+    await this.upsertBudgetRule(entity, 'daily_tokens', entity.daily_token_limit, threshold);
+    await this.upsertBudgetRule(entity, 'daily_cost', entity.daily_cost_limit, threshold);
   }
 
   private async upsertBudgetRule(
     entity: GatewayApiKey,
     type: string,
     limit: number | null,
+    threshold: number,
   ): Promise<void> {
     const existing = await this.budgetRepo.findOne({
-      where: {
+      where: workspaceFindWhere(this.entityWorkspaceId(entity), {
         api_key_id: entity.id,
         type,
-        workspace_id: this.entityWorkspaceId(entity),
-      },
+      }),
     });
 
     if (limit === null) {
       if (existing) {
-        existing.is_active = false;
-        await this.budgetRepo.save(existing);
+        await this.budgetRepo.update(workspaceFindWhere(this.entityWorkspaceId(entity), { id: existing.id }), { is_active: false });
       }
       return;
     }
 
     if (existing) {
-      existing.limit_value = limit;
-      existing.alert_threshold = this.config.budget.alert_threshold;
-      existing.api_key_name = entity.name;
-      existing.is_active = true;
-      await this.budgetRepo.save(existing);
+      await this.budgetRepo.update(workspaceFindWhere(this.entityWorkspaceId(entity), { id: existing.id }), { limit_value: limit, alert_threshold: threshold, api_key_name: entity.name, is_active: true });
       return;
     }
 
     await this.budgetRepo.save(this.budgetRepo.create({
       type,
       limit_value: limit,
-      alert_threshold: this.config.budget.alert_threshold,
+      alert_threshold: threshold,
       current_value: 0,
       period_start: this.startOfDay(new Date()),
       is_active: true,
@@ -591,7 +642,7 @@ export class GatewayApiKeyService {
 
   private async renameBudgetRules(id: string, name: string): Promise<void> {
     await this.budgetRepo.update(
-      { api_key_id: id, workspace_id: this.workspaceId() },
+      workspaceFindWhere(this.workspaceId(), { api_key_id: id }),
       { api_key_name: name },
     );
   }

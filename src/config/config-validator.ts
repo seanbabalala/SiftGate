@@ -1,7 +1,9 @@
+import { VIDEO_RESULT_PROFILES } from "../pricing/video-result-profile.types";
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import type { GatewayConfig } from './gateway.config';
+import { pricingLimitsIssues } from './pricing-limits';
 import { ALERT_EVENTS as CONNECTOR_EVENTS, CONNECTOR_TYPES, validateChannel } from '../alerts/alert-connector-runtime';
 import { buildNodeModelDiagnostics } from './config-diagnostics';
 import {
@@ -330,6 +332,9 @@ export function validateConfigObject(
   validateCluster(config.cluster, config.state, issues);
   validateSecretManager(config.secret_manager, issues);
   validatePricing(config.models_pricing, issues);
+  for (const entry of pricingLimitsIssues(config.pricing_limits)) {
+    issues.push(issue('error', 'invalid_pricing_limits', entry.message, entry.path));
+  }
   validateCatalogConfig(config.catalog, issues);
   validateConfigAudit(config.config_audit, issues);
   validateControlPlane(config.control_plane, issues);
@@ -1398,6 +1403,9 @@ function validateNodes(
     validateOptionalEndpoint(node, basePath, 'video_generations_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'video_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'video_status_endpoint', issues);
+    if (node.video_result_profile !== undefined && !(VIDEO_RESULT_PROFILES as readonly unknown[]).includes(node.video_result_profile)) {
+      issues.push(issue('error', 'invalid_video_result_profile', 'Choose a supported versioned video result profile.', `${basePath}.video_result_profile`));
+    }
     validateOptionalEndpoint(node, basePath, 'video_content_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'video_cancel_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'batch_endpoint', issues);
@@ -6923,7 +6931,17 @@ function validateSecretReferences(
   backends: Record<SecretReferenceBackend, boolean>,
 ): void {
   if (typeof value === 'string') {
-    const scan = scanSecretReferences(value);
+    // Endpoint slots are literal routing tokens, not secret references. Protect
+    // actual ${...} expressions first; malformed/nested expressions still fail.
+    const videoGeneration = /^nodes\[\d+\]\.video_(?:endpoint|generations_endpoint)$/.test(currentPath);
+    const videoControl = /^nodes\[\d+\]\.video_(?:status|content|cancel)_endpoint$/.test(currentPath);
+    const scanned = videoGeneration || videoControl
+      ? value.replace(/\$\{[^}]*\}|\{(?:id|model)\}/g, token => {
+          if (token.startsWith('${')) return token;
+          return (videoGeneration && token === '{model}') || (videoControl && token === '{id}') ? '__VIDEO_ENDPOINT_SLOT__' : token;
+        })
+      : value;
+    const scan = scanSecretReferences(scanned);
     for (const invalid of scan.invalid) {
       const envLike = invalid.reason.startsWith('Environment references');
       issues.push(

@@ -6,7 +6,9 @@ function makeRepo<T extends { id?: any }>(initial: T[] = []) {
   const store = [...initial];
   let nextId = 1;
 
-  const matchesValue = (itemValue: unknown, whereValue: any) => {
+  const matchesValue = (itemValue: unknown, whereValue: any): boolean => {
+    if (whereValue?._type === 'or') return whereValue._value.some((part: unknown) => matchesValue(itemValue, part));
+    if (whereValue?._type === 'lessThanOrEqual') return itemValue != null && Number(itemValue) <= Number(whereValue._value);
     if (whereValue && typeof whereValue === 'object' && whereValue._type === 'isNull') {
       return itemValue === null || itemValue === undefined;
     }

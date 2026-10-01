@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
+import { coordinatedRepositoryOperation } from '../database/coordinated-repository';
 import type {
   CanonicalMessage,
   CanonicalRequest,
@@ -21,6 +22,23 @@ import {
   normalizeWorkspaceId,
   workspaceFindWhere,
 } from '../workspaces/workspace-scope';
+
+export interface EvalRecordedRunInput {
+  dataset: EvalDatasetInput;
+  primary: EvalTargetInput;
+  candidate: EvalTargetInput;
+  judge?: EvalJudgeConfigInput;
+  samples: Array<{
+    sample_id?: string | null;
+    sample_hash: string;
+    primary: Partial<EvalTargetMetrics>;
+    candidate: Partial<EvalTargetMetrics>;
+    judge?: Partial<EvalJudgeResult>;
+    metadata?: Record<string, unknown>;
+  }>;
+  status?: 'completed' | 'failed';
+  error?: string | null;
+}
 
 export interface EvalTargetInput {
   node_id?: string | null;
@@ -89,6 +107,7 @@ const DEFAULT_JUDGE_RUBRIC =
 
 @Injectable()
 export class EvaluationService {
+  private databaseScoped = false;
   private readonly logger = new Logger(EvaluationService.name);
 
   constructor(
@@ -106,17 +125,52 @@ export class EvaluationService {
     private readonly pipeline?: PipelineService,
   ) {}
 
-  async listReports(filters: EvalReportFilters = {}) {
+  /** Only repository work belongs here; target and judge calls stay outside. */
+  private database<T>(
+    write: boolean,
+    action: (service: EvaluationService) => Promise<T>,
+  ): Promise<T> {
+    if (this.databaseScoped) return action(this);
+    return coordinatedRepositoryOperation(this.runs, write, (manager) => {
+      if (!manager) return action(this);
+      const scoped = new EvaluationService(
+        this.config,
+        manager.getRepository(EvalDataset),
+        manager.getRepository(EvalExperimentRun),
+        manager.getRepository(EvalSampleResult),
+        manager.getRepository(CallLog),
+        this.workspaceContext,
+        this.pipeline,
+      );
+      scoped.databaseScoped = true;
+      return action(scoped);
+    });
+  }
+
+  listReports(filters: EvalReportFilters = {}) {
+    return this.database(false, (service) =>
+      service.listReportsInDatabase(filters),
+    );
+  }
+
+  private async listReportsInDatabase(filters: EvalReportFilters) {
     const period = filters.period || '30d';
     const limit = this.clamp(filters.limit, 50, 500);
     const qb = this.runs.createQueryBuilder('run').where('1 = 1');
     applyWorkspaceQueryScope(qb, 'run', this.workspaceId());
     const since = this.periodStart(period);
     if (since) qb.andWhere('run.created_at >= :since', { since });
-    if (filters.status) qb.andWhere('run.status = :status', { status: filters.status });
-    if (filters.dataset_id) qb.andWhere('run.dataset_id = :datasetId', { datasetId: filters.dataset_id });
+    if (filters.status)
+      qb.andWhere('run.status = :status', { status: filters.status });
+    if (filters.dataset_id)
+      qb.andWhere('run.dataset_id = :datasetId', {
+        datasetId: filters.dataset_id,
+      });
 
-    const rows = await qb.orderBy('run.created_at', 'DESC').take(limit).getMany();
+    const rows = await qb
+      .orderBy('run.created_at', 'DESC')
+      .take(limit)
+      .getMany();
     return {
       generated_at: new Date().toISOString(),
       metadata_only: true,
@@ -131,7 +185,11 @@ export class EvaluationService {
     };
   }
 
-  async getReport(id: string) {
+  getReport(id: string) {
+    return this.database(false, (service) => service.getReportInDatabase(id));
+  }
+
+  private async getReportInDatabase(id: string) {
     const run = await this.runs.findOne({
       where: workspaceFindWhere(this.workspaceId(), { id }),
     });
@@ -146,27 +204,22 @@ export class EvaluationService {
       metadata_only: true,
       run: this.toRunDetail(run),
       samples: rows.map((sample) => this.toSampleSummary(sample)),
-      privacy: this.privacySummary(this.safeJson(run.privacy_json)?.sample_previews_stored === true),
+      privacy: this.privacySummary(
+        this.safeJson(run.privacy_json)?.sample_previews_stored === true,
+      ),
     };
   }
 
-  async recordRun(input: {
-    dataset: EvalDatasetInput;
-    primary: EvalTargetInput;
-    candidate: EvalTargetInput;
-    judge?: EvalJudgeConfigInput;
-    samples: Array<{
-      sample_id?: string | null;
-      sample_hash: string;
-      primary: Partial<EvalTargetMetrics>;
-      candidate: Partial<EvalTargetMetrics>;
-      judge?: Partial<EvalJudgeResult>;
-      metadata?: Record<string, unknown>;
-    }>;
-    status?: 'completed' | 'failed';
-    error?: string | null;
-  }) {
-    const dataset = await this.upsertDatasetMetadata(input.dataset, input.samples.length, false);
+  recordRun(input: EvalRecordedRunInput) {
+    return this.database(true, (service) => service.recordRunInDatabase(input));
+  }
+
+  private async recordRunInDatabase(input: EvalRecordedRunInput) {
+    const dataset = await this.upsertDatasetMetadata(
+      input.dataset,
+      input.samples.length,
+      false,
+    );
     const now = new Date().toISOString();
     const workspaceId = this.workspaceId();
     const run = this.runs.create({
@@ -192,72 +245,113 @@ export class EvaluationService {
       error: input.error || null,
       privacy_json: this.stringifySafe(this.privacySummary(false)),
     });
-    this.applyAggregateMetrics(run, input.samples.map((sample) => ({
-      primary: this.metricDefaults(sample.primary),
-      candidate: this.metricDefaults(sample.candidate),
-      judge: {
-        request_id: sample.judge?.request_id || null,
-        score: typeof sample.judge?.score === 'number' ? sample.judge.score : null,
-        label: sample.judge?.label || null,
-        reason_summary: sample.judge?.reason_summary || null,
-      },
-    })));
+    this.applyAggregateMetrics(
+      run,
+      input.samples.map((sample) => ({
+        primary: this.metricDefaults(sample.primary),
+        candidate: this.metricDefaults(sample.candidate),
+        judge: {
+          request_id: sample.judge?.request_id || null,
+          score:
+            typeof sample.judge?.score === 'number' ? sample.judge.score : null,
+          label: sample.judge?.label || null,
+          reason_summary: sample.judge?.reason_summary || null,
+        },
+      })),
+    );
     const saved = await this.runs.save(run);
-    await this.samples.save(input.samples.map((sample) => this.samples.create({
-      workspace_id: workspaceId,
-      run_id: saved.id,
-      sample_id: sample.sample_id || null,
-      sample_hash: sample.sample_hash,
-      primary_request_id: sample.primary.request_id || null,
-      candidate_request_id: sample.candidate.request_id || null,
-      judge_request_id: sample.judge?.request_id || null,
-      primary_status_code: sample.primary.status_code ?? null,
-      candidate_status_code: sample.candidate.status_code ?? null,
-      primary_success: Boolean(sample.primary.success),
-      candidate_success: Boolean(sample.candidate.success),
-      primary_latency_ms: Math.max(0, Number(sample.primary.latency_ms || 0)),
-      candidate_latency_ms: Math.max(0, Number(sample.candidate.latency_ms || 0)),
-      primary_cost_usd: Math.max(0, Number(sample.primary.cost_usd || 0)),
-      candidate_cost_usd: Math.max(0, Number(sample.candidate.cost_usd || 0)),
-      primary_fallback: Boolean(sample.primary.is_fallback),
-      candidate_fallback: Boolean(sample.candidate.is_fallback),
-      judge_score: typeof sample.judge?.score === 'number' ? sample.judge.score : null,
-      judge_label: sample.judge?.label || null,
-      judge_reason_summary: this.summarizeReason(sample.judge?.reason_summary),
-      error_type: this.firstErrorType(sample.primary.error_type, sample.candidate.error_type),
-      metadata_json: this.stringifySafe(this.sanitizeMetadata(sample.metadata || {})),
-    })));
+    await this.samples.save(
+      input.samples.map((sample) =>
+        this.samples.create({
+          workspace_id: workspaceId,
+          run_id: saved.id,
+          sample_id: sample.sample_id || null,
+          sample_hash: sample.sample_hash,
+          primary_request_id: sample.primary.request_id || null,
+          candidate_request_id: sample.candidate.request_id || null,
+          judge_request_id: sample.judge?.request_id || null,
+          primary_status_code: sample.primary.status_code ?? null,
+          candidate_status_code: sample.candidate.status_code ?? null,
+          primary_success: Boolean(sample.primary.success),
+          candidate_success: Boolean(sample.candidate.success),
+          primary_latency_ms: Math.max(
+            0,
+            Number(sample.primary.latency_ms || 0),
+          ),
+          candidate_latency_ms: Math.max(
+            0,
+            Number(sample.candidate.latency_ms || 0),
+          ),
+          primary_cost_usd: Math.max(0, Number(sample.primary.cost_usd || 0)),
+          candidate_cost_usd: Math.max(
+            0,
+            Number(sample.candidate.cost_usd || 0),
+          ),
+          primary_fallback: Boolean(sample.primary.is_fallback),
+          candidate_fallback: Boolean(sample.candidate.is_fallback),
+          judge_score:
+            typeof sample.judge?.score === 'number' ? sample.judge.score : null,
+          judge_label: sample.judge?.label || null,
+          judge_reason_summary: this.summarizeReason(
+            sample.judge?.reason_summary,
+          ),
+          error_type: this.firstErrorType(
+            sample.primary.error_type,
+            sample.candidate.error_type,
+          ),
+          metadata_json: this.stringifySafe(
+            this.sanitizeMetadata(sample.metadata || {}),
+          ),
+        }),
+      ),
+    );
     return this.getReport(saved.id);
   }
 
   async runComparison(input: EvalRunComparisonInput) {
     if (!this.pipeline) {
-      throw new BadRequestException('Evaluation runner requires PipelineService.');
+      throw new BadRequestException(
+        'Evaluation runner requires PipelineService.',
+      );
     }
     if (!Array.isArray(input.samples) || input.samples.length === 0) {
-      throw new BadRequestException('Evaluation run requires at least one sample.');
+      throw new BadRequestException(
+        'Evaluation run requires at least one sample.',
+      );
     }
 
     const sampleStorageEnabled = this.sampleStorageEnabled(input);
-    const dataset = await this.upsertDatasetMetadata(input.dataset, input.samples.length, sampleStorageEnabled);
+    const dataset = await this.upsertDatasetMetadata(
+      input.dataset,
+      input.samples.length,
+      sampleStorageEnabled,
+    );
     const workspaceId = this.workspaceId();
-    const run = await this.runs.save(this.runs.create({
-      workspace_id: workspaceId,
-      dataset_id: dataset.id,
-      dataset_name: dataset.name,
-      primary_node_id: input.primary.node_id || null,
-      primary_model: input.primary.model,
-      candidate_node_id: input.candidate.node_id || null,
-      candidate_model: input.candidate.model,
-      judge_node_id: input.judge?.node_id || null,
-      judge_model: input.judge?.model || 'auto',
-      judge_config_json: this.stringifySafe(this.safeJudgeConfig(input.judge)),
-      status: 'running',
-      sample_count: input.samples.length,
-      started_at: new Date().toISOString(),
-      completed_at: null,
-      privacy_json: this.stringifySafe(this.privacySummary(sampleStorageEnabled)),
-    }));
+    const run = await this.database(true, (service) =>
+      service.runs.save(
+        service.runs.create({
+          workspace_id: workspaceId,
+          dataset_id: dataset.id,
+          dataset_name: dataset.name,
+          primary_node_id: input.primary.node_id || null,
+          primary_model: input.primary.model,
+          candidate_node_id: input.candidate.node_id || null,
+          candidate_model: input.candidate.model,
+          judge_node_id: input.judge?.node_id || null,
+          judge_model: input.judge?.model || 'auto',
+          judge_config_json: this.stringifySafe(
+            this.safeJudgeConfig(input.judge),
+          ),
+          status: 'running',
+          sample_count: input.samples.length,
+          started_at: new Date().toISOString(),
+          completed_at: null,
+          privacy_json: this.stringifySafe(
+            this.privacySummary(sampleStorageEnabled),
+          ),
+        }),
+      ),
+    );
 
     const results: Array<{
       primary: EvalTargetMetrics;
@@ -268,55 +362,91 @@ export class EvaluationService {
     try {
       for (const [index, sample] of input.samples.entries()) {
         const sampleHash = this.sampleHash(sample);
-        const primary = await this.executeTarget(run.id, sample, input.primary, 'primary', index);
-        const candidate = await this.executeTarget(run.id, sample, input.candidate, 'candidate', index);
-        const judge = await this.executeJudge(run.id, sample, input.judge, primary.output_text, candidate.output_text, index);
+        const primary = await this.executeTarget(
+          run.id,
+          sample,
+          input.primary,
+          'primary',
+          index,
+        );
+        const candidate = await this.executeTarget(
+          run.id,
+          sample,
+          input.candidate,
+          'candidate',
+          index,
+        );
+        const judge = await this.executeJudge(
+          run.id,
+          sample,
+          input.judge,
+          primary.output_text,
+          candidate.output_text,
+          index,
+        );
         results.push({ primary, candidate, judge });
-        await this.samples.save(this.samples.create({
-          workspace_id: workspaceId,
-          run_id: run.id,
-          sample_id: sample.id || null,
-          sample_hash: sampleHash,
-          primary_request_id: primary.request_id,
-          candidate_request_id: candidate.request_id,
-          judge_request_id: judge.request_id,
-          primary_status_code: primary.status_code,
-          candidate_status_code: candidate.status_code,
-          primary_success: primary.success,
-          candidate_success: candidate.success,
-          primary_latency_ms: primary.latency_ms,
-          candidate_latency_ms: candidate.latency_ms,
-          primary_cost_usd: primary.cost_usd,
-          candidate_cost_usd: candidate.cost_usd,
-          primary_fallback: primary.is_fallback,
-          candidate_fallback: candidate.is_fallback,
-          judge_score: judge.score,
-          judge_label: judge.label,
-          judge_reason_summary: this.summarizeReason(judge.reason_summary),
-          error_type: this.firstErrorType(primary.error_type, candidate.error_type),
-          metadata_json: this.stringifySafe({
-            ...this.sanitizeMetadata(sample.metadata || {}),
-            sample_previews_stored: sampleStorageEnabled,
-            ...(sampleStorageEnabled
-              ? {
-                  prompt_preview: this.redactAndTrim(sample.prompt || this.canonicalPromptText(sample.canonical)),
-                  expected_preview: this.redactAndTrim(sample.expected || ''),
-                  primary_preview: this.redactAndTrim(primary.output_text),
-                  candidate_preview: this.redactAndTrim(candidate.output_text),
-                }
-              : {}),
-          }),
-        }));
+        await this.database(true, (service) =>
+          service.samples.save(
+            service.samples.create({
+              workspace_id: workspaceId,
+              run_id: run.id,
+              sample_id: sample.id || null,
+              sample_hash: sampleHash,
+              primary_request_id: primary.request_id,
+              candidate_request_id: candidate.request_id,
+              judge_request_id: judge.request_id,
+              primary_status_code: primary.status_code,
+              candidate_status_code: candidate.status_code,
+              primary_success: primary.success,
+              candidate_success: candidate.success,
+              primary_latency_ms: primary.latency_ms,
+              candidate_latency_ms: candidate.latency_ms,
+              primary_cost_usd: primary.cost_usd,
+              candidate_cost_usd: candidate.cost_usd,
+              primary_fallback: primary.is_fallback,
+              candidate_fallback: candidate.is_fallback,
+              judge_score: judge.score,
+              judge_label: judge.label,
+              judge_reason_summary: this.summarizeReason(judge.reason_summary),
+              error_type: this.firstErrorType(
+                primary.error_type,
+                candidate.error_type,
+              ),
+              metadata_json: this.stringifySafe({
+                ...this.sanitizeMetadata(sample.metadata || {}),
+                sample_previews_stored: sampleStorageEnabled,
+                ...(sampleStorageEnabled
+                  ? {
+                      prompt_preview: this.redactAndTrim(
+                        sample.prompt ||
+                          this.canonicalPromptText(sample.canonical),
+                      ),
+                      expected_preview: this.redactAndTrim(
+                        sample.expected || '',
+                      ),
+                      primary_preview: this.redactAndTrim(primary.output_text),
+                      candidate_preview: this.redactAndTrim(
+                        candidate.output_text,
+                      ),
+                    }
+                  : {}),
+              }),
+            }),
+          ),
+        );
       }
       this.applyAggregateMetrics(run, results);
       run.status = 'completed';
       run.completed_at = new Date().toISOString();
-      await this.runs.save(run);
+      await this.database(true, (service) => service.runs.save(run));
     } catch (error) {
       run.status = 'failed';
-      run.error = this.redactAndTrim(error instanceof Error ? error.message : String(error), 500);
+      run.error = this.redactAndTrim(
+        error instanceof Error ? error.message : String(error),
+        500,
+      );
       run.completed_at = new Date().toISOString();
-      await this.runs.save(run);
+      await this.database(true, (service) => service.runs.save(run));
       throw error;
     }
 
@@ -433,8 +563,14 @@ export class EvaluationService {
   }
 
   private async findLogBySession(sessionKey: string): Promise<CallLog | null> {
+    if (!this.databaseScoped && this.runs.manager?.connection)
+      return this.database(false, (service) =>
+        service.findLogBySession(sessionKey),
+      );
     return this.callLogs.findOne({
-      where: workspaceFindWhere(this.workspaceId(), { session_key: sessionKey }),
+      where: workspaceFindWhere(this.workspaceId(), {
+        session_key: sessionKey,
+      }),
     });
   }
 
@@ -443,6 +579,10 @@ export class EvaluationService {
     sampleCount: number,
     sampleStorageEnabled: boolean,
   ): Promise<EvalDataset> {
+    if (!this.databaseScoped && this.runs.manager?.connection)
+      return this.database(true, (service) =>
+        service.upsertDatasetMetadata(input, sampleCount, sampleStorageEnabled),
+      );
     const name = this.requiredString(input.name, 'dataset.name');
     const existing = input.id
       ? await this.datasets.findOne({
@@ -456,7 +596,9 @@ export class EvaluationService {
     entity.source = this.nullableString(input.source) || 'local';
     entity.sample_count = sampleCount;
     entity.sample_storage_enabled = sampleStorageEnabled;
-    entity.metadata_json = this.stringifySafe(this.sanitizeMetadata(input.metadata || {}));
+    entity.metadata_json = this.stringifySafe(
+      this.sanitizeMetadata(input.metadata || {}),
+    );
     return this.datasets.save(entity);
   }
 

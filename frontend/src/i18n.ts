@@ -8,6 +8,7 @@ export const localeNamespaces = [
   'common',
   'dashboard',
   'alerts',
+  'pricing',
   'logs',
   'nodes',
   'routing',

@@ -5,7 +5,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { Repository } from 'typeorm';
+import { Repository, type EntityManager } from 'typeorm';
+import { coordinatedRepositoryOperation, requireRepositoryTransaction } from '../database/coordinated-repository';
+import { lockWorkspaceWriter } from '../workspaces/workspace-writer-lock';
 import {
   WorkspaceInvitation,
   WORKSPACE_MEMBERSHIP_ROLES,
@@ -53,15 +55,36 @@ export interface AcceptedWorkspaceInvitation {
   organizationId: string;
 }
 
+export type InvitationAcceptanceEffect = (accepted: AcceptedWorkspaceInvitation, manager?: EntityManager) => Promise<void>;
+
 @Injectable()
 export class WorkspaceInvitationService {
+  private databaseScope: EntityManager | null = null;
   constructor(
     @InjectRepository(WorkspaceInvitation)
     private readonly invitations: Repository<WorkspaceInvitation>,
   ) {}
 
+  withTransaction<T>(action: (service: WorkspaceInvitationService, manager?: EntityManager) => Promise<T>, manager?: EntityManager): Promise<T> {
+    if (manager) {
+      requireRepositoryTransaction(this.invitations, manager);
+      return action(this.scoped(manager), manager);
+    }
+    if (this.databaseScope) return action(this, this.databaseScope);
+    return coordinatedRepositoryOperation(this.invitations, true, (transaction) => action(transaction ? this.scoped(transaction) : this, transaction));
+  }
+
+  private scoped(manager: EntityManager): WorkspaceInvitationService {
+    const service = new WorkspaceInvitationService(manager.getRepository(WorkspaceInvitation));
+    service.databaseScope = manager;
+    return service;
+  }
+  private needsDatabaseScope(): boolean { return !this.databaseScope && Boolean(this.invitations.manager?.connection); }
+
   async list(workspaceId = DEFAULT_WORKSPACE_ID): Promise<WorkspaceInvitationSummary[]> {
-    await this.expirePendingInvitations();
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.list(workspaceId));
+    await lockWorkspaceWriter(this.databaseScope ?? undefined, workspaceId);
+    await this.expirePendingInvitations(workspaceId);
     const rows = await this.invitations.find({
       where: { workspace_id: workspaceId },
       order: { created_at: 'DESC' },
@@ -72,6 +95,8 @@ export class WorkspaceInvitationService {
   async create(
     input: CreateWorkspaceInvitationInput,
   ): Promise<WorkspaceInvitationCreated> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.create(input));
+    await lockWorkspaceWriter(this.databaseScope ?? undefined, input.workspaceId || DEFAULT_WORKSPACE_ID);
     const role = assertRole(input.role);
     const expiresInHours = input.expiresInHours ?? 168;
     if (!Number.isFinite(expiresInHours) || expiresInHours <= 0 || expiresInHours > 24 * 90) {
@@ -99,8 +124,10 @@ export class WorkspaceInvitationService {
     };
   }
 
-  async revoke(id: string): Promise<WorkspaceInvitationSummary> {
-    const invitation = await this.invitations.findOne({ where: { id } });
+  async revoke(id: string, workspaceId = DEFAULT_WORKSPACE_ID): Promise<WorkspaceInvitationSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.revoke(id, workspaceId));
+    await lockWorkspaceWriter(this.databaseScope ?? undefined, workspaceId);
+    const invitation = await this.invitations.findOne({ where: { id, workspace_id: workspaceId } });
     if (!invitation) {
       throw new NotFoundException(`Workspace invitation not found: ${id}`);
     }
@@ -114,21 +141,43 @@ export class WorkspaceInvitationService {
     token: string | undefined | null,
     userId: string,
     email?: string | null,
+    onAccepted?: InvitationAcceptanceEffect,
   ): Promise<AcceptedWorkspaceInvitation | null> {
     const normalizedToken = (token || '').trim();
     if (!normalizedToken) return null;
-    return this.acceptHashForUser(hashInviteToken(normalizedToken), userId, email);
+    return this.acceptHashForUser(hashInviteToken(normalizedToken), userId, email, onAccepted);
   }
 
   async acceptHashForUser(
     tokenHash: string | undefined | null,
     userId: string,
     email?: string | null,
+    onAccepted?: InvitationAcceptanceEffect,
   ): Promise<AcceptedWorkspaceInvitation | null> {
+    if (!(tokenHash || '').trim()) return null;
+    // Return expired as a value so the status commits before the public rejection.
+    // Membership effects execute in this transaction; failures preserve the token.
+    const outcome = await this.withTransaction((service, manager) => service.acceptHashInTransaction(tokenHash, userId, email, onAccepted, manager));
+    if (outcome && 'expired' in outcome) throw new BadRequestException('Invitation has expired.');
+    return outcome;
+  }
+
+  private async acceptHashInTransaction(
+    tokenHash: string | undefined | null,
+    userId: string,
+    email?: string | null,
+    onAccepted?: InvitationAcceptanceEffect,
+    manager?: EntityManager,
+  ): Promise<AcceptedWorkspaceInvitation | { expired: true } | null> {
     const normalizedHash = (tokenHash || '').trim();
     if (!normalizedHash) return null;
+    const user = userId.trim();
+    if (!user) throw new BadRequestException('Workspace member user id is required.');
+    const candidate = await this.invitations.findOne({ where: { token_hash: normalizedHash } });
+    if (!candidate) throw new BadRequestException('Invitation token is invalid.');
+    await lockWorkspaceWriter(manager, candidate.workspace_id);
     const invitation = await this.invitations.findOne({
-      where: { token_hash: normalizedHash },
+      where: { id: candidate.id, token_hash: normalizedHash, workspace_id: candidate.workspace_id },
     });
     if (!invitation) {
       throw new BadRequestException('Invitation token is invalid.');
@@ -139,7 +188,7 @@ export class WorkspaceInvitationService {
     if (Date.parse(invitation.expires_at) <= Date.now()) {
       invitation.status = 'expired';
       await this.invitations.save(invitation);
-      throw new BadRequestException('Invitation has expired.');
+      return { expired: true };
     }
     const normalizedInviteEmail = normalizeEmail(invitation.email);
     const normalizedIdentityEmail = normalizeEmail(email);
@@ -153,18 +202,20 @@ export class WorkspaceInvitationService {
 
     invitation.status = 'accepted';
     invitation.accepted_at = new Date().toISOString();
-    invitation.accepted_by_user_id = userId;
+    invitation.accepted_by_user_id = user;
     const saved = await this.invitations.save(invitation);
-    return {
+    const accepted = {
       invitation: this.toSummary(saved),
       role: saved.role,
       workspaceId: saved.workspace_id,
       organizationId: saved.organization_id,
     };
+    await onAccepted?.(accepted, manager);
+    return accepted;
   }
 
-  private async expirePendingInvitations(): Promise<void> {
-    const pending = await this.invitations.find({ where: { status: 'pending' } });
+  private async expirePendingInvitations(workspaceId: string): Promise<void> {
+    const pending = await this.invitations.find({ where: { workspace_id: workspaceId, status: 'pending' } });
     const expired = pending.filter((row) => Date.parse(row.expires_at) <= Date.now());
     if (expired.length === 0) return;
     for (const row of expired) {

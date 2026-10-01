@@ -1,3 +1,4 @@
+import { attachTokenPricingEvidence } from '../pricing-usage-evidence';
 import { CanonicalStreamEvent, TokenUsage } from '../../canonical/canonical.types';
 import {
   extractUsageBySchema,
@@ -16,6 +17,9 @@ import {
  */
 export class ChatCompletionsStreamParser {
   private buffer = '';
+  private pricingUsage?: TokenUsage;
+
+  getPricingUsage(): TokenUsage | undefined { return this.pricingUsage; }
   private hasStarted = false;
   private hasSentStop = false;
   private pendingStopReason: string | null = null;
@@ -48,7 +52,7 @@ export class ChatCompletionsStreamParser {
             yield {
               type: 'stop',
               stop_reason: this.pendingStopReason || 'end_turn',
-              usage: { input_tokens: 0, output_tokens: 0 },
+              usage: this.resolveUsage({}),
             };
             this.pendingStopReason = null;
           }
@@ -87,6 +91,7 @@ export class ChatCompletionsStreamParser {
       return;
     }
 
+    if (data.usage) this.resolveUsage(data);
     const choices = data.choices as Record<string, unknown>[];
     if (!choices || choices.length === 0) {
       if (data.usage && !this.hasSentStop) {
@@ -174,7 +179,7 @@ export class ChatCompletionsStreamParser {
       yield {
         type: 'stop',
         stop_reason: this.pendingStopReason,
-        usage: { input_tokens: 0, output_tokens: 0 },
+        usage: this.resolveUsage({}),
       };
       this.pendingStopReason = null;
     }
@@ -221,7 +226,7 @@ export class ChatCompletionsStreamParser {
       ? extractUsageBySchema(data, this.usageSchema)
       : { input_tokens: 0, output_tokens: 0 };
     const knownUsage = extractUsageByKnownFields(data);
-    return {
+    const result: TokenUsage = {
       input_tokens:
         schemaUsage.input_tokens ||
         knownUsage.input_tokens ||
@@ -243,5 +248,8 @@ export class ChatCompletionsStreamParser {
         fallbackUsage.cache_read_input_tokens ||
         0,
     };
+    attachTokenPricingEvidence(data, result, this.usageSchema);
+    this.pricingUsage = result;
+    return result;
   }
 }

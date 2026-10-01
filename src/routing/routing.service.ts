@@ -1,3 +1,4 @@
+import { PricingRuntimeService } from '../pricing/pricing-runtime.service';
 // ===================================================================
 // RoutingService — Tier-based route resolution with circuit breaker
 // ===================================================================
@@ -12,7 +13,7 @@
 //   3. Default: tier config order unchanged
 // ===================================================================
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import {
   CapabilityService,
@@ -211,6 +212,7 @@ export class RoutingService {
     private readonly circuitBreaker: CircuitBreakerService,
     private readonly momentum: MomentumService,
     private readonly cacheAffinityService: CacheAffinityService,
+    @Optional() private readonly pricingRuntime?: PricingRuntimeService,
   ) {}
 
   /**
@@ -1168,6 +1170,8 @@ export class RoutingService {
     target: RouteTarget,
     selectionHints: RouteSelectionHints,
   ): number | null {
+    const frozen = this.pricingRuntime?.estimate({ node_id: target.node, model: target.model }, selectionHints.estimated_input_tokens ?? 1_000_000, selectionHints.estimated_output_tokens ?? 1_000_000);
+    if (frozen) return frozen.report_amount === null ? null : Number(frozen.report_amount);
     const pricing = this.capabilityService.resolveModelRoutingCapabilities?.(
       target.node,
       target.model,
@@ -1459,6 +1463,8 @@ export class RoutingService {
   }
 
   private estimateMediaCost(target: RouteTarget): number {
+    const frozen = this.pricingRuntime?.estimate({ node_id: target.node, model: target.model }, 1000, 0);
+    if (frozen) return frozen.report_amount === null ? Number.POSITIVE_INFINITY : Number(frozen.report_amount);
     const pricing = this.capabilityService.resolveModelRoutingCapabilities(
       target.node,
       target.model,
@@ -1535,6 +1541,8 @@ export class RoutingService {
   }
 
   private estimateRerankCost(target: RouteTarget): number {
+    const frozen = this.pricingRuntime?.estimate({ node_id: target.node, model: target.model }, 1000, 0);
+    if (frozen) return frozen.report_amount === null ? Number.POSITIVE_INFINITY : Number(frozen.report_amount);
     const pricing = this.capabilityService.resolveModelRoutingCapabilities(
       target.node,
       target.model,
@@ -1543,6 +1551,8 @@ export class RoutingService {
   }
 
   private estimateEmbeddingCost(target: RouteTarget): number {
+    const frozen = this.pricingRuntime?.estimate({ node_id: target.node, model: target.model }, 1000, 0);
+    if (frozen) return frozen.report_amount === null ? Number.POSITIVE_INFINITY : Number(frozen.report_amount);
     const pricing = this.capabilityService.resolveModelRoutingCapabilities(
       target.node,
       target.model,

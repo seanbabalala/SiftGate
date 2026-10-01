@@ -1,3 +1,5 @@
+import { CacheReferenceNotice } from '@/components/pricing/cache-reference-notice'
+import { cacheComparisonAmount, formatCacheMoney, formatCachePercent } from '@/lib/cache-reference-display'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -172,7 +174,9 @@ function SignalTooltip({
 }
 
 export function DashboardPage() {
-  const { t } = useTranslation('dashboard')
+  const { t, i18n } = useTranslation('dashboard')
+  const formatCacheCost = (value: number | string | null | undefined) => formatCacheMoney(value, i18n.resolvedLanguage ?? i18n.language)
+  const formatCacheRate = (value: number | null | undefined) => formatCachePercent(value, i18n.resolvedLanguage ?? i18n.language)
   const [apiKeyFilter, setApiKeyFilter] = useState('')
   const [namespaceFilter, setNamespaceFilter] = useState('')
   const [activeTier, setActiveTier] = useState<string | null>(null)
@@ -881,22 +885,24 @@ export function DashboardPage() {
               </div>
               <div
                 className={
-                  (cacheSavings?.summary.savings_usd || 0) >= 0
+                  cacheComparisonAmount(cacheSavings?.summary, 'savings') == null
+                    ? 'text-[29px] font-extrabold leading-none tracking-tight text-[var(--foreground-muted)]'
+                    : Number(cacheComparisonAmount(cacheSavings?.summary, 'savings')) >= 0
                     ? 'text-[29px] font-extrabold leading-none tracking-tight text-emerald-700 dark:text-emerald-300'
                     : 'text-[29px] font-extrabold leading-none tracking-tight text-amber-700 dark:text-amber-300'
                 }
               >
-                {formatCost(cacheSavings?.summary.savings_usd || 0)}
+                {formatCacheCost(cacheComparisonAmount(cacheSavings?.summary, 'savings'))}
               </div>
               <div className="space-y-1">
                 <div className="text-[11px] font-medium text-[var(--foreground-dim)]">
                   {t('metrics.cacheSavingsPercent', {
-                    value: formatPercent(cacheSavings?.summary.savings_percentage || 0),
+                    value: formatCacheRate(cacheSavings?.summary.savings_percentage),
                   })}
                 </div>
                 <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--foreground-dim)]">
                   {t('metrics.cacheSavingsHitRate', {
-                    value: formatPercent(cacheSavings?.summary.cache_hit_rate || 0),
+                    value: formatCacheRate(cacheSavings?.summary.cache_hit_rate),
                   })}
                 </div>
               </div>
@@ -905,6 +911,7 @@ export function DashboardPage() {
               <TrendingDown className="h-5 w-5" />
             </div>
           </div>
+          <CacheReferenceNotice data={cacheSavings} />
           <div className="relative mt-5 flex h-6 items-end gap-1">
             {[22, 36, 48, 64, 42, 72, 58, 78, 62].map((height, index) => (
               <div
