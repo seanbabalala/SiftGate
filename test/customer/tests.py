@@ -206,5 +206,92 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(archives[0], archives[1])
 
 
+class ReleaseTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        source = SOURCE.parents[2] / "scripts/upload-customer-assets.py"
+        spec = importlib.util.spec_from_file_location("release_assets", source)
+        self.module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.module)
+        self.tag = "v1.2.3"
+        self.names = ["siftgate-v1.2.3-install.tar.gz", "siftgate-v1.2.3-install.tar.gz.sha256"]
+        (self.root / self.names[0]).write_bytes(b"synthetic archive bytes")
+        (self.root / self.names[1]).write_text(
+            self.module.sha256(self.root / self.names[0]) + "  " + self.names[0] + "\n")
+        self.remote = {}
+        self.uploaded = []
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def fake_gh(self, *args):
+        operation = args[1]
+        if operation == "view":
+            return json.dumps({"assets": [{"name": name} for name in self.remote]})
+        if operation == "download":
+            name = args[args.index("--pattern") + 1]
+            directory = Path(args[args.index("--dir") + 1])
+            (directory / name).write_bytes(self.remote[name])
+        elif operation == "upload":
+            self.assertNotIn("--clobber", args)
+            file = Path(args[3])
+            self.assertNotIn(file.name, self.remote)
+            self.remote[file.name] = file.read_bytes()
+            self.uploaded.append(file.name)
+        else:
+            self.fail("Unexpected GitHub mutation: " + operation)
+        return ""
+
+    def test_upload_and_download_verification(self):
+        with patch.object(self.module, "gh", side_effect=self.fake_gh):
+            self.module.synchronize("example/siftgate", self.tag, self.root)
+            self.module.synchronize("example/siftgate", self.tag, self.root, verify_only=True)
+        self.assertEqual(self.uploaded, self.names)
+
+    def test_partial_upload_resumes_only_missing_asset(self):
+        self.remote[self.names[0]] = (self.root / self.names[0]).read_bytes()
+        with patch.object(self.module, "gh", side_effect=self.fake_gh):
+            self.module.synchronize("example/siftgate", self.tag, self.root)
+            self.module.synchronize("example/siftgate", self.tag, self.root)
+        self.assertEqual(self.uploaded, [self.names[1]])
+
+    def test_different_existing_bytes_refuse_all_uploads(self):
+        self.remote[self.names[1]] = b"different published bytes"
+        with patch.object(self.module, "gh", side_effect=self.fake_gh), self.assertRaises(ValueError):
+            self.module.synchronize("example/siftgate", self.tag, self.root)
+        self.assertFalse(self.uploaded)
+
+    def test_verify_only_cannot_upload_missing_asset(self):
+        with patch.object(self.module, "gh", side_effect=self.fake_gh), self.assertRaises(ValueError):
+            self.module.synchronize("example/siftgate", self.tag, self.root, verify_only=True)
+        self.assertFalse(self.uploaded)
+
+    def test_extra_private_file_never_uploaded(self):
+        (self.root / "provider.env").write_text("synthetic private fixture")
+        with patch.object(self.module, "gh") as gh, self.assertRaises(ValueError):
+            self.module.synchronize("example/siftgate", self.tag, self.root)
+        gh.assert_not_called()
+
+    def test_corrupt_local_checksum_refuses_network(self):
+        (self.root / self.names[0]).write_bytes(b"modified after checksumming")
+        with patch.object(self.module, "gh") as gh, self.assertRaises(ValueError):
+            self.module.synchronize("example/siftgate", self.tag, self.root)
+        gh.assert_not_called()
+
+    def test_manual_dispatch_even_of_tag_never_publishes(self):
+        workflow = (SOURCE.parents[2] / ".github/workflows/customer-release.yml").read_text()
+        guards = [line.strip() for line in workflow.splitlines() if line.strip().startswith("if:")]
+        self.assertGreaterEqual(len(guards), 4)
+        for guard in guards:
+            self.assertEqual(guard, "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')")
+        self.assertIn('"$GITHUB_EVENT_NAME" == push', workflow)
+        self.assertIn('customer-image-${{ matrix.arch }}', workflow)
+        self.assertIn('actions/workflows/ci.yml/runs', workflow)
+        self.assertIn('"$GITHUB_REF_NAME" "${GITHUB_REF_NAME#v}"', workflow)
+        self.assertIn('--draft "${flags[@]}"', workflow)
+        self.assertIn('--verify-only', workflow)
+
+
 if __name__ == "__main__":
     unittest.main()

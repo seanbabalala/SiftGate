@@ -260,6 +260,12 @@ npm run docs:check
 
 ## PR, Merge, Tag, And Release
 
+For official GHCR images and customer installer assets, follow the executable
+[formal image release runbook](customer-release.md)
+([中文完整版](customer-release.zh-cn.md)). It includes initial package permissions,
+exact-commit main CI, dual-architecture acceptance, immutable version aliases,
+draft-to-public asset publication and failure recovery.
+
 Publishing source is separate from deploying it. Follow the
 [runtime alignment procedure](BASELINE.md#runtime-alignment-without-an-early-restart)
 when a live gateway must keep serving during release preparation. Build in an
@@ -292,7 +298,11 @@ git tag -a vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-Create a GitHub release for `vX.Y.Z` with:
+With the customer release workflow installed on `main`, the approved annotated
+tag push publishes the tested images and installer. Do not create a competing
+empty public Release while it runs: the workflow stages a Draft and verifies
+assets before publishing. Manual workflow dispatch is test-only, including a
+dispatch that selects a tag. Keep the following content in the release notes:
 
 - concise highlights
 - upgrade notes

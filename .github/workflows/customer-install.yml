@@ -13,5 +13,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 -m unittest discover -s test/customer -v
-      - run: python3 -m py_compile deploy/customer/siftgate.py scripts/package-customer-release.py scripts/smoke-customer-install.py
+      - run: python3 -m py_compile deploy/customer/siftgate.py scripts/package-customer-release.py scripts/smoke-customer-install.py scripts/upload-customer-assets.py
       - run: node --check deploy/customer/container-ops.cjs

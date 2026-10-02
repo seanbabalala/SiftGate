@@ -115,8 +115,12 @@ python3 "$HOME/siftgate/kit/siftgate.py" --directory "$HOME/siftgate" watchdog -
 
 ## 发布边界
 
+维护者完整发布手册位于源码仓库的 `docs/customer-release.zh-cn.md`，包含首次 GHCR
+设置、版本同步、双架构演练、正式 tag、失败续传、匿名验收、离线交付及问题版本处理。
+
 普通代码推送不发布镜像、不升级现网。合并主分支、对齐版本并推送审核过的 annotated
 版本 tag 后，发布流水线才构建和原生验证 AMD64/ARM64，再发布版本镜像及校验安装包。
-手动运行流水线只测试，不发布。首次发布还需确认 GHCR 可被客户拉取。
+手动运行流水线只测试，即使选择 tag 也不发布。正式发布还要求确切提交的主分支 CI
+成功；带 v/不带 v 标签须对应同一 digest，附件完成校验后才公开 Release。
 
 更完整的权限、备份、升级失败处理与发布检查见随包附带的英文说明。

@@ -235,12 +235,18 @@ watchdog/down notifications. HTTP liveness is not proof a provider is healthy.
 
 ## Maintainer release gate
 
+The full publisher runbooks are `docs/customer-release.md` and
+`docs/customer-release.zh-cn.md` in the source repository. They cover first-time
+GHCR access, exact-commit CI, tag approval, fixed architecture digests, both version
+aliases, interrupted uploads, anonymous verification and offline delivery.
+
 1. Review and merge the candidate code and customer kit to `main`. Align the
    actual version metadata and run the repository release checks.
 2. Manually run **Customer multi-platform release** for a test-only build if
    desired. It builds and runs real acceptance on native Linux AMD64 and ARM64;
-   a manual run never publishes an image or release.
-3. Push an annotated `vX.Y.Z` tag on the reviewed main commit. Only this action
+   a manual run never publishes an image or release, even if a tag is selected.
+3. Wait for successful full main push CI for the exact reviewed commit, then push
+   an annotated `vX.Y.Z` tag on that commit. Only this action
    enables image publication. No branch push triggers a release or fleet update.
 4. Both architectures must pass before the combined version image and installation
    archive are published. The workflow requires anonymous GHCR access before
@@ -251,7 +257,7 @@ watchdog/down notifications. HTTP liveness is not proof a provider is healthy.
    a separately reviewed credential-aware publication policy.
 5. Rehearse install/upgrade/restore with the actual versioned image. The smoke test
    covers fresh setup, real mock-provider routing, Dashboard config persistence,
-  credentials, safe backup, restart and independent restore. It is not a claim
+   credentials, safe backup, restart and independent restore. It is not a claim
    that arbitrary old/new schema combinations or every Linux distribution passed.
 
 Never publish maintainer migration bundles, runtime volumes, or local test
