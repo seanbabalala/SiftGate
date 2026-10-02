@@ -44,6 +44,8 @@
     "benchmark:upstream": "node scripts/benchmark-upstream.js",
     "benchmark:platform": "node scripts/benchmark-platform.js",
     "smoke:docker": "bash scripts/docker-smoke.sh",
+    "test:customer": "python3 -m unittest discover -s test/customer -v",
+    "smoke:customer": "python3 scripts/smoke-customer-install.py",
     "benchmark:pricing": "ts-node scripts/benchmark-pricing.ts"
   },
   "dependencies": {

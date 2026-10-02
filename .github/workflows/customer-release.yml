@@ -1,0 +1,108 @@
+name: Customer multi-platform release
+# Ordinary branch pushes never publish an image or change a deployment.
+# Manual runs test only. Pushing a reviewed version tag explicitly enables publication.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: customer-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check release boundary and version
+        run: |
+          node scripts/check-public-release.js
+          node scripts/check-docs.js
+          node scripts/check-release-version.js
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            test "${GITHUB_REF_NAME}" = "v$(node -p "require('./package.json').version")"
+            test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
+            git merge-base --is-ancestor HEAD origin/main
+          fi
+      - run: python3 -m unittest discover -s test/customer -v
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: siftgate-customer:smoke
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=customer-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=customer-${{ matrix.arch }}
+      - name: Real fresh-install, backup and restore acceptance
+        run: python3 scripts/smoke-customer-install.py --image siftgate-customer:smoke
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested architecture candidate
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:build-${GITHUB_SHA}-${ARCH}"
+          docker tag siftgate-customer:smoke "$image"
+          docker push "$image"
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish immutable version and installer (never latest)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          image="${repository}:${GITHUB_REF_NAME}"
+          amd="$(docker buildx imagetools inspect "${repository}:build-${GITHUB_SHA}-amd64" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          arm="$(docker buildx imagetools inspect "${repository}:build-${GITHUB_SHA}-arm64" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if docker buildx imagetools inspect "$image" --raw > /tmp/siftgate-existing-manifest.json 2>/dev/null; then
+            # Resume a failed upload/visibility gate, but never replace a different release.
+            python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); assert sorted(x["digest"] for x in m["manifests"]) == sorted(sys.argv[2:]), "Existing release differs; refusing overwrite"' \
+              /tmp/siftgate-existing-manifest.json "$amd" "$arm"
+          else
+            docker buildx imagetools create -t "$image" "${repository}@${amd}" "${repository}@${arm}"
+          fi
+          # GHCR packages can initially be private. Do not ship an unusable public installer.
+          # Owner: set package visibility, then rerun failed jobs (not the successful builds).
+          DOCKER_CONFIG="$(mktemp -d)" docker manifest inspect "$image" >/dev/null
+          digest="$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          python3 scripts/package-customer-release.py --version "$GITHUB_REF_NAME" \
+            --image "${repository}@${digest}" --output output/customer-release
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            flags=()
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "${flags[@]}"
+          fi
+          gh release upload "$GITHUB_REF_NAME" output/customer-release/*

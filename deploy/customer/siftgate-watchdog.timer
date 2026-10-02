@@ -1,0 +1,11 @@
+[Unit]
+Description=Probe the SiftGate listener every 30 seconds
+
+[Timer]
+OnBootSec=90
+OnUnitInactiveSec=30
+AccuracySec=1
+Unit=siftgate-watchdog.service
+
+[Install]
+WantedBy=timers.target

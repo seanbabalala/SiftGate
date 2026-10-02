@@ -1,17 +1,22 @@
 # Docker Quickstart
 
-This guide is the recommended path for self-hosted and open-source installs.
+For customer deployments, prefer the [versioned customer installation kit](customer-install.md) ([中文](customer-install.zh-cn.md)). This page describes the source-build development path; it does not imply that a new registry image is published.
 
 ## 1. Prepare Local Files
 
 ```bash
 cp gateway.config.example.yaml gateway.config.yaml
 cp .env.example .env
-mkdir -p data
+mkdir -p data config
+export SIFTGATE_CONFIG_DIR="$PWD/config"
+cp gateway.config.yaml "$SIFTGATE_CONFIG_DIR/gateway.config.yaml"
+printf '\nSIFTGATE_CONFIG_DIR=%s\nCOMPOSE_FILE=docker-compose.yml:deploy/docker-compose.dashboard.yml\nTZ=UTC\n' "$SIFTGATE_CONFIG_DIR" >> .env
 ```
 
 Edit `.env` and add provider API keys for the nodes you enabled in
-`gateway.config.yaml`. The gateway can start without real provider keys, but
+`config/gateway.config.yaml`. Set `TZ` to your actual budget timezone before the
+first startup. The saved `COMPOSE_FILE` keeps subsequent commands on the same
+directory-mounted configuration. The gateway can start without real provider keys, but
 upstream model requests will fail until the relevant provider key is set.
 
 Gateway API keys are not stored in `.env`. Create them from the Dashboard after
@@ -21,13 +26,13 @@ If you are running from a source checkout with dependencies installed, validate
 the config before starting Compose:
 
 ```bash
-npm run validate:config -- --config gateway.config.yaml
+npm run validate:config -- --config config/gateway.config.yaml
 ```
 
 ## 2. Start
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.yml -f deploy/docker-compose.dashboard.yml up -d --build
 ```
 
 Open the Dashboard:
@@ -38,7 +43,7 @@ http://localhost:2099
 
 The Compose file publishes SiftGate on host localhost only. On first startup,
 SiftGate generates an initial Dashboard password, logs it once, hashes it, and
-writes the hash back to `gateway.config.yaml`. Read it with:
+writes the hash back to `config/gateway.config.yaml`. The directory overlay is required for atomic Dashboard saves; the root single-file mount is not the active editable configuration. Read it with:
 
 ```bash
 docker compose logs siftgate | grep 'Generated initial Dashboard password'
@@ -53,7 +58,7 @@ docker compose ps
 docker compose logs -f siftgate
 ```
 
-The container healthcheck uses `/ready`, which checks the local database. Use
+The container healthcheck uses `/live`, which probes HTTP liveness. `/ready` checks the local database and is appropriate for readiness/load balancing, not automatic restart decisions. Compose does not restart a container merely because it becomes unhealthy. Use
 `/health` for the fuller status payload that includes provider/node degradation,
 budgets, realtime state, and database details. SQLite data is persisted in
 `./data`, so generated Gateway API keys and call logs survive container
@@ -93,7 +98,7 @@ that is normally shared with the Docker VM.
 
 The default Compose stack runs the gateway with local memory state. To test the
 v2 Redis shared state backend for multi-instance deployments, enable the Redis
-profile and configure `state.backend: redis` in `gateway.config.yaml`:
+profile and configure `state.backend: redis` in `config/gateway.config.yaml`:
 
 ```bash
 printf '\nREDIS_URL=redis://redis:6379\n' >> .env
@@ -117,7 +122,7 @@ POSTGRES_PASSWORD=replace-me docker compose --profile postgres up -d postgres
 ```
 
 Set `DATABASE_URL=postgresql://siftgate:replace-me@postgres:5432/siftgate` in
-`.env`, change `gateway.config.yaml` to `database.type: postgres`, and set
+`.env`, change `config/gateway.config.yaml` to `database.type: postgres`, and set
 `database.synchronize: false` after running the migration/bootstrap step. You
 can also configure `database.pool` and `database.ssl` as shown in
 `gateway.config.example.yaml`. See [Production Deployment](PRODUCTION.md) for
@@ -163,7 +168,8 @@ curl http://localhost:2099/v1/chat/completions \
 
 The compose file mounts:
 
-- `./gateway.config.yaml` to `/app/gateway.config.yaml`
+- `./config` to `/app/operator-config` (active writable config with the overlay)
+- `./gateway.config.yaml` to `/app/gateway.config.yaml` (legacy mount; not the active overlay config)
 - `./data` to `/app/data`
 
 The config file is mounted writable so Dashboard edits and first-start dashboard
@@ -203,8 +209,8 @@ Then open `http://localhost:21099`.
 ### Dashboard password was saved as plain text
 
 On startup, the gateway hashes a plain-text dashboard password and writes it
-back to `gateway.config.yaml`. Make sure the mounted config file is writable, or
-pre-hash the password before mounting it read-only.
+back to `config/gateway.config.yaml`. Make sure the mounted config file is writable, or
+pre-hash the password before mounting it read-only. For Dashboard-managed changes, use the configuration directory overlay shown above.
 
 ### Data disappears after restart
 

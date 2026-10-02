@@ -581,6 +581,8 @@ code, diffs, hidden reasoning text, or resolved secrets by default.
 
 ## Quick Start
 
+For a versioned, persistent customer Docker installation, see the [customer install kit](docs/customer-install.md) ([中文](docs/customer-install.zh-cn.md)). Source availability does not imply that the newest image is already published.
+
 ```bash
 git clone https://github.com/seanbabalala/ai-gateway.git
 cd ai-gateway

@@ -55,6 +55,7 @@ start with the [engineering baseline](BASELINE.md).
 | --- | --- |
 | Product overview | [../README.md](../README.md) |
 | Quickstart | [QUICKSTART.md](QUICKSTART.md) |
+| Customer installation | [English](customer-install.md), [中文](customer-install.zh-cn.md) |
 | Docker quickstart | [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) |
 | Dashboard | [DASHBOARD.md](DASHBOARD.md) |
 | OSS concepts | [OSS_CONCEPTS.md](OSS_CONCEPTS.md) |
