@@ -16,6 +16,7 @@ ARG NODE_IMAGE=node:22-alpine
 FROM ${NODE_IMAGE} AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/.npmrc ./
 RUN npm ci
 COPY frontend/ ./
 # The Dashboard imports shared pricing contracts and browser-safe helpers.
@@ -26,6 +27,7 @@ RUN npm run build
 FROM ${NODE_IMAGE} AS backend-build
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY .npmrc ./
 RUN npm ci
 COPY tsconfig.json nest-cli.json ./
 COPY src/ ./src/
@@ -40,6 +42,7 @@ WORKDIR /app
 
 # Install production dependencies only
 COPY package.json package-lock.json ./
+COPY .npmrc ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built backend

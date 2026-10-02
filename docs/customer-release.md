@@ -13,6 +13,48 @@ explicit maintainer decisions. Work in an isolated checkout, never a live runtim
 Commands below use Bash; macOS zsh users should open a Bash session first. Keep
 the exported release variables in that session.
 
+## 0. State gate: a branch runbook is not a ready main branch
+
+**Audit snapshot, October 2, 2026:** remote `main` was `b3764a2`, without the
+customer workflows, `deploy/customer/` or these runbooks. Corrections are on
+`codex/v2.11.6-customer-install`; root version remains `2.11.5`. The `v2.11.6`
+example is not a selected or published release. This dated observation is not
+permanent status: fetch and inspect actual commits before each operation.
+
+| State | Required evidence | Permitted actions |
+| --- | --- | --- |
+| **S0 not merged** | Main lacks any release/install component or still has the old checklist | Review, repair, isolated local tests only; **do not execute sections 4/5** |
+| **S1 rehearsal-ready** | All components, Node constraints and the updated checklist are reviewed and merged to the default branch | Test-only dispatch; a green rehearsal is not publication |
+| **S2 tag-ready** | Version aligned, exact main push CI green, both native rehearsals green, migrations reviewed and explicit publication approval | Push the approved annotated tag; never overwrite a conflict |
+| **S3 customer-installable** | Publication gates pass, actual anonymous layers and verified assets download, clean-host acceptance complete | Announce availability; existing 2099 deployments still need separate approval |
+
+```text
+S0 not merged → reviewed complete merge → S1 rehearsal-ready
+S1 → version/CI/platform/migration/approval gates → S2 tag-ready
+S2 → publication + public downloads + clean-host acceptance → S3 customer-installable
+```
+
+Merge the customer workflows, deployment kit, scripts/tests, Node constraints,
+`docs/customer-*` and **the `docs/RELEASE_CHECKLIST.md` update together**. Do not
+merge only the new manual while leaving main's old manual-Release instructions.
+A fix on this feature branch is not a fix already on remote main; this work does
+not merge it automatically. These read-only checks must succeed in an isolated checkout:
+
+```bash
+git fetch origin main
+git rev-parse origin/main
+git cat-file -e origin/main:.github/workflows/customer-release.yml
+git cat-file -e origin/main:deploy/customer/siftgate.py
+git show origin/main:docs/RELEASE_CHECKLIST.md
+```
+
+**First GHCR release:** a public repository does not guarantee a public package.
+The first tag may stop at anonymous manifest access. The **package administrator**
+audits/makes the package public, then uses **`gh run rerun RUN_ID --failed` only**.
+Do not rebuild successful architectures or bypass the gate (sections 2 and 7).
+Use the [separate-gate command card](customer-release-quickref.md) under pressure;
+it is not one unattended paste-and-publish script.
+
 ## 1. Deliverables and identity
 
 A completed release has all of the following:
@@ -106,9 +148,24 @@ Synchronize the version following [Release checklist](RELEASE_CHECKLIST.md):
 One `npm version` command does not update this whole set. Do not globally replace
 historical version references, reuse published version numbers or move old tags.
 
-In the isolated checkout, use Node 22 and locked dependencies:
+This candidate uses **Node `>=22.13.0 <23`**: `.nvmrc` selects the 22 line,
+root/frontend `engines.node` and lockfile metadata match, every Node CI selector
+reads `.nvmrc`, and the Docker default is `node:22-alpine`. Root/frontend
+`.npmrc` enforce `engine-strict=true` at installation. Never add registry credentials
+to those build-context files. This is a major/minimum-version contract, not an
+exact patch/digest pin; retain the resolved `NODE_IMAGE` digest for reproducibility.
+It governs gateway development/builds, not a new restriction on downstream SDK consumers.
+
+At the audit starting point, main Docker/CI used 20, but the candidate Dockerfile
+already used 22 while CI still used 20. This correction aligns the candidate on
+22 rather than downgrading Docker. With nvm, run `nvm install` and `nvm use` first;
+other managers should follow `.nvmrc`. Do not rely on the interactive shell default.
+
+Validate runtime in the isolated checkout before installing locked dependencies:
 
 ```bash
+npm run runtime:check
+npm run test:runtime
 npm ci
 npm --prefix frontend ci
 npm run release:hardening -- --dry-run
@@ -116,6 +173,18 @@ npm run release:hardening
 npm run test:customer
 git diff --check
 ```
+
+Keep these checks distinct:
+
+| Command | Covers | Does not cover |
+| --- | --- | --- |
+| `release:hardening` | Node contract plus backend/frontend/SDK/config/docs/audit/version gates | **Not** `test:customer`, `smoke:customer` or `smoke:docker` by default |
+| `release:hardening -- --include-docker` | The above plus the legacy `smoke:docker` | Still not customer unit/smoke tests |
+| `test:customer` | Python installer/recovery/release-asset regression, no real Docker operations | No actual container startup |
+| `smoke:customer -- --image IMAGE` | Real customer-kit flow against the specified loaded image | Not the root-Compose `smoke:docker`, nor arbitrary cross-version migration proof |
+
+Run the separate customer unit and smoke gates; a hardening pass does not subsume
+them. Main CI also runs customer unit tests separately, without changing that boundary.
 
 The hardening gate covers backend/frontend/SDK/config/docs/audit/version checks.
 PostgreSQL claims require additional isolated PostgreSQL evidence. Never supply
@@ -269,9 +338,17 @@ Use `shasum -a 256 -c` instead of `sha256sum -c` on macOS. Public customers can
 download from the Release page without a `gh` account; the CLI is an operator
 convenience. Checksums detect mismatch/corruption, not authenticity by signature.
 
+**Continue from the extracted `siftgate-$TAG/` Release archive in the preceding
+step**, with its verified `release.json`. Do not run this image-less command from
+the source root or `deploy/customer/`. Source invocation requires an explicit
+real `--image`, and an unpublished local image also requires `--local-image`.
+Source availability is not proof that a registry image exists.
+
 On clean AMD64 and ARM64 test machines, install the actual downloaded bundle:
 
 ```bash
+test -f siftgate.py
+test -f release.json
 python3 siftgate.py --directory "$HOME/siftgate-release-acceptance" init \
   --timezone Asia/Shanghai --port 21099
 python3 "$HOME/siftgate-release-acceptance/kit/siftgate.py" \

@@ -5,6 +5,12 @@ manual and non-destructive: scripts may verify release readiness, but they must
 not push branches, merge PRs, move tags, or create GitHub releases without an
 explicit maintainer action.
 
+First determine S0/S1/S2/S3 from the [release-state gate](customer-release.md)
+([中文](customer-release.zh-cn.md)). A feature-branch runbook does not establish
+that main contains the system. Merge this checklist update together with the
+customer workflows, kit, Node constraints and tests; do not retain the old manual
+public-Release instructions beside a newly merged automatic publisher.
+
 ## Branch And Scope
 
 - Start from the latest `main`.
@@ -46,6 +52,11 @@ npm run release:check
 The check must be read-only. It should fail if version metadata is misaligned.
 
 ## Required CI Signals
+
+Gateway CI selects Node 22 from `.nvmrc`; root/frontend manifests and lockfiles
+require `>=22.13.0 <23`, enforced at installation by `.npmrc`. Run
+`npm run runtime:check` and `npm run test:runtime` before release preparation.
+These select a supported release line, not an exact base-image digest.
 
 Every pull request should get non-Docker CI signal from `.github/workflows/ci.yml`:
 
@@ -91,6 +102,12 @@ Then run the standard gate:
 ```bash
 npm run release:hardening
 ```
+
+This gate does **not** include `test:customer` or `smoke:customer`. Run the customer
+unit suite separately (`npm run test:customer`) and the real customer installer
+smoke against a specific built image (`npm run smoke:customer -- --image IMAGE`).
+The optional `--include-docker` below adds the legacy `smoke:docker`, not the
+customer-kit smoke; these are distinct paths and neither is a universal migration test.
 
 Optional when Docker is available:
 

@@ -12,6 +12,47 @@
 本文命令按 **Bash** 编写。Mac 默认使用 zsh 的维护者先运行 `bash`，并在同一发布终端
 保留后续导出的版本、提交和镜像变量；不要在变量未设置时直接跳到中间步骤执行。
 
+## 0. 先确认状态：分支手册不等于 main 已具备发布系统
+
+**审阅快照（2026 年 10 月 2 日）**：远端 `main` 为 `b3764a2`，尚未包含客户发布工作流、
+`deploy/customer/` 和这组手册；本轮修正位于 `codex/v2.11.6-customer-install`。
+根 `package.json` 仍为 `2.11.5`，`v2.11.6` 只是示例，不能据此直接发版。
+这是有日期的审阅记录，不是永久状态；每次操作都必须重新 fetch 并核对实际提交。
+
+| 状态 | 必须满足 | 此时允许做什么 |
+| --- | --- | --- |
+| **S0 未合入** | main 缺少任一发布/安装组件，或仍是旧 checklist | 只审阅、修复、做隔离本地测试；**不要执行 §4/§5 的正式仓库操作** |
+| **S1 可演练** | 整套组件、Node 约束和更新后的 checklist 已审核合入默认分支 | 可运行只测试的 `workflow_dispatch`；不能把成功演练当成已发布 |
+| **S2 可推 tag** | 新版本已同步、确切 main push CI 成功、双架构演练通过、迁移评审完成且获明确发布批准 | 才可执行 §5；tag 存在/冲突时停下，禁止覆盖 |
+| **S3 可宣称客户可装** | tag 发布门禁全部成功、公共 layer 实际可拉、Release 附件与身份校验通过、干净机器验收完成 | 才宣布可安装；升级已有 2099 仍需单独批准 |
+
+```text
+S0 未合入 → 审查并合入整套变更 → S1 可演练
+S1 → 版本/CI/双架构/迁移/审批全部完成 → S2 可推 tag
+S2 → 正式发布 + 公共下载 + 客户安装验收 → S3 客户可装
+```
+
+合入必须包含 `.github/workflows/customer-*.yml`、`deploy/customer/`、相应 scripts/tests、
+Node 版本约束、`docs/customer-*` 和 **`docs/RELEASE_CHECKLIST.md` 的更新**。
+不能只合入新文档，继续让 main 旧 checklist 指示“打 tag 后手工创建公开 Release”。
+本分支改好了不代表远端 main 已经改好；本次没有执行合并。
+
+在隔离 checkout 内做以下只读核验；缺少文件就是 S0，不要越过：
+
+```bash
+git fetch origin main
+git rev-parse origin/main
+git cat-file -e origin/main:.github/workflows/customer-release.yml
+git cat-file -e origin/main:deploy/customer/siftgate.py
+git show origin/main:docs/RELEASE_CHECKLIST.md
+```
+
+**首次 GHCR 特别提醒**：仓库 Public 不代表新包 Public。首次 tag 可能在匿名 manifest
+检查处暂停；必须由**包管理员审计后公开包，再仅执行 `gh run rerun RUN_ID --failed`**。
+不要因此重建成功架构、跳过匿名检查或直接公开未完成的 Release。详情见 §2.4/§7。
+
+压力下操作使用 [分阶段命令速查卡](customer-release-quickref.md)，不能把所有命令一次粘贴执行。
+
 ## 1. 什么才算“发布完成”
 
 一次正式发布必须同时具备：
@@ -146,9 +187,23 @@ git status --short
 
 ### 3.3 发布前验证
 
-在该隔离 checkout 使用 Node 22 及锁文件安装依赖：
+本发布候选统一使用 **Node `>=22.13.0 <23`**：`.nvmrc` 选择 22 系列，根目录/前端的
+`engines.node` 和锁文件匹配；各 CI 读取 `.nvmrc`，Docker 默认 `node:22-alpine`。
+根目录与前端 `.npmrc` 的 `engine-strict=true` 在安装时拒绝不匹配的 Node。
+不要把注册表凭证写入这些会进入构建上下文的 `.npmrc`。
+
+这里锁的是 Node 主版本和最低兼容版本，不是声称所有 patch 字节都相同。
+需要重现镜像时还要保存/固定实际 `NODE_IMAGE` digest。此约束面向网关开发和镜像构建，
+不是新增对客户直接使用 SDK 的 Node 版本限制。
+历史 main Docker/CI 曾为 20；审阅起点的功能分支 Docker 已为 22、CI 却仍为 20，
+本次修正统一候选配置，而不是把 Docker 退回 20。使用 nvm 的维护者先执行 `nvm install`
+和 `nvm use`，其他运行时管理器也应读取 `.nvmrc`。不能依赖交互 shell 恰好选中了 22。
+
+在隔离 checkout 验证运行时再按锁文件安装依赖：
 
 ```bash
+npm run runtime:check
+npm run test:runtime
 npm ci
 npm --prefix frontend ci
 npm run release:hardening -- --dry-run
@@ -156,6 +211,18 @@ npm run release:hardening
 npm run test:customer
 git diff --check
 ```
+
+四套检查的边界不能混淆：
+
+| 命令 | 内容 | 不包含 |
+| --- | --- | --- |
+| `release:hardening` | Node 约束及后端/前端/SDK/配置/文档/审计/版本检查 | 默认**不含** `test:customer`、`smoke:customer`、`smoke:docker` |
+| `release:hardening -- --include-docker` | 上一项加传统 `smoke:docker` | 仍不含 `test:customer` / `smoke:customer` |
+| `test:customer` | Python 客户安装、恢复、发布附件保护的回归测试，无真实 Docker 操作 | 不构建/启动真实客户容器 |
+| `smoke:customer -- --image IMAGE` | 使用指定已加载镜像，真实走客户初始化、登录、后台保存、备份与恢复 | 不等于传统根 Compose 的 `smoke:docker`，不替代跨版本迁移验收 |
+
+因此 `release:hardening` 成功不能省略另外两项客户链路验收；上方 `test:customer` 和下方
+`smoke:customer` 是独立命令。主 CI 也独立运行客户回归，不改变 hardening 的上述边界。
 
 `release:hardening` 包含后端、前端、SDK、配置、文档、依赖审计及版本检查，不含真实
 生产请求。PostgreSQL 相关声明还要补隔离 PostgreSQL 验证；不得把生产 `DATABASE_URL`
@@ -331,9 +398,16 @@ Mac 将两处 `sha256sum -c` 换成 `shasum -a 256 -c`。客户可从公共 Rele
 
 ### 6.4 用实际公开包在干净机器安装
 
+**下面必须接在 §6.3 后，当前目录是从 Release 附件解压出的 `siftgate-$TAG/`**，
+并且其中有通过校验的 `release.json`。不是源码根目录或 `deploy/customer/`。
+省略 `--image` 只在这个已发布安装包场景有效；源码调用必须显式提供真实镜像，
+本地未推送镜像还需要 `--local-image`，不能把源码文件存在误当成公共镜像已就绪。
+
 分别选一台 AMD64、一台 ARM64 测试机，使用没有历史容器、密钥和配置的新目录：
 
 ```bash
+test -f siftgate.py
+test -f release.json
 python3 siftgate.py --directory "$HOME/siftgate-release-acceptance" init \
   --timezone Asia/Shanghai --port 21099
 python3 "$HOME/siftgate-release-acceptance/kit/siftgate.py" \

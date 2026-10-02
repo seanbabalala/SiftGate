@@ -57,6 +57,7 @@ start with the [engineering baseline](BASELINE.md).
 | Quickstart | [QUICKSTART.md](QUICKSTART.md) |
 | Customer installation | [English](customer-install.md), [中文](customer-install.zh-cn.md) |
 | Formal image release | [English](customer-release.md), [中文](customer-release.zh-cn.md) |
+| Release command card (state-gated) | [Commands / 命令](customer-release-quickref.md) |
 | Docker quickstart | [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) |
 | Dashboard | [DASHBOARD.md](DASHBOARD.md) |
 | OSS concepts | [OSS_CONCEPTS.md](OSS_CONCEPTS.md) |

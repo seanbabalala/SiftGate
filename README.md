@@ -581,11 +581,13 @@ code, diffs, hidden reasoning text, or resolved secrets by default.
 
 ## Quick Start
 
-For a versioned, persistent customer Docker installation, see the [customer install kit](docs/customer-install.md) ([中文](docs/customer-install.zh-cn.md)). Source availability does not imply that the newest image is already published. Maintainers: follow the [formal image release runbook](docs/customer-release.md) ([中文](docs/customer-release.zh-cn.md)).
+For a versioned, persistent customer Docker installation, see the [customer install kit](docs/customer-install.md) ([中文](docs/customer-install.zh-cn.md)). Source availability does not imply that the newest image is already published. Maintainers: follow the [formal image release runbook](docs/customer-release.md) ([中文](docs/customer-release.zh-cn.md)). Check its S0–S3 state gate first: files on a feature branch do not mean main is release-ready.
 
 ```bash
 git clone https://github.com/seanbabalala/ai-gateway.git
 cd ai-gateway
+# Select Node >=22.13.0 <23 using .nvmrc (nvm install && nvm use when available).
+npm run runtime:check
 npm install
 cd frontend && npm install && cd ..
 cp gateway.config.example.yaml gateway.config.yaml

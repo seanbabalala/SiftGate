@@ -3,6 +3,9 @@
   "version": "2.11.5",
   "description": "SiftGate self-hosted AI traffic gateway with smart routing",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0 <23"
+  },
   "private": true,
   "workspaces": [
     "packages/client"
@@ -16,6 +19,8 @@
     "privateReason": "Keep private=true until an npm package is intentionally published."
   },
   "scripts": {
+    "runtime:check": "node scripts/check-node-runtime.js",
+    "test:runtime": "node --test test/runtime/*.test.cjs",
     "build": "rm -rf dist-runtime-plugins src/canonical/canonical.types.js src/config/gateway.config.js src/config/modality.js src/plugins/types.js && nest build && tsc -p tsconfig.plugins.json && node scripts/copy-runtime-assets.js",
     "build:sdk": "npm --workspace @siftgate/client run build",
     "start": "nest start",

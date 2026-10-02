@@ -7,6 +7,8 @@ on:
       - master
     paths:
       - .github/workflows/postgres-budget-smoke.yml
+      - .nvmrc
+      - .npmrc
       - package.json
       - package-lock.json
       - src/budget/**
@@ -15,6 +17,8 @@ on:
   pull_request:
     paths:
       - .github/workflows/postgres-budget-smoke.yml
+      - .nvmrc
+      - .npmrc
       - package.json
       - package-lock.json
       - src/budget/**
@@ -47,7 +51,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 

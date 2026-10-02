@@ -3,6 +3,9 @@
   "private": true,
   "version": "2.11.5",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0 <23"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

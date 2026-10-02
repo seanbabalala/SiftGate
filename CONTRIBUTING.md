@@ -4,7 +4,13 @@ Thanks for helping improve SiftGate.
 
 ## Development Setup
 
+Use Node `>=22.13.0 <23`, selected by `.nvmrc`. With nvm, run `nvm install` and
+`nvm use` first. Root/frontend `.npmrc` enforce the package engine constraints;
+do not put registry credentials in these committed files.
+
 ```bash
+npm run runtime:check
+npm run test:runtime
 npm install
 cd frontend && npm install && cd ..
 cp gateway.config.example.yaml gateway.config.yaml

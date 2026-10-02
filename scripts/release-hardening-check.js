@@ -24,6 +24,7 @@ for (const arg of args) {
 }
 
 const steps = [
+  step('Node runtime policy', [npm, 'run', 'runtime:check']),
   step('Public repository boundary', [npm, 'run', 'public:check']),
   step('Documentation links and safety scan', [npm, 'run', 'docs:check']),
   step('Zero-warning backend/script lint', [npm, 'run', 'lint']),

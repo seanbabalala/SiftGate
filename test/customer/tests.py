@@ -292,6 +292,15 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('--draft "${flags[@]}"', workflow)
         self.assertIn('--verify-only', workflow)
 
+    def test_customer_checks_survive_merge_and_runtime_changes(self):
+        workflow = (SOURCE.parents[2] / ".github/workflows/customer-install.yml").read_text()
+        self.assertIn("branches: [main, master, 'codex/**']", workflow)
+        self.assertNotIn("codex/v2.11.6-customer-install", workflow)
+        for dependency in ("docs/customer-*", ".nvmrc", ".npmrc", "Dockerfile", "test/runtime/**"):
+            self.assertEqual(workflow.count("      - " + dependency + "\n"), 2)
+        core_ci = (SOURCE.parents[2] / ".github/workflows/ci.yml").read_text()
+        self.assertIn("npm run test:runtime && npm run test:customer", core_ci)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,9 +4,15 @@ This guide starts the open-source SiftGate Data Plane on one machine with memory
 
 ## 1. Install
 
+Source development requires Node `>=22.13.0 <23` (`.nvmrc` selects 22). With nvm,
+run `nvm install` and `nvm use` after entering the checkout; other managers must
+select the same release line. The root/frontend npm engine constraints reject
+incompatible installations. Container-only customers do not need host Node.
+
 ```bash
 git clone https://github.com/seanbabalala/ai-gateway.git
 cd ai-gateway
+npm run runtime:check
 npm install
 cd frontend && npm install && cd ..
 ```
