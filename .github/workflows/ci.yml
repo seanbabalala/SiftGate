@@ -32,6 +32,9 @@ jobs:
       - name: Check runtime and customer release tooling
         run: npm run test:runtime && npm run test:customer && npm run test:control-ui
 
+      - name: Check actual publisher verifier CLI compatibility offline
+        run: python3 scripts/check-customer-verifier-cli.py
+
       - name: Install dependencies
         run: npm ci
 

@@ -20,7 +20,6 @@ PREFIX="siftgate-${TAG}"
 SOURCE_COMMIT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_commit"])' "${PREFIX}-release.json")"
 gh attestation verify "${PREFIX}-release.json" \
   --hostname github.com --repo seanbabalala/SiftGate \
-  --signer-workflow github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml \
   --cert-identity "https://github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml@refs/tags/${TAG}" \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --source-ref "refs/tags/${TAG}" --source-digest "$SOURCE_COMMIT" \

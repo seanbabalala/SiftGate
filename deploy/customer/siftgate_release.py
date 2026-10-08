@@ -193,6 +193,19 @@ class VerifiedRelease:
                 "target": manifest["platforms"].get("linux/" + architecture)}
 
 
+def verifier_arguments(manifest_path, bundle_path, manifest):
+    # GitHub CLI makes cert-identity and signer-workflow mutually exclusive.
+    # The exact certificate identity already pins repository + workflow + tag;
+    # keep that stricter binding rather than combining incompatible selectors.
+    return ["gh", "attestation", "verify", str(Path(manifest_path).absolute()),
+            "--hostname", "github.com", "--repo", REPOSITORY,
+            "--cert-identity", "https://" + WORKFLOW + "@refs/tags/" + manifest["tag"],
+            "--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
+            "--source-ref", "refs/tags/" + manifest["tag"], "--source-digest", manifest["source_commit"],
+            "--deny-self-hosted-runners", "--predicate-type", "https://slsa.dev/provenance/v1",
+            "--bundle", str(Path(bundle_path).absolute()), "--format", "json"]
+
+
 def verify_release(manifest_path, bundle_path, *, trusted_root=None, trusted_root_sha256=None, runner=kit.run):
     raw = read_bytes(manifest_path, MAX_MANIFEST)
     manifest = validate_manifest(json_bytes(raw))
@@ -202,13 +215,7 @@ def verify_release(manifest_path, bundle_path, *, trusted_root=None, trusted_roo
         gh_version = runner(["gh", "version"], timeout=10, output_limit=8192)
         match = re.search(r"gh version (\d+)\.(\d+)\.(\d+)", gh_version)
         require(match and tuple(map(int, match.groups())) >= (2, 86, 0), "github_verifier_2_86_required")
-        arguments = ["gh", "attestation", "verify", str(Path(manifest_path).absolute()),
-                     "--hostname", "github.com", "--repo", REPOSITORY, "--signer-workflow", WORKFLOW,
-                     "--cert-identity", "https://" + WORKFLOW + "@refs/tags/" + manifest["tag"],
-                     "--cert-oidc-issuer", "https://token.actions.githubusercontent.com",
-                     "--source-ref", "refs/tags/" + manifest["tag"], "--source-digest", manifest["source_commit"],
-                     "--deny-self-hosted-runners", "--predicate-type", "https://slsa.dev/provenance/v1",
-                     "--bundle", str(Path(bundle_path).absolute()), "--format", "json"]
+        arguments = verifier_arguments(manifest_path, bundle_path, manifest)
         if trusted_root is not None:
             # Trust is pinned by the installation owner OUTSIDE the received bundle.
             require(isinstance(trusted_root_sha256, str) and SHA.fullmatch(trusted_root_sha256), "out_of_band_trust_pin_required")

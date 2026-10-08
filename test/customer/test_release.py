@@ -89,10 +89,17 @@ class ReleaseFilesTests(unittest.TestCase):
         verified = release.verify_release(self.file, self.bundle, runner=self.runner)
         args, options = self.calls[-1]
         for flag, expected in (("--hostname", "github.com"), ("--repo", release.REPOSITORY), ("--source-ref", "refs/tags/v2.12.0"),
-                               ("--source-digest", "a" * 40), ("--signer-workflow", release.WORKFLOW),
+                               ("--source-digest", "a" * 40),
                                ("--cert-identity", "https://" + release.WORKFLOW + "@refs/tags/v2.12.0")):
             self.assertEqual(args[args.index(flag)+1], expected)
         self.assertIn("--deny-self-hosted-runners", args)
+        for exclusive in ("--signer-workflow", "--signer-repo", "--cert-identity-regex"):
+            self.assertNotIn(exclusive, args)
+        for name in ("customer-release-quickref.md", "customer-artifact-verification.md",
+                     "customer-release.md", "customer-release.zh-cn.md"):
+            commands = (Path(__file__).resolve().parents[2] / "docs" / name).read_text()
+            self.assertNotIn("--signer-workflow github.com/", commands)
+            self.assertIn('--cert-identity "https://', commands)
         self.assertEqual(options["output_limit"], 4*1024*1024)
         self.assertEqual(verified.digest, hashlib.sha256(self.file.read_bytes()).hexdigest())
 

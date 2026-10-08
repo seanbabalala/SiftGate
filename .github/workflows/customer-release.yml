@@ -59,6 +59,8 @@ jobs:
             python3 -c 'import json,sys; runs=json.load(open(sys.argv[1]))["workflow_runs"]; assert any(r["head_sha"] == sys.argv[2] and r["event"] == "push" and r["head_branch"] == "main" and r["conclusion"] == "success" for r in runs), "Wait for successful main push CI on this exact commit before publishing"' /tmp/siftgate-main-ci.json "$(git rev-parse HEAD)"
           fi
       - run: python3 -m unittest discover -s test/customer -v
+      - name: Check actual publisher verifier CLI compatibility offline
+        run: python3 scripts/check-customer-verifier-cli.py
       - run: npm run test:control-ui
       - name: Prepare isolated SSH acceptance runtime
         run: |

@@ -398,7 +398,6 @@ gh release download "$TAG" --repo "$REPO" \
   --pattern "siftgate-$TAG-release.json" --pattern "siftgate-$TAG-release.sigstore.jsonl"
 sha256sum -c "siftgate-$TAG-install.tar.gz.sha256"
 gh attestation verify "siftgate-$TAG-release.json" --hostname github.com --repo "$REPO" \
-  --signer-workflow github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml \
   --cert-identity "https://github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml@refs/tags/$TAG" \
   --cert-oidc-issuer https://token.actions.githubusercontent.com \
   --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners \
