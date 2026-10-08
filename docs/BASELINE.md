@@ -1,14 +1,24 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-10-08
-Release: **v2.11.6**
+Release: **v2.11.7**
 
 ## Release Identity And Scope
 
 This release promotes the reviewed pricing application (`591ebb99`) and the
-customer installation/publication system. The annotated `v2.11.6` tag, exact
+customer installation/publication system. The annotated `v2.11.7` tag, exact
 main CI run and image index/child digests identify the final release. A package
 version by itself does not identify a deployed instance.
+
+The preserved `v2.11.6` source tag points to `cff3cc9`, whose main CI passed
+4,472 unit and 815 HTTP tests with zero skips, plus both native rehearsals.
+Its tag workflow stopped before image builds: checkout flattened its local tag
+ref, so the old local-object-type check rejected a valid remote annotated tag.
+No v2.11.6 image or GitHub Release was published. The v2.11.7 successor validates
+the remote annotated object in a disposable non-tag ref, preserving all version
+tags and the exact-commit main CI gate. Twelve offline Git regressions cover this
+path; the customer test suite now contains 37 cases. New run results, not the
+v2.11.6 evidence alone, are required for this successor's publication.
 
 - Pricing includes versioned rules, long-context/cache and time-window pricing,
   media quantities, frozen FX, exact settlement, durable recovery and cost evidence.
@@ -68,14 +78,14 @@ handoffs must not become public Release attachments.
 ## Deployment Boundary
 
 A source merge, a public image and a running instance are separate events.
-Publishing v2.11.6 does not restart 2099, change provider routing or copy production
+Publishing v2.11.7 does not restart 2099, change provider routing or copy production
 configuration into a customer installation. Record actual deployed commit/image,
 backups, approval and post-switch health separately. Never start an older binary
 against an upgraded database without verified compatibility and reconciliation.
 
 ## Historical v2.11.5 Baseline (Retained Evidence)
 
-The section below is the previous release's record, not v2.11.6 test counts or
+The section below is the previous release's record, not v2.11.7 test counts or
 current deployment status.
 
 Reviewed: 2026-09-20

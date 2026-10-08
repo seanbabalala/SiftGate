@@ -16,7 +16,8 @@ test "$(git branch --show-current)" = main
 test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 for file in .github/workflows/customer-release.yml .github/workflows/customer-install.yml \
-  deploy/customer/siftgate.py docs/customer-release.zh-cn.md scripts/check-node-runtime.js; do
+  deploy/customer/siftgate.py docs/customer-release.zh-cn.md scripts/check-node-runtime.js \
+  scripts/check-customer-release-tag.py; do
   git cat-file -e "origin/main:$file"
 done
 npm run runtime:check
