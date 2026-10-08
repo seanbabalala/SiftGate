@@ -15,14 +15,14 @@ the exported release variables in that session.
 
 ## 0. State gate: a branch runbook is not a ready main branch
 
-**Publication checkpoint, October 8, 2026:** PR #132 merged the customer system
-to `main` (`cff3cc9`); its full main CI and both native rehearsals passed.
-The `v2.11.6` tag workflow then failed before builds because checkout flattened
-the runner's local annotated-tag ref to a commit. The remote tag is preserved;
-no v2.11.6 image or GitHub Release was published. Successor v2.11.7 validates the
-remote tag object and adds offline regressions. It still requires its own full
-gates: the predecessor's green runs are not successor release evidence. Fetch
-and inspect actual commits before each operation.
+**Historical baseline and current authority:** PR #132 merged the customer
+installation system into `main`. The v2.11.6 workflow failed before builds on
+local annotated-tag validation; its remote tag was not moved. The corrected
+v2.11.7 became the public installation baseline. Starting with v2.12.0,
+publication additionally binds lifecycle acceptance and customer artifacts to a
+publisher-attested manifest. Fetch and inspect current main, exact CI, the tag
+workflow, the signed quartet and cold-install results on every release; neither
+this version number nor a historical checkpoint establishes publication.
 
 | State | Required evidence | Permitted actions |
 | --- | --- | --- |

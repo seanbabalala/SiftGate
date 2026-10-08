@@ -223,6 +223,16 @@ class InstallerTests(unittest.TestCase):
                 self.install.upgrade("sha256:"+"f"*64,True)
         docker.assert_not_called(); container.assert_not_called()
 
+    def test_backup_reserves_image_identity_export_before_stopping_gateway(self):
+        from types import SimpleNamespace
+        self.install.meta["image"] = "sha256:" + "a" * 64
+        with patch.object(self.install,"container",return_value={"State":{"Running":True}}), \
+                patch.object(self.install,"docker",return_value=json.dumps([{"Size":800*1024**2}])), \
+                patch.object(KIT.shutil,"disk_usage",return_value=SimpleNamespace(free=600*1024**2)), \
+                patch.object(self.install,"stop") as stop,self.assertRaisesRegex(KIT.OperatorError,"Insufficient disk space"):
+            self.install.backup(None)
+        stop.assert_not_called(); self.assertFalse((self.root/"maintenance").exists())
+
     def test_restore_checks_image_before_mounting_customer_files(self):
         target = self.root / "new"
         args = argparse.Namespace(directory=str(target), port=12345, bind="127.0.0.1", mode="local",

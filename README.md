@@ -17,9 +17,9 @@
 </p>
 
 <p align="center">
-  Current release: <strong>v2.12.0</strong> (development candidate; not yet published)
+  Current release: <strong>v2.12.0</strong> (availability: signed release assets and successful release workflow)
 </p>
-<!-- Current release: **v2.12.0** — development candidate, not yet published -->
+<!-- Current release: **v2.12.0** — verify signed release assets and the release workflow before installing -->
 
 <table>
   <tr>

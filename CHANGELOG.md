@@ -4,9 +4,9 @@
 
 ## 2.12.0 - 2026-10-08
 
-**Development candidate, not yet published.** Publication requires the complete
-lifecycle, native-platform, CI and publisher-attestation gates. This section is
-not authorization to deploy or restart an existing gateway.
+Publication status is established by the matching annotated tag and successful
+customer-release workflow, including signed artifacts and anonymous cold installs.
+This changelog is not authorization to deploy or restart an existing gateway.
 
 ### Added
 

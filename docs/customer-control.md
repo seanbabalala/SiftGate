@@ -155,3 +155,19 @@ Verify/import its opaque inbox ID in Control, then propose with offline mode.
 Import verifies files, every layer, loaded configuration and engine binding;
 it never approves or starts an upgrade. No automatic overwrite or cutover.
 Trust-root changes require explicit owner review outside imported packages.
+
+
+## Capacity and retention boundaries
+
+The first lifecycle release is intentionally bounded: each installation retains
+up to20 Vault drill records and10,000 Operator jobs; Control supports up to256
+users,1,000 enrolled installations and100,000 audit entries. These are defensive
+ceilings, not throughput/HA claims. Reaching a history/audit ceiling stops new
+maintenance actions for owner review; it does not stop gateway business traffic.
+There is no automatic audit/checkpoint deletion or UI retention override in this
+release. Plan a retention review before reaching the ceiling; keep verified
+private exports and do not edit live SQLite journals or remove records referenced
+by pending, uncertain or failed operations. No in-place audit rotation is supported.
+Routine gateway backups alone can use the installer’s explicit keep policy;
+upgrade checkpoints and retained recovery diagnostics are never auto-pruned.
+Image-identity export space is checked before entering gateway maintenance.

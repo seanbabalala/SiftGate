@@ -312,7 +312,14 @@ class Install:
                 value = path.lstat()
                 require(stat.S_ISDIR(value.st_mode) or (stat.S_ISREG(value.st_mode) and value.st_nlink == 1), "Unsafe filesystem entry; snapshot refused before maintenance")
                 if stat.S_ISREG(value.st_mode): size += value.st_size
-        require(shutil.disk_usage(self.root).free >= max(512 * 1024**2, size * 2 + 128 * 1024**2),
+        # Snapshot creation also exports the immutable image to bind its real
+        # configuration digest. Reserve that space BEFORE maintenance/stop,
+        # rather than discovering a missing image-export reserve after downtime.
+        image = json.loads(self.docker("image", "inspect", self.meta["image"]))[0]
+        image_size = image.get("Size")
+        require(type(image_size) is int and 0 <= image_size <= 20 * 1024**3,
+                "Unsupported image size for a verified snapshot")
+        require(shutil.disk_usage(self.root).free >= max(512 * 1024**2, size * 2 + image_size + 384 * 1024**2),
                 "Insufficient disk space for a verified snapshot")
 
     def check_port(self):
