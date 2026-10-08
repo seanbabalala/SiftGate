@@ -22,19 +22,15 @@ interface DialogProps {
 }
 
 export function Dialog({ open, onOpenChange, children }: DialogProps) {
-  const previousFocus = useRef<HTMLElement | null>(null)
-
-  // Save the currently focused element when opening
+  // Cleanup also runs when a conditionally rendered dialog is unmounted.
   useEffect(() => {
-    if (open) {
-      previousFocus.current = document.activeElement as HTMLElement
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-      previousFocus.current?.focus()
-    }
+    if (!open) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
-      document.body.style.overflow = ''
+      document.body.style.overflow = previousOverflow
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true })
     }
   }, [open])
 
@@ -78,9 +74,10 @@ function useDialogContext() {
 interface DialogContentProps {
   children: ReactNode
   className?: string
+  ariaLabel?: string
 }
 
-export function DialogContent({ children, className }: DialogContentProps) {
+export function DialogContent({ children, className, ariaLabel }: DialogContentProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const { onOpenChange } = useDialogContext()
 
@@ -135,6 +132,7 @@ export function DialogContent({ children, className }: DialogContentProps) {
       ref={contentRef}
       role="dialog"
       aria-modal="true"
+      aria-label={ariaLabel}
       initial={{ opacity: 0, scale: 0.95, y: 8 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 8 }}

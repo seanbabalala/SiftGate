@@ -4,10 +4,25 @@ import zlib from 'node:zlib'
 
 const assetsDir = path.join(process.cwd(), 'dist', 'assets')
 
+// Data-router navigation protection adds 17.5 KiB to shared vendor (measured 123.47 KiB).
+// The 125 KiB cap replaces 120 KiB; pricing itself stays in a capped lazy route.
 const budgets = [
   { label: 'dashboard entry', prefix: 'index-', suffix: '.js', gzipKb: 20 },
   { label: 'React vendor', prefix: 'react-vendor-', suffix: '.js', gzipKb: 70 },
-  { label: 'shared vendor', prefix: 'vendor-', suffix: '.js', gzipKb: 120 },
+  { label: 'shared vendor', prefix: 'vendor-', suffix: '.js', gzipKb: 125 },
+  { label: 'pricing route', prefix: 'pricing-page-', suffix: '.js', gzipKb: 24 },
+  { label: 'request cost route', prefix: 'request-cost-page-', suffix: '.js', gzipKb: 8 },
+  { label: 'budget recovery route', prefix: 'recovery-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'attempt correction route', prefix: 'attempt-correction-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'group disposition route', prefix: 'group-disposition-page-', suffix: '.js', gzipKb: 16 },
+  { label: 'outcome disposition route', prefix: 'outcome-disposition-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'usage recovery route', prefix: 'usage-recovery-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'cost report route', prefix: 'cost-report-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'admission preview route', prefix: 'admission-preview-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'media inventory route', prefix: 'media-tasks-page-', suffix: '.js', gzipKb: 8 },
+  { label: 'media task route', prefix: 'media-task-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'media disposition route', prefix: 'media-disposition-page-', suffix: '.js', gzipKb: 12 },
+  { label: 'media sources route', prefix: 'media-sources-page-', suffix: '.js', gzipKb: 10 },
   { label: 'charts vendor', prefix: 'charts-vendor-', suffix: '.js', gzipKb: 95 },
   { label: 'largest route chunk', prefix: 'NodesPage-', suffix: '.js', gzipKb: 30 },
 ]

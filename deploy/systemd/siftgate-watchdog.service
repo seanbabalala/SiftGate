@@ -1,0 +1,15 @@
+[Unit]
+Description=Probe SiftGate HTTP liveness and perform bounded recovery
+After=network-online.target
+
+[Service]
+Type=oneshot
+# This script invokes the fixed systemctl command for its configured unit.
+# Install this script and its configuration root-owned, not writable by siftgate.
+ExecStart=/usr/bin/node /usr/local/lib/siftgate-watchdog/gateway-watchdog.js /etc/siftgate-watchdog/config.json
+TimeoutStartSec=180
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=full
+StateDirectory=siftgate-watchdog
+StateDirectoryMode=0700

@@ -56,6 +56,8 @@ function mockRepo(qb: any) {
   };
 }
 
+const ADMIN_TEST_MANAGER = { transaction_fixture: true };
+
 function makeDashboard(overrides: Record<string, any> = {}) {
   const config = mockConfigService({
     nodes: [
@@ -216,6 +218,7 @@ function makeDashboard(overrides: Record<string, any> = {}) {
   };
 
   const gatewayApiKeys = {
+    withTransaction: jest.fn(async (action: (service: unknown, manager?: unknown) => Promise<unknown>): Promise<unknown> => action(gatewayApiKeys, ADMIN_TEST_MANAGER)),
     list: jest.fn().mockResolvedValue([]),
     getSummary: jest.fn(),
     create: jest.fn(),
@@ -255,6 +258,7 @@ function makeDashboard(overrides: Record<string, any> = {}) {
     ...overrides.agentPlatform,
   };
   const teams = {
+    withTransaction: jest.fn(async (action: (service: unknown, manager?: unknown) => Promise<unknown>): Promise<unknown> => action(teams, ADMIN_TEST_MANAGER)),
     list: jest.fn().mockResolvedValue([]),
     getSummary: jest.fn(),
     create: jest.fn(),
@@ -503,6 +507,8 @@ function makeDashboard(overrides: Record<string, any> = {}) {
     ...overrides.batchJobs,
   };
   const workspaces = {
+    withTransaction: jest.fn(),
+    lockWorkspace: jest.fn().mockResolvedValue(undefined),
     getState: jest.fn().mockResolvedValue({
       organization: {
         id: "default-org",
@@ -574,6 +580,8 @@ function makeDashboard(overrides: Record<string, any> = {}) {
     ...overrides.workspaces,
   };
   const memberships = {
+    withTransaction: jest.fn(),
+    lockWorkspace: jest.fn().mockResolvedValue(undefined),
     list: jest.fn().mockResolvedValue([]),
     listForUser: jest.fn().mockResolvedValue([
       {
@@ -598,11 +606,18 @@ function makeDashboard(overrides: Record<string, any> = {}) {
     ...overrides.memberships,
   };
   const invitations = {
+    withTransaction: jest.fn(),
     list: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
     revoke: jest.fn(),
     ...overrides.invitations,
   };
+  for (const service of [workspaces, memberships, invitations]) {
+    service.withTransaction.mockImplementation((action: (scoped: unknown, manager: unknown) => unknown, manager?: unknown) => {
+      if (manager) expect(manager).toBe(ADMIN_TEST_MANAGER);
+      return action(service, manager ?? ADMIN_TEST_MANAGER);
+    });
+  }
   const workspaceContext = {
     currentWorkspaceId: jest.fn(() => "default-workspace"),
     ...overrides.workspaceContext,
@@ -705,6 +720,54 @@ function controllerMethod(name: keyof DashboardController): Function {
 // ═══════════════════════════════════════════════════════════
 // Stats
 // ═══════════════════════════════════════════════════════════
+
+describe("DashboardController — automatic log retention", () => {
+  beforeEach(() => jest.useFakeTimers({ doNotFake: ['setImmediate'] }));
+  afterEach(() => { jest.clearAllTimers(); jest.useRealTimers(); });
+
+  it('runs after one minute, repeats six hours later, and stops on shutdown', async () => {
+    const { controller, callLogRepo } = makeDashboard();
+    await jest.advanceTimersByTimeAsync(59_999);
+    expect(callLogRepo.createQueryBuilder).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+    expect(callLogRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(6 * 60 * 60_000);
+    expect(callLogRepo.createQueryBuilder).toHaveBeenCalledTimes(2);
+    await controller.beforeApplicationShutdown();
+    await jest.advanceTimersByTimeAsync(6 * 60 * 60_000);
+    expect(callLogRepo.createQueryBuilder).toHaveBeenCalledTimes(2);
+  });
+
+  it('honors explicit keep-forever instead of silently enabling deletion', async () => {
+    const { controller, callLogRepo, routeDecisionRepo } = makeDashboard({
+      config: { database: { type: 'sqlite', log_retention_days: 0 } },
+    });
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(callLogRepo.createQueryBuilder).not.toHaveBeenCalled();
+    expect(routeDecisionRepo.createQueryBuilder).not.toHaveBeenCalled();
+    await controller.beforeApplicationShutdown();
+  });
+
+  it('defaults to thirty days and stops additional batches when shutting down', async () => {
+    const qb = mockQueryBuilder({}, [{ id: 1 }]);
+    const repo = { ...mockRepo(qb), delete: jest.fn() };
+    const { controller, routeDecisionRepo } = makeDashboard({
+      config: { database: { type: 'sqlite' } }, callLogRepo: repo,
+    });
+    repo.delete.mockImplementation(async () => {
+      await controller.beforeApplicationShutdown();
+      return { affected: 1 };
+    });
+    const before = Date.now();
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(qb.take).toHaveBeenCalledWith(500);
+    expect(qb.where).toHaveBeenCalledWith('log.timestamp < :cutoff', {
+      cutoff: new Date(before + 60_000 - 30 * 86_400_000),
+    });
+    expect(repo.delete).toHaveBeenCalledTimes(1);
+    expect(routeDecisionRepo.createQueryBuilder).not.toHaveBeenCalled();
+  });
+});
 
 describe("DashboardController — getStats", () => {
   it("should return aggregated stats", async () => {
@@ -973,6 +1036,7 @@ describe("DashboardController — workspaces", () => {
         resourceId: "ws_agents",
         workspaceId: "ws_agents",
       }),
+      ADMIN_TEST_MANAGER,
     );
   });
 
@@ -4399,6 +4463,7 @@ describe("DashboardController — api-keys", () => {
           secret: "redacted",
         }),
       }),
+      ADMIN_TEST_MANAGER,
     );
     const auditPayload = JSON.stringify(
       configAudit.recordManagementEvent.mock.calls[0][0],
@@ -4448,6 +4513,7 @@ describe("DashboardController — api-keys", () => {
           ],
         },
       }),
+      ADMIN_TEST_MANAGER,
     );
   });
 
@@ -4474,6 +4540,7 @@ describe("DashboardController — api-keys", () => {
           secret: "redacted",
         }),
       }),
+      ADMIN_TEST_MANAGER,
     );
     expect(configAudit.recordManagementEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -4483,6 +4550,7 @@ describe("DashboardController — api-keys", () => {
           secret: "redacted",
         }),
       }),
+      ADMIN_TEST_MANAGER,
     );
     const auditPayload = JSON.stringify(
       configAudit.recordManagementEvent.mock.calls,
@@ -4560,6 +4628,7 @@ describe("DashboardController — local teams", () => {
           enterprise: expect.objectContaining({ sso: false, scim: false }),
         }),
       }),
+      ADMIN_TEST_MANAGER,
     );
     expect(configAudit.recordManagementEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -4567,12 +4636,14 @@ describe("DashboardController — local teams", () => {
         beforeSummary: expect.objectContaining({ status: "active" }),
         afterSummary: expect.objectContaining({ status: "disabled" }),
       }),
+      ADMIN_TEST_MANAGER,
     );
     expect(configAudit.recordManagementEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "team.delete",
         beforeSummary: expect.objectContaining({ secret: "not_applicable" }),
       }),
+      ADMIN_TEST_MANAGER,
     );
     expect(
       JSON.stringify(configAudit.recordManagementEvent.mock.calls),

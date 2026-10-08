@@ -1,0 +1,8 @@
+# Optional overlay for persistent Dashboard-managed configuration.
+# Use a directory mount: replacing a single-file bind mount atomically fails.
+services:
+  siftgate:
+    environment:
+      GATEWAY_CONFIG_PATH: /app/operator-config/gateway.config.yaml
+    volumes:
+      - ${SIFTGATE_CONFIG_DIR:?Set an absolute writable configuration directory}:/app/operator-config

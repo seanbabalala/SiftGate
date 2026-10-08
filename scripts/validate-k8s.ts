@@ -226,6 +226,7 @@ function validateHelmTemplateText(helmDir: string, result: K8sValidationResult):
   requireText(deployment, 'GATEWAY_CONFIG_PATH', 'Helm deployment must set GATEWAY_CONFIG_PATH.', result);
   requireText(deployment, '.Values.config.mountPath', 'Helm deployment must mount configurable gateway config path.', result);
   requireText(deployment, 'path: /ready', 'Helm readinessProbe must use /ready.', result);
+  requireText(deployment, 'path: /live', 'Helm livenessProbe must use /live.', result);
   requireText(deployment, 'persistentVolumeClaim', 'Helm deployment must mount the SQLite data PVC when persistence is enabled.', result);
   requireText(configmap, '.Values.config.data', 'Helm ConfigMap must render config.data.', result);
   requireText(secret, 'stringData:', 'Helm Secret template must use stringData placeholders/values.', result);
@@ -299,8 +300,8 @@ function validateKustomizeBase(
     result.errors.push('Kubernetes base readinessProbe must use /ready.');
   }
   const livenessPath = getPath(container, ['livenessProbe', 'httpGet', 'path']);
-  if (livenessPath !== '/health') {
-    result.errors.push('Kubernetes base livenessProbe must use /health.');
+  if (livenessPath !== '/live') {
+    result.errors.push('Kubernetes base livenessProbe must use /live.');
   }
   const servicePorts = Array.isArray(getPath(service, ['spec', 'ports']))
     ? (getPath(service, ['spec', 'ports']) as unknown[])

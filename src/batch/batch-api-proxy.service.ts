@@ -7,6 +7,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { withCoordinatedRepository } from '../database/coordinated-repository';
 import type { Request } from 'express';
 import { ConfigService } from '../config/config.service';
 import type { NodeConfig } from '../config/gateway.config';
@@ -174,7 +175,11 @@ export class BatchApiProxyService {
 
   async cancel(input: BatchExistingJobInput): Promise<BatchProxyResponse> {
     const job = await this.getAccessibleJob(input.id, input.context.apiKey);
-    this.assertApiKeyAllowedForStoredJob(input.context.apiKey, job, input.context);
+    this.assertApiKeyAllowedForStoredJob(
+      input.context.apiKey,
+      job,
+      input.context,
+    );
     const node = this.requireNode(job.node_id);
     await this.checkBudget(input.context.apiKey);
 
@@ -184,19 +189,27 @@ export class BatchApiProxyService {
       input.context.requestId,
     );
     const body = this.responseBody(response.body);
-    const publicBody = this.publicResponseBody(response.body, response.statusCode);
+    const publicBody = this.publicResponseBody(
+      response.body,
+      response.statusCode,
+    );
     let error: string | null = null;
-    if (this.isRecord(body)) {
+    if (response.statusCode === 204) {
+      // JSON adapters represent an empty 204 as {}; do not treat that as a new validating job.
+      job.status = (await this.jobs.markCancelled(job)).status;
+    } else if (this.isRecord(body)) {
       await this.jobs.updateFromProvider(job, body);
-      error = extractBatchProviderError(body.error, this.batchRedactionTelemetry());
+      error = extractBatchProviderError(
+        body.error,
+        this.batchRedactionTelemetry(),
+      );
     } else if (response.statusCode >= 400) {
       error = redactBatchProviderErrorText(String(body), {
         maxLength: 500,
         telemetry: this.batchRedactionTelemetry(),
       });
     } else {
-      job.status = 'cancelled';
-      await this.jobs.save(job);
+      job.status = (await this.jobs.markCancelled(job)).status;
     }
 
     await this.recordZeroUsage(input.context.apiKey);
@@ -218,7 +231,9 @@ export class BatchApiProxyService {
       model: job.model,
       endpoint: job.endpoint,
       providerBatchId: job.provider_batch_id,
-      status: this.isRecord(body) ? this.firstString(body.status, body.state) : job.status,
+      status: this.isRecord(body)
+        ? this.firstString(body.status, body.state) || job.status
+        : job.status,
       error,
     };
   }
@@ -521,7 +536,9 @@ export class BatchApiProxyService {
       api_key_id: input.context.apiKey?.id || null,
       namespace_id: input.context.apiKey?.namespace_id || null,
     });
-    await this.callLogs.save(log);
+    await withCoordinatedRepository(this.callLogs, true, (repo) =>
+      repo.save(log),
+    );
     this.telemetry.recordCallMetrics({
       tier: 'direct',
       node: input.target.nodeId,

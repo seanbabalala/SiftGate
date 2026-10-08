@@ -24,6 +24,7 @@ import {
   EmbeddingBatchingConfig,
   ClusterConfig,
   AlertsConfig,
+  AlertChannelConfig,
   AlertSpikeRuleConfig,
   AlertLatencySpikeRuleConfig,
   NamespaceConfig,
@@ -57,7 +58,10 @@ import type { ConfigDiagnostic } from './config-diagnostics';
 import type { EventBusService } from '../plugins/event-bus.service';
 import { containsSecretReference, isTypedSecretReferenceExpression } from './secret-references';
 import { loadLocalEnvFiles } from './local-env';
+import { validateChannel } from '../alerts/alert-connector-runtime';
 import type { ProviderCatalog } from '../catalog/catalog.types';
+import { resolvePricingLimits } from './pricing-limits';
+import { selectConfiguredLegacyPricing, withLegacyCachePricing } from './legacy-pricing-resolution';
 
 export type { ConfigDiagnostic, ConfigDiagnosticSeverity } from './config-diagnostics';
 
@@ -273,6 +277,7 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
     if (!config || typeof config !== 'object') {
       throw new Error('Invalid configuration: YAML root must be an object');
     }
+    resolvePricingLimits(config.pricing_limits);
     if (!config.server || typeof config.server !== 'object') {
       throw new Error('Invalid configuration: server is required');
     }
@@ -613,7 +618,8 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
       namespaces_changed: JSON.stringify(previous.namespaces || []) !== JSON.stringify(next.namespaces || []),
       routing_changed: JSON.stringify(previous.routing) !== JSON.stringify(next.routing),
       budget_changed: JSON.stringify(previous.budget) !== JSON.stringify(next.budget),
-      pricing_changed: JSON.stringify(previous.models_pricing) !== JSON.stringify(next.models_pricing),
+      pricing_changed: JSON.stringify(previous.models_pricing) !== JSON.stringify(next.models_pricing) ||
+        JSON.stringify(previous.pricing_limits ?? {}) !== JSON.stringify(next.pricing_limits ?? {}),
       control_plane_changed: JSON.stringify(previous.control_plane || null) !== JSON.stringify(next.control_plane || null),
       hot_reload_changed: JSON.stringify(previous.hot_reload || null) !== JSON.stringify(next.hot_reload || null),
       state_changed: JSON.stringify(previous.state || null) !== JSON.stringify(next.state || null),
@@ -647,6 +653,10 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
 
   get database(): DatabaseConfig {
     return this.config.database;
+  }
+
+  get pricingLimits() {
+    return resolvePricingLimits(this.config.pricing_limits);
   }
 
   get auth(): AuthConfig {
@@ -1381,129 +1391,10 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
     manual_review_required?: boolean;
     pricing_confidence?: string;
   }) | undefined {
-    if (nodeId) {
-      const nodePricing = this.getNode(nodeId)?.model_capabilities?.[model]?.pricing;
-      if (nodePricing) {
-        return this.withImplicitCachePricing({
-          ...nodePricing,
-          source: nodePricing.source || 'config:model_capabilities',
-          pricing_used_from: 'node_model_config',
-          currency: nodePricing.currency || 'USD',
-        }, model, nodeId);
-      }
-    }
-    const configuredPricing = this.config.models_pricing[model];
-    if (configuredPricing) {
-      return this.withImplicitCachePricing({
-        ...configuredPricing,
-        source: configuredPricing.source || 'config:models_pricing',
-        pricing_used_from: 'gateway_config',
-        currency: configuredPricing.currency || 'USD',
-      }, model, nodeId);
-    }
-    const fallback = this.getCatalogPricingFallback(model, nodeId);
-    return fallback
-      ? this.withImplicitCachePricing(fallback, model, nodeId)
-      : undefined;
-  }
-
-  private withImplicitCachePricing<T extends ModelPricing>(
-    pricing: T,
-    model: string,
-    nodeId?: string,
-  ): T {
-    const cacheReadPrice =
-      pricing.cache_read_input ?? pricing.cache_read_per_1m_tokens;
-    const cacheCreationPrice =
-      pricing.cache_creation_input ?? pricing.cache_write_per_1m_tokens;
-
-    if (this.shouldInferAnthropicPromptCachePricing(model, nodeId)) {
-      if (cacheReadPrice !== undefined && cacheCreationPrice !== undefined) {
-        return pricing;
-      }
-
-      return {
-        ...pricing,
-        cache_read_input: cacheReadPrice ?? roundCurrency(pricing.input * 0.1),
-        cache_creation_input:
-          cacheCreationPrice ?? roundCurrency(pricing.input * 1.25),
-      };
-    }
-
-    if (
-      this.shouldInferOpenAiPromptCachePricing(model, nodeId) &&
-      cacheReadPrice === undefined
-    ) {
-      return {
-        ...pricing,
-        cache_read_input: roundCurrency(
-          pricing.input * this.openAiCacheReadDiscount(model, nodeId),
-        ),
-      };
-    }
-
-    return pricing;
-  }
-
-  private shouldInferAnthropicPromptCachePricing(
-    model: string,
-    nodeId?: string,
-  ): boolean {
-    const normalizedModel = normalizePricingIdentity(model);
-    if (normalizedModel.startsWith('claude-')) return true;
-
-    if (!nodeId) return false;
-    const node = this.getNode(nodeId);
-    if (!node) return false;
-
-    const profiles = Array.isArray(node.compatibility_profile)
-      ? node.compatibility_profile
-      : node.compatibility_profile
-        ? [node.compatibility_profile]
-        : [];
-    if (profiles.some((profile) => `${profile}`.includes('anthropic'))) {
-      return true;
-    }
-    if (node.protocol === 'messages') return true;
-
-    const upstreamModel = normalizePricingIdentity(
-      node.upstream_model_aliases?.[model] || '',
-    );
-    return upstreamModel.startsWith('claude-');
-  }
-
-  private shouldInferOpenAiPromptCachePricing(
-    model: string,
-    nodeId?: string,
-  ): boolean {
-    const normalizedModel = normalizePricingIdentity(model);
-    const looksLikeOpenAiModel =
-      normalizedModel.startsWith('gpt-') ||
-      normalizedModel.startsWith('o1') ||
-      normalizedModel.startsWith('o3') ||
-      normalizedModel.startsWith('o4');
-
-    if (!nodeId) return looksLikeOpenAiModel;
-    const node = this.getNode(nodeId);
-    if (!node) return looksLikeOpenAiModel;
-
-    const profiles = Array.isArray(node.compatibility_profile)
-      ? node.compatibility_profile
-      : node.compatibility_profile
-        ? [node.compatibility_profile]
-        : [];
-    if (profiles.some((profile) => `${profile}`.includes('openai'))) {
-      return true;
-    }
-
-    const upstreamModel = normalizePricingIdentity(
-      node.upstream_model_aliases?.[model] || '',
-    );
-    return looksLikeOpenAiModel || upstreamModel.startsWith('gpt-');
-  }
-
-  private openAiCacheReadDiscount(_model: string, _nodeId?: string): number {
-    return 0.1;
+    const node = nodeId ? this.getNode(nodeId) : undefined;
+    const configured = selectConfiguredLegacyPricing(this.config.models_pricing, model, node);
+    const price = configured?.pricing ?? this.getCatalogPricingFallback(model, nodeId);
+    return price ? withLegacyCachePricing(price, model, node) : undefined;
   }
 
   private getCatalogPricingFallback(
@@ -1729,6 +1620,22 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
     return this.config;
   }
 
+  /** Preserve raw secret references while editing/reordering connector entries. */
+  getAlertSettingsForEditing(): AlertsConfig {
+    return this.cloneConfig(this.prepareConfigForPersistence().alerts || {});
+  }
+
+  updateAlertSettings(enabled: boolean, channels: AlertChannelConfig[]): void {
+    if (typeof enabled !== 'boolean' || channels.length > 20) throw new Error('Invalid alert configuration');
+    channels.forEach((channel) => validateChannel(channel, { allowReferences: true }));
+    const previous = this.config.alerts;
+    this.config.alerts = { ...previous, enabled, channels: this.cloneConfig(channels) };
+    try { this.saveConfig(true); } catch {
+      this.config.alerts = previous;
+      throw new Error('Unable to persist alert settings; the previous configuration remains active.');
+    }
+  }
+
   /** Get structured node/model naming diagnostics for dashboard and tests. */
   getNodeModelDiagnostics(): ConfigDiagnostic[] {
     return buildNodeModelDiagnostics(this.config);
@@ -1871,7 +1778,7 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
    * Startup-time ${VAR} references are resolved in memory, so we overlay the
    * last loaded raw references when the user did not edit that value.
    */
-  private saveConfig(): void {
+  private saveConfig(privateFile = false): void {
     const configToPersist = this.prepareConfigForPersistence();
     const yamlStr = yaml.dump(configToPersist, {
       indent: 2,
@@ -1879,20 +1786,20 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
       noRefs: true,
       sortKeys: false,
     });
-    this.writeConfigFileAtomic(yamlStr);
+    this.writeConfigFileAtomic(yamlStr, privateFile ? 0o600 : undefined);
     this.originalConfigForPersistence = this.cloneConfig(configToPersist);
     this.resolvedConfigForPersistence = this.cloneConfig(this.config);
     this.logger.log(`Configuration saved to ${this.configPath}`);
   }
 
-  private writeConfigFileAtomic(contents: string): void {
+  private writeConfigFileAtomic(contents: string, modeOverride?: number): void {
     const dir = path.dirname(this.configPath);
     const base = path.basename(this.configPath);
     const tempPath = path.join(
       dir,
       `.${base}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
     );
-    const mode = this.configFileMode();
+    const mode = modeOverride ?? this.configFileMode();
     let wroteTemp = false;
 
     try {
@@ -2248,12 +2155,4 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Tier "${tierName}" ${label}: node "${target.node}" not found`);
     }
   }
-}
-
-function normalizePricingIdentity(value: string): string {
-  return `${value || ''}`.trim().toLowerCase();
-}
-
-function roundCurrency(value: number): number {
-  return Number(value.toFixed(6));
 }

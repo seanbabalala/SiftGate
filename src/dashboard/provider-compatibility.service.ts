@@ -1,6 +1,10 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import {
+  lockRepositoryWriter,
+  withCoordinatedRepository,
+} from '../database/coordinated-repository';
 import { NodeConfig } from '../config/gateway.config';
 import {
   ProviderCompatibilityCapability,
@@ -105,11 +109,13 @@ export class ProviderCompatibilityService {
   ): Promise<Record<string, ProviderCompatibilityMatrixItem[]>> {
     const nodeIds = nodes.map((node) => node.id);
     const saved = nodeIds.length
-      ? await this.repo.find({
-          where: workspaceFindWhereStrict(this.workspaceId(), {
-            node_id: In(nodeIds),
+      ? await withCoordinatedRepository(this.repo, false, (repo) =>
+          repo.find({
+            where: workspaceFindWhereStrict(this.workspaceId(), {
+              node_id: In(nodeIds),
+            }),
           }),
-        })
+        )
       : [];
     const byKey = new Map(
       saved.map((result) => [`${result.node_id}:${result.capability}`, result]),
@@ -123,9 +129,19 @@ export class ProviderCompatibilityService {
     return matrix;
   }
 
-  async matrixForNode(node: NodeConfig): Promise<ProviderCompatibilityMatrixItem[]> {
-    const saved = await this.repo.find({ where: { node_id: node.id } });
-    const byCapability = new Map(saved.map((result) => [result.capability, result]));
+  async matrixForNode(
+    node: NodeConfig,
+  ): Promise<ProviderCompatibilityMatrixItem[]> {
+    const saved = await withCoordinatedRepository(this.repo, false, (repo) =>
+      repo.find({
+        where: workspaceFindWhereStrict(this.workspaceId(), {
+          node_id: node.id,
+        }),
+      }),
+    );
+    const byCapability = new Map(
+      saved.map((result) => [result.capability, result]),
+    );
     return this.plansForNode(node).map((plan) =>
       this.toMatrixItem(plan, byCapability.get(plan.capability)),
     );
@@ -439,30 +455,41 @@ export class ProviderCompatibilityService {
       status_code: number | null;
     },
   ): Promise<ProviderCompatibilityMatrixItem> {
-    const existing = await this.repo.findOne({
-      where: workspaceFindWhere(this.workspaceId(), {
+    return withCoordinatedRepository(this.repo, true, async (repo, manager) => {
+      // The existing compatibility table has a global node/capability unique key.
+      // Serialize that key, but never read or overwrite another workspace's row.
+      await lockRepositoryWriter(
+        repo,
+        manager,
+        JSON.stringify([node.id, plan.capability]),
+      );
+      const existing = await repo.findOne({
+        where: workspaceFindWhere(this.workspaceId(), {
+          node_id: node.id,
+          capability: plan.capability,
+        }),
+      });
+      const entity = repo.create({
+        ...(existing || {}),
+        workspace_id: this.workspaceId(),
         node_id: node.id,
         capability: plan.capability,
-      }),
+        configured: result.configured,
+        tested: result.tested,
+        last_status: result.last_status,
+        last_checked_at: result.tested
+          ? new Date().toISOString()
+          : existing?.last_checked_at || null,
+        failure_reason: result.failure_reason
+          ? this.sanitize(result.failure_reason)
+          : null,
+        latency_ms: result.latency_ms,
+        status_code: result.status_code,
+        test_mode: plan.testMode,
+      });
+      const saved = await repo.save(entity);
+      return this.toMatrixItem(plan, saved);
     });
-    const entity = this.repo.create({
-      ...(existing || {}),
-      workspace_id: this.workspaceId(),
-      node_id: node.id,
-      capability: plan.capability,
-      configured: result.configured,
-      tested: result.tested,
-      last_status: result.last_status,
-      last_checked_at: result.tested
-        ? new Date().toISOString()
-        : existing?.last_checked_at || null,
-      failure_reason: result.failure_reason ? this.sanitize(result.failure_reason) : null,
-      latency_ms: result.latency_ms,
-      status_code: result.status_code,
-      test_mode: plan.testMode,
-    });
-    const saved = await this.repo.save(entity);
-    return this.toMatrixItem(plan, saved);
   }
 
   private async authHeaders(node: NodeConfig, json = true): Promise<Record<string, string>> {

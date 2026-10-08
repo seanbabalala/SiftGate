@@ -87,7 +87,7 @@ export class AgentProfile {
   @Column({ type: 'simple-json', nullable: true })
   metadata!: Record<string, unknown> | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: Date, nullable: true })
   last_generated_at!: Date | null;
 
   @CreateDateColumn()

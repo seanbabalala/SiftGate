@@ -3,6 +3,7 @@
  */
 
 import { createE2EHarness, E2EHarness } from './setup';
+import { DatabaseHealthService } from '../../src/database/database-health.service';
 
 describe('Health (e2e)', () => {
   let harness: E2EHarness;
@@ -13,6 +14,21 @@ describe('Health (e2e)', () => {
 
   afterAll(async () => {
     await harness?.close();
+  });
+
+  it('GET /live is a lightweight liveness check, independent of database readiness', async () => {
+    const database = harness.app.get(DatabaseHealthService);
+    const check = jest.spyOn(database, 'check').mockResolvedValue({
+      healthy: false, connected: false, type: 'sqlite', target: ':memory:',
+      latency_ms: 0, checked_at: new Date().toISOString(), error: 'test unavailable', synchronize: false,
+    });
+    try {
+      const live = await harness.agent.get('/live');
+      expect(live.status).toBe(200);
+      expect(live.body).toEqual({ status: 'alive' });
+      expect(check).not.toHaveBeenCalled();
+      expect((await harness.agent.get('/ready')).status).toBe(503);
+    } finally { check.mockRestore(); }
   });
 
   it('GET /health → 200 with expected shape', async () => {

@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
+import { Repository, type EntityManager } from 'typeorm';
+import { coordinatedRepositoryOperation, requireRepositoryTransaction } from '../database/coordinated-repository';
+import { lockWorkspaceWriter } from '../workspaces/workspace-writer-lock';
 import {
   WorkspaceMembership,
   WORKSPACE_MEMBERSHIP_ROLES,
@@ -37,15 +40,45 @@ export interface EnsureWorkspaceMembershipInput {
 
 @Injectable()
 export class WorkspaceMembershipService {
+  private databaseScope: { manager: EntityManager; write: boolean } | null = null;
   constructor(
     @InjectRepository(WorkspaceMembership)
     private readonly memberships: Repository<WorkspaceMembership>,
   ) {}
 
+  withTransaction<T>(action: (service: WorkspaceMembershipService, manager?: EntityManager) => Promise<T>, manager?: EntityManager): Promise<T> {
+    if (manager) {
+      requireRepositoryTransaction(this.memberships, manager);
+      return action(this.scoped(manager, true), manager);
+    }
+    if (this.databaseScope) {
+      if (!this.databaseScope.write) throw new Error('Cannot promote a read scope to a write transaction');
+      return action(this, this.databaseScope.manager);
+    }
+    return coordinatedRepositoryOperation(this.memberships, true, (transaction) => action(transaction ? this.scoped(transaction, true) : this, transaction));
+  }
+
+  private scoped(manager: EntityManager, write: boolean): WorkspaceMembershipService {
+    const service = new WorkspaceMembershipService(manager.getRepository(WorkspaceMembership));
+    service.databaseScope = { manager, write };
+    return service;
+  }
+
+  private needsDatabaseScope(): boolean { return !this.databaseScope && Boolean(this.memberships.manager?.connection); }
+  private read<T>(action: (service: WorkspaceMembershipService) => Promise<T>): Promise<T> {
+    return coordinatedRepositoryOperation(this.memberships, false, (manager) => action(manager ? this.scoped(manager, false) : this));
+  }
+
+  async lockWorkspace(workspaceId: string): Promise<void> {
+    if (!this.databaseScope?.write && this.memberships.manager?.connection) throw new Error('Workspace lock requires a write scope');
+    await lockWorkspaceWriter(this.databaseScope?.manager, workspaceId);
+  }
+
   async findActiveRole(
     userId: string,
     workspaceId: string,
   ): Promise<WorkspaceMembershipRole | null> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.findActiveRole(userId, workspaceId));
     const membership = await this.memberships.findOne({
       where: {
         user_id: userId,
@@ -57,6 +90,7 @@ export class WorkspaceMembershipService {
   }
 
   async list(workspaceId = DEFAULT_WORKSPACE_ID): Promise<WorkspaceMembershipSummary[]> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.list(workspaceId));
     const rows = await this.memberships.find({
       where: { workspace_id: workspaceId },
       order: { role: 'ASC', created_at: 'ASC' },
@@ -65,6 +99,7 @@ export class WorkspaceMembershipService {
   }
 
   async listForUser(userId: string): Promise<WorkspaceMembershipSummary[]> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.listForUser(userId));
     const rows = await this.memberships.find({
       where: { user_id: normalizeUserId(userId) },
       order: { workspace_id: 'ASC', role: 'ASC', created_at: 'ASC' },
@@ -75,8 +110,11 @@ export class WorkspaceMembershipService {
   async update(
     id: string,
     input: UpdateWorkspaceMembershipInput,
+    workspaceId = DEFAULT_WORKSPACE_ID,
   ): Promise<WorkspaceMembershipSummary> {
-    const membership = await this.memberships.findOne({ where: { id } });
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.update(id, input, workspaceId));
+    await this.lockWorkspace(workspaceId);
+    const membership = await this.memberships.findOne({ where: { id, workspace_id: workspaceId } });
     if (!membership) {
       throw new NotFoundException(`Workspace member not found: ${id}`);
     }
@@ -89,14 +127,17 @@ export class WorkspaceMembershipService {
   async ensureMembership(
     input: EnsureWorkspaceMembershipInput,
   ): Promise<WorkspaceMembershipSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.ensureMembership(input));
     const userId = normalizeUserId(input.userId);
     const workspaceId = input.workspaceId || DEFAULT_WORKSPACE_ID;
     const organizationId = input.organizationId || DEFAULT_ORGANIZATION_ID;
     const role = assertRole(input.role);
+    await this.lockWorkspace(workspaceId);
     const existing = await this.memberships.findOne({
       where: { user_id: userId, workspace_id: workspaceId },
     });
     if (existing) {
+      await this.assertNotRemovingLastAdmin(existing, { role, status: 'active' });
       existing.organization_id = organizationId;
       existing.role = role;
       existing.status = 'active';
@@ -115,6 +156,8 @@ export class WorkspaceMembershipService {
   }
 
   async ensureDefaultAdmin(): Promise<WorkspaceMembershipSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.ensureDefaultAdmin());
+    await this.lockWorkspace(DEFAULT_WORKSPACE_ID);
     const existing = await this.memberships.findOne({
       where: {
         workspace_id: DEFAULT_WORKSPACE_ID,
@@ -129,7 +172,11 @@ export class WorkspaceMembershipService {
     }
     const created = await this.memberships.save(
       this.memberships.create({
-        id: 'membership-default-dashboard-admin',
+        // Existing legacy IDs are preserved above; a new native PostgreSQL UUID
+        // column cannot store SQLite's historical human-readable bootstrap ID.
+        id: this.memberships.manager?.connection.options.type === 'postgres'
+          ? randomUUID()
+          : 'membership-default-dashboard-admin',
         user_id: 'dashboard',
         organization_id: DEFAULT_ORGANIZATION_ID,
         workspace_id: DEFAULT_WORKSPACE_ID,

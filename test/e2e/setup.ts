@@ -1,3 +1,6 @@
+import { AbstractLoader } from '@nestjs/serve-static/dist/loaders/abstract.loader';
+import { ExpressLoader } from '@nestjs/serve-static/dist/loaders/express.loader';
+import { SERVE_STATIC_MODULE_OPTIONS } from '@nestjs/serve-static/dist/serve-static.constants';
 /**
  * E2E test infrastructure — shared setup for all E2E test files.
  *
@@ -465,9 +468,9 @@ export interface E2EHarness {
   close: () => Promise<void>;
 }
 
-export async function createE2EHarness(): Promise<E2EHarness> {
+export async function createE2EHarness(configPath = FIXTURE_PATH, options: { frontendRoot?: string } = {}): Promise<E2EHarness> {
   // Set config path BEFORE module resolution
-  process.env.GATEWAY_CONFIG_PATH = FIXTURE_PATH;
+  process.env.GATEWAY_CONFIG_PATH = configPath;
 
   // Lazy-import AppModule so the config path is read at require time
   const { AppModule } = await import('../../src/app.module');
@@ -477,13 +480,19 @@ export async function createE2EHarness(): Promise<E2EHarness> {
   const fetchMock = new FetchMock();
   fetchMock.install();
 
-  const moduleFixture: TestingModule = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [AppModule],
   })
     // Override PluginLoaderService to skip auto-discovery of plugins/
     .overrideProvider(PluginLoaderService)
-    .useValue({ onModuleInit: () => {} })
-    .compile();
+    .useValue({ onModuleInit: () => {} });
+  // TestingModule has no adapter during provider construction, so ServeStatic otherwise chooses NoopLoader.
+  // Browser tests opt in with an explicit isolated build directory; API-only tests keep their old behavior.
+  if (options.frontendRoot) {
+    builder.overrideProvider(AbstractLoader).useValue(new ExpressLoader());
+    builder.overrideProvider(SERVE_STATIC_MODULE_OPTIONS).useValue([{ rootPath: options.frontendRoot, exclude: ['/api{/*path}', '/v1{/*path}', '/mcp{/*path}', '/live{/*path}', '/health{/*path}', '/ready{/*path}', '/cluster{/*path}'] }]);
+  }
+  const moduleFixture: TestingModule = await builder.compile();
 
   const app = moduleFixture.createNestApplication();
 
@@ -574,7 +583,7 @@ export async function createE2EHarness(): Promise<E2EHarness> {
     }),
   ]);
 
-  await app.listen(0);
+  await app.listen(0, '127.0.0.1');
 
   const server = app.getHttpServer();
   const agent = request.agent(server);

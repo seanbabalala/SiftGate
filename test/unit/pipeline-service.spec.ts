@@ -16,6 +16,7 @@ import { CanonicalMediaRequest } from '../../src/canonical/canonical.types';
 import { createNoOpHookExecutor } from '../../src/plugins/testing';
 import { TelemetryService } from '../../src/telemetry/telemetry.service';
 import { MessagesNormalizer } from '../../src/canonical/normalizers/messages.normalizer';
+import { CallLog } from '../../src/database/entities/call-log.entity';
 
 function makeBudgetReservation(tokens = 0, costUsd = 0) {
   return {
@@ -296,6 +297,9 @@ function makePipeline(overrides: Record<string, any> = {}): {
     embeddingBatching as any,
     shadowTraffic as any,
     agentProfiles as any,
+    undefined,
+    undefined,
+    overrides.pricingRuntime,
   );
 
   return {
@@ -1978,6 +1982,182 @@ describe('PipelineService — error formatting', () => {
 // ═══════════════════════════════════════════════════════════
 
 describe('PipelineService — call logging', () => {
+  function projectedLogging(database = { type: 'postgres', path: ':memory:' }, owned = true) {
+    const pricing = {
+      active: jest.fn(() => true),
+      ownsLogContext: jest.fn(() => owned),
+      estimate: jest.fn(() => null),
+      logSummary: jest.fn(async () => ({ known_subtotal: '0.0003' })),
+      persistCallLogs: jest.fn(async (logs: CallLog[], _required?: boolean): Promise<CallLog[] | null> =>
+        logs.map(log => ({ ...log, id: 1, cost_usd: 0.004, cost_without_cache_usd: null }))),
+    };
+    const { pipeline, mocks } = makePipeline({ config: { database }, pricingRuntime: pricing });
+    jest.spyOn(mocks.telemetry, 'recordCallMetrics');
+    const params: Parameters<PipelineService['logCall']>[0] = {
+      requestId: 'synthetic-log', canonical: makeRequest('synthetic'), tier: 'standard', score: 0,
+      nodeId: 'openai', model: 'gpt-4o', statusCode: 200, isFallback: false,
+      latencyMs: 10, usage: { input_tokens: 10, output_tokens: 5 }, error: null,
+    };
+    return { pipeline, mocks, pricing, params };
+  }
+
+  it('records the committed PostgreSQL log projection without a preliminary summary read', async () => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    let release!: () => void;
+    let reached!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { reached = resolve; });
+    pricing.persistCallLogs.mockImplementationOnce(async logs => {
+      reached(); await gate;
+      return logs.map(log => ({ ...log, id: 1, cost_usd: 0.004 }));
+    });
+    const task = pipeline.logCall(params);
+    try {
+      await started;
+      expect(mocks.telemetry.recordCallMetrics).not.toHaveBeenCalled();
+      expect(mocks.logEventBus.emit).not.toHaveBeenCalled();
+    } finally { release(); await task; }
+    expect(pricing.logSummary).not.toHaveBeenCalled();
+    expect(pricing.persistCallLogs).toHaveBeenCalledWith(expect.any(Array), true);
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledTimes(1);
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.004, statusCode: 200 }));
+    expect(mocks.callLogRepo.save).not.toHaveBeenCalled();
+    expect(mocks.logEventBus.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes a joined committed log without a second log or route write', async () => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    let released!: () => void, reached!: () => void;
+    const entered = new Promise<void>(resolve => { reached = resolve; });
+    const wait = new Promise<void>(resolve => { released = resolve; });
+    const joining = pipeline.logCall(params, async ({ call }) => {
+      reached(); await wait; return { ...call, id: 41, cost_usd: .004 };
+    });
+    try {
+      await entered;
+      expect(mocks.logEventBus.emit).not.toHaveBeenCalled();
+      expect(mocks.telemetry.recordCallMetrics).not.toHaveBeenCalled();
+    } finally { released(); await joining; }
+    expect(pricing.persistCallLogs).not.toHaveBeenCalled();
+    expect(mocks.routeDecisionRepo.save).not.toHaveBeenCalled();
+    expect(pricing.logSummary).not.toHaveBeenCalled();
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledWith(expect.objectContaining({ costUsd: .004 }));
+    expect(mocks.logEventBus.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps sequence-allocated identities when joined logging falls back after an uncertain commit', async () => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    await pipeline.logCall(params, async ({ call, route }) => {
+      call.id = 71; route!.id = 72; return null;
+    });
+    expect(pricing.persistCallLogs).toHaveBeenCalledWith([expect.objectContaining({ id: 71 })], true);
+    expect(mocks.routeDecisionRepo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 72 }));
+    expect(mocks.logEventBus.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['preparation', 'unavailable', 'callback-failure'] as const)('records budget exactly once when joined logging has %s failure', async failure => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    const budgetResult = jest.fn(async () => ({ costUsd: .004, totalTokens: 15 }));
+    const budgetResultWithLogs = jest.fn(async () => {
+      if (failure === 'callback-failure') throw Error('synthetic joined callback failure');
+      return null;
+    });
+    Object.assign(pricing, { budgetResult, budgetResultWithLogs });
+    if (failure === 'preparation') mocks.callLogRepo.create.mockImplementationOnce(() => { throw Error('synthetic log preparation failure'); });
+    const coordinator = pipeline as unknown as {
+      recordBudgetAndLog(canonical: typeof params.canonical, usage: typeof params.usage, model: string, node: string, reservation: null, logParams: typeof params): Promise<{ costUsd: number; totalTokens: number }>;
+    };
+    await expect(coordinator.recordBudgetAndLog(params.canonical, params.usage, params.model, params.nodeId, null, params)).resolves.toEqual({ costUsd: .004, totalTokens: 15 });
+    expect(budgetResult).toHaveBeenCalledTimes(1);
+    expect(budgetResultWithLogs).toHaveBeenCalledTimes(failure === 'preparation' ? 0 : 1);
+    expect(mocks.providerClient.forward).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('joined route preparation failure still persists the call and never retries trace preparation (fallback=%s)', async fallback => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    pricing.estimate.mockImplementationOnce(() => { throw Error('synthetic route preparation failure'); });
+    const settle = jest.fn(async ({ call, route }: { call: CallLog; route?: unknown }) => {
+      expect(route).toBeUndefined();
+      return fallback ? null : { ...call, id: 91, cost_usd: .004 };
+    });
+    await pipeline.logCall(params, settle);
+    expect(settle).toHaveBeenCalledTimes(1);
+    expect(pricing.estimate).toHaveBeenCalledTimes(1);
+    expect(mocks.routeDecisionRepo.save).not.toHaveBeenCalled();
+    expect(pricing.persistCallLogs).toHaveBeenCalledTimes(fallback ? 1 : 0);
+    expect(mocks.logEventBus.emit).toHaveBeenCalledTimes(1);
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledWith(expect.objectContaining({ costUsd: .004 }));
+  });
+
+  it.each([0, 0.004])('uses the projected known subtotal for failed calls without inferring a new price (%s)', async amount => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    pricing.persistCallLogs.mockImplementationOnce(async logs => logs.map(log => ({ ...log, cost_usd: amount })));
+    await pipeline.logCall({ ...params, statusCode: 502, error: 'synthetic upstream failure' });
+    expect(pricing.logSummary).not.toHaveBeenCalled();
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledWith(expect.objectContaining({ costUsd: amount, statusCode: 502 }));
+  });
+
+  it.each(['rejected', 'unavailable'] as const)('keeps call metrics but never writes a placeholder when projection is %s', async failure => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    if (failure === 'rejected') pricing.persistCallLogs.mockRejectedValueOnce(new Error('synthetic persistence failure'));
+    else pricing.persistCallLogs.mockResolvedValueOnce(null);
+    await expect(pipeline.logCall(params)).resolves.toBeUndefined();
+    expect(pricing.logSummary).toHaveBeenCalledTimes(1);
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledTimes(1);
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.0003 }));
+    expect(mocks.callLogRepo.save).not.toHaveBeenCalled();
+    expect(mocks.logEventBus.emit).not.toHaveBeenCalled();
+  });
+
+  it('retains call-count metrics when a routing observer fails before log persistence', async () => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    mocks.routingService.recordTargetUsage = jest.fn(() => { throw new Error('synthetic observer failure'); });
+    await expect(pipeline.logCall(params)).resolves.toBeUndefined();
+    expect(pricing.persistCallLogs).not.toHaveBeenCalled();
+    expect(pricing.logSummary).toHaveBeenCalledTimes(1);
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['publisher', 'telemetry'] as const)('never emits a second metric when the %s throws after persistence', async failure => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    const fault = () => { throw new Error('synthetic post-persistence failure'); };
+    if (failure === 'publisher') mocks.logEventBus.emit.mockImplementation(fault);
+    else mocks.telemetry.recordCallMetrics.mockImplementation(fault);
+    await expect(pipeline.logCall(params)).resolves.toBeUndefined();
+    expect(pricing.persistCallLogs).toHaveBeenCalledTimes(1);
+    expect(pricing.logSummary).not.toHaveBeenCalled();
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not dispatch another provider call when fallback summary and telemetry are unavailable', async () => {
+    const { pipeline, mocks, pricing, params } = projectedLogging();
+    pricing.persistCallLogs.mockRejectedValueOnce(new Error('synthetic save failure'));
+    pricing.logSummary.mockRejectedValueOnce(new Error('synthetic read failure'));
+    await expect(pipeline.logCall(params)).resolves.toBeUndefined();
+    expect(mocks.providerClient.forward).not.toHaveBeenCalled();
+    expect(mocks.telemetry.recordCallMetrics).not.toHaveBeenCalled();
+    expect(mocks.callLogRepo.save).not.toHaveBeenCalled();
+  });
+
+  it.each(['sqlite', 'unowned'] as const)('keeps the preliminary summary for the %s path', async mode => {
+    const { pipeline, mocks, pricing, params } = projectedLogging({ type: mode === 'sqlite' ? 'sqlite' : 'postgres', path: ':memory:' }, mode !== 'unowned');
+    await pipeline.logCall(params);
+    expect(pricing.logSummary).toHaveBeenCalledTimes(1);
+    expect(pricing.persistCallLogs).toHaveBeenCalledWith(expect.any(Array));
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.0003 }));
+  });
+
+  it('publishes the known cost before SQLite write-behind rather than a projection placeholder', async () => {
+    const { pipeline, mocks, pricing, params } = projectedLogging({ type: 'sqlite', path: '/synthetic/not-opened.sqlite' });
+    const queued: CallLog[] = [];
+    jest.spyOn(pipeline as unknown as { enqueueCallLogWrite(log: CallLog): void }, 'enqueueCallLogWrite').mockImplementation(log => { queued.push(log); });
+    await pipeline.logCall(params);
+    expect(queued).toHaveLength(1); expect(queued[0].cost_usd).toBe(0.0003);
+    expect(pricing.logSummary).toHaveBeenCalledTimes(1);
+    expect(pricing.persistCallLogs).not.toHaveBeenCalled();
+    expect(mocks.telemetry.recordCallMetrics).toHaveBeenCalledTimes(1);
+  });
+
   it('should log successful calls', async () => {
     const { pipeline, mocks } = makePipeline();
     const request = makeRequest('Hello', { originalModel: 'gpt-4o' });

@@ -23,12 +23,14 @@ import { IntelligenceModule } from './intelligence/intelligence.module';
 import { CostPlatformModule } from './cost-platform/cost-platform.module';
 import { SemanticPlatformModule } from './semantic-platform/semantic-platform.module';
 import { PublicGatewayExceptionFilter } from './http/public-gateway-exception.filter';
+import { HttpListenerWatchdogService } from './http/http-listener-watchdog.service';
+import { PricingModule } from './pricing/pricing.module';
 
 @Module({
   imports: [
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'frontend', 'dist'),
-      exclude: ['/api{/*path}', '/v1{/*path}', '/mcp{/*path}', '/health{/*path}', '/ready{/*path}', '/cluster{/*path}'],
+      exclude: ['/api{/*path}', '/v1{/*path}', '/mcp{/*path}', '/live{/*path}', '/health{/*path}', '/ready{/*path}', '/cluster{/*path}'],
     }),
     ConfigModule,
     StateModule,
@@ -45,6 +47,7 @@ import { PublicGatewayExceptionFilter } from './http/public-gateway-exception.fi
     EvaluationModule,
     IntelligenceModule,
     CostPlatformModule,
+    PricingModule,
     SemanticPlatformModule,
     PluginModule,
     AuthModule,
@@ -52,6 +55,7 @@ import { PublicGatewayExceptionFilter } from './http/public-gateway-exception.fi
     DashboardModule,
   ],
   providers: [
+    HttpListenerWatchdogService,
     {
       provide: APP_FILTER,
       useClass: PublicGatewayExceptionFilter,

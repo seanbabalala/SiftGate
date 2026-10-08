@@ -19,8 +19,13 @@ function log(overrides: Record<string, unknown> = {}) {
 
 describe('AdaptiveRoutingStatsService', () => {
   it('aggregates node:model sliding-window stats with percentiles and fallback rate', async () => {
-    const repo = {
-      find: jest.fn().mockResolvedValue([
+    const query = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([
         log({ latency_ms: 100, cost_usd: 0.001 }),
         log({ latency_ms: 200, cost_usd: 0.002 }),
         log({ status_code: 500, latency_ms: 500, cost_usd: 0, is_fallback: true }),
@@ -33,12 +38,31 @@ describe('AdaptiveRoutingStatsService', () => {
         }),
       ]),
     };
+    const repo = {
+      createQueryBuilder: jest.fn(() => query),
+      metadata: {
+        findColumnWithPropertyName: (propertyName: string) => ({
+          propertyName,
+          setEntityValue: (entity: Record<string, unknown>, value: unknown) => { entity[propertyName] = value; },
+        }),
+      },
+      manager: { connection: { driver: { prepareHydratedValue: (value: unknown) => value } } },
+    };
     const service = new AdaptiveRoutingStatsService(repo as any);
 
     const result = await service.getWindow({ windowHours: 6, sampleLimit: 500, minSamples: 2 });
     const openai = result.targets.find((target) => target.key === 'openai:gpt-4o');
 
-    expect(repo.find).toHaveBeenCalledWith(expect.objectContaining({ take: 500 }));
+    expect(query.select).toHaveBeenCalledWith([]);
+    expect(query.take).toHaveBeenCalledWith(500);
+    expect(query.orderBy).toHaveBeenCalledWith('log.timestamp', 'DESC');
+    expect(query.addSelect.mock.calls).toEqual([
+      ['log.timestamp', 'timestamp'], ['log.tier', 'tier'],
+      ['log.node_id', 'node_id'], ['log.model', 'model'],
+      ['log.status_code', 'status_code'], ['log.is_fallback', 'is_fallback'],
+      ['log.latency_ms', 'latency_ms'], ['log.cost_usd', 'cost_usd'],
+      ['log.retry_count', 'retry_count'],
+    ]);
     expect(result.observed_calls).toBe(4);
     expect(openai).toMatchObject({
       calls: 3,

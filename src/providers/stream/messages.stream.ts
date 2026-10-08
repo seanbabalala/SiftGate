@@ -1,4 +1,5 @@
-import { CanonicalStreamEvent } from '../../canonical/canonical.types';
+import { attachTokenPricingEvidence } from '../pricing-usage-evidence';
+import { CanonicalStreamEvent, TokenUsage } from '../../canonical/canonical.types';
 import {
   extractUsageBySchema,
   extractUsageByKnownFields,
@@ -29,6 +30,11 @@ import {
  */
 export class MessagesStreamParser {
   private buffer = '';
+  private rawPricingUsage: Record<string, unknown> = {};
+  private pricingUsage?: TokenUsage;
+  private resolvedServiceTier?: string;
+
+  getPricingUsage(): TokenUsage | undefined { return this.pricingUsage; }
   private currentEvent = '';
 
   // Track content block types by index
@@ -81,6 +87,8 @@ export class MessagesStreamParser {
       case 'message_start': {
         const message = (data.message || {}) as Record<string, unknown>;
         const startUsage = (message.usage || {}) as Record<string, unknown>;
+        this.rawPricingUsage = { ...startUsage };
+        this.resolvedServiceTier = typeof message.service_tier === 'string' ? message.service_tier : undefined;
         const resolvedUsage = this.resolveUsage({ usage: startUsage });
         this.inputTokens = resolvedUsage.input_tokens || 0;
         this.cacheCreationInputTokens =
@@ -151,10 +159,8 @@ export class MessagesStreamParser {
         const usage = (data.usage || {}) as Record<string, unknown>;
         const resolvedUsage = this.resolveUsage({ usage });
 
-        yield {
-          type: 'stop',
-          stop_reason: (delta.stop_reason as string) || 'end_turn',
-          usage: {
+        this.rawPricingUsage = { ...this.rawPricingUsage, ...usage };
+        const combined: TokenUsage = {
             input_tokens:
               this.inputTokens || resolvedUsage.input_tokens || 0,
             output_tokens: resolvedUsage.output_tokens || 0,
@@ -166,8 +172,10 @@ export class MessagesStreamParser {
               this.cacheReadInputTokens ||
               resolvedUsage.cache_read_input_tokens ||
               0,
-          },
         };
+        attachTokenPricingEvidence({ usage: this.rawPricingUsage, service_tier: this.resolvedServiceTier }, combined, this.usageSchema);
+        this.pricingUsage = combined;
+        yield { type: 'stop', stop_reason: (delta.stop_reason as string) || 'end_turn', usage: combined };
         break;
       }
 

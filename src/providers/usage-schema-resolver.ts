@@ -12,7 +12,7 @@ export interface UsageSchema {
   cache_creation_input_tokens?: UsageSchemaPath;
 }
 
-const INPUT_TOKEN_PATHS = [
+export const INPUT_TOKEN_PATHS = [
   'usage.input_tokens',
   'usage.prompt_tokens',
   'usage.inputTokens',
@@ -22,7 +22,7 @@ const INPUT_TOKEN_PATHS = [
   'usageMetadata.promptTokenCount',
 ];
 
-const OUTPUT_TOKEN_PATHS = [
+export const OUTPUT_TOKEN_PATHS = [
   'usage.output_tokens',
   'usage.completion_tokens',
   'usage.outputTokens',
@@ -32,13 +32,13 @@ const OUTPUT_TOKEN_PATHS = [
   'usageMetadata.candidatesTokenCount',
 ];
 
-const TOTAL_TOKEN_PATHS = [
+export const TOTAL_TOKEN_PATHS = [
   'usage.total_tokens',
   'usage.totalTokens',
   'usageMetadata.totalTokenCount',
 ];
 
-const CACHE_READ_TOKEN_PATHS = [
+export const CACHE_READ_TOKEN_PATHS = [
   'usage.cache_read_input_tokens',
   'usage.cacheReadInputTokens',
   'usage.cache_read_tokens',
@@ -60,7 +60,7 @@ const CACHE_READ_TOKEN_PATHS = [
   'usageMetadata.cachedContentTokenCount',
 ];
 
-const CACHE_CREATION_TOKEN_PATHS = [
+export const CACHE_CREATION_TOKEN_PATHS = [
   'usage.cache_creation_input_tokens',
   'usage.cacheCreationInputTokens',
   'usage.cache_write_input_tokens',
@@ -69,6 +69,8 @@ const CACHE_CREATION_TOKEN_PATHS = [
   'usage.cacheCreationTokens',
   'usage.cache_write_tokens',
   'usage.cacheWriteTokens',
+  'usage.prompt_tokens_details.cache_write_tokens',
+  'usage.input_tokens_details.cache_write_tokens',
 ];
 
 function resolvePathValue(

@@ -953,5 +953,6 @@
   "mcp.setup.bullets.toolProxy": "Clients は Gateway API key で MCP proxy を呼び、SiftGate は configured MCP servers に転送します。",
   "mcp.setup.bullets.notModelRouting": "この surface は tool calls を統制します。model selection は routing、nodes、API key policy が担います。",
   "mcp.setup.bullets.endpointPermissions": "allowed_endpoints に mcp、mcp:server、mcp:server:tool と namespace allow-lists を使います。",
-  "mcp.setup.bullets.noPayloadStorage": "Audit は method、tool、scope、status、latency、size のみ保存し、tool arguments/results、headers、secrets は保存しません。"
+  "mcp.setup.bullets.noPayloadStorage": "Audit は method、tool、scope、status、latency、size のみ保存し、tool arguments/results、headers、secrets は保存しません。",
+  "alerts.configure": "連携を設定"
 }

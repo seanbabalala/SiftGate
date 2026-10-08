@@ -150,7 +150,7 @@ database:
 Run the SQLite-to-PostgreSQL migration or schema bootstrap before switching a
 live deployment to `synchronize: false`. See [Production Deployment](PRODUCTION.md).
 
-The chart and plain manifests use `/ready` for readiness and `/health` for
+The chart and plain manifests use `/ready` for readiness and `/live` for
 liveness. `/ready` checks database availability only. Provider/node degradation
 is visible in `/health` and Dashboard views but does not evict a pod from the
 Service endpoints.

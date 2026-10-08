@@ -1,8 +1,11 @@
 {
   "name": "siftgate",
-  "version": "2.11.5",
+  "version": "2.11.6",
   "description": "SiftGate self-hosted AI traffic gateway with smart routing",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0 <23"
+  },
   "private": true,
   "workspaces": [
     "packages/client"
@@ -16,7 +19,9 @@
     "privateReason": "Keep private=true until an npm package is intentionally published."
   },
   "scripts": {
-    "build": "rm -rf dist-runtime-plugins src/canonical/canonical.types.js src/config/gateway.config.js src/config/modality.js src/plugins/types.js && nest build && tsc -p tsconfig.plugins.json",
+    "runtime:check": "node scripts/check-node-runtime.js",
+    "test:runtime": "node --test test/runtime/*.test.cjs",
+    "build": "rm -rf dist-runtime-plugins src/canonical/canonical.types.js src/config/gateway.config.js src/config/modality.js src/plugins/types.js && nest build && tsc -p tsconfig.plugins.json && node scripts/copy-runtime-assets.js",
     "build:sdk": "npm --workspace @siftgate/client run build",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -32,7 +37,7 @@
     "catalog": "ts-node src/cli/siftgate.ts catalog",
     "migrate:db": "ts-node src/cli/siftgate.ts migrate-db",
     "typecheck:sdk": "npm --workspace @siftgate/client run typecheck",
-    "lint": "eslint --max-warnings=0 \"{src,test}/**/*.ts\" \"scripts/**/*.{js,ts}\"",
+    "lint": "eslint --max-warnings=0 \"{src,test}/**/*.ts\" \"scripts/**/*.{js,ts}\" src/alerts/alert-connector-runtime.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
     "test:sdk": "npm --workspace @siftgate/client run test",
@@ -43,44 +48,47 @@
     "test:postgres-budget-smoke": "jest --runInBand test/unit/budget-postgres-lock.integration.spec.ts",
     "benchmark:upstream": "node scripts/benchmark-upstream.js",
     "benchmark:platform": "node scripts/benchmark-platform.js",
-    "smoke:docker": "bash scripts/docker-smoke.sh"
+    "smoke:docker": "bash scripts/docker-smoke.sh",
+    "test:customer": "python3 -m unittest discover -s test/customer -v",
+    "smoke:customer": "python3 scripts/smoke-customer-install.py",
+    "benchmark:pricing": "ts-node scripts/benchmark-pricing.ts"
   },
   "dependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
-    "@nestjs/platform-express": "^11.0.0",
+    "@nestjs/common": "^11.2.6",
+    "@nestjs/core": "^11.2.6",
+    "@nestjs/platform-express": "^11.2.6",
     "@nestjs/serve-static": "^5.0.5",
-    "@nestjs/swagger": "^11.4.2",
+    "@nestjs/swagger": "^11.4.7",
     "@nestjs/typeorm": "^11.0.0",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/exporter-prometheus": "^0.217.0",
-    "@opentelemetry/exporter-trace-otlp-proto": "^0.217.0",
-    "@opentelemetry/instrumentation-http": "^0.217.0",
-    "@opentelemetry/resources": "^2.7.1",
-    "@opentelemetry/sdk-metrics": "^2.7.1",
-    "@opentelemetry/sdk-node": "^0.217.0",
-    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@opentelemetry/exporter-prometheus": "^0.222.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.222.0",
+    "@opentelemetry/instrumentation-http": "^0.222.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-metrics": "^2.11.0",
+    "@opentelemetry/sdk-node": "^0.222.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "helmet": "^8.1.0",
-    "js-yaml": "^4.1.0",
+    "js-yaml": "^4.3.2",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.13.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
-    "typeorm": "^0.3.20",
-    "undici": "^6.25.0",
+    "typeorm": "^0.3.31",
+    "undici": "^6.29.0",
     "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
-    "@nestjs/testing": "^11.0.0",
+    "@nestjs/testing": "^11.2.6",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.11",
     "@types/express": "^5.0.0",
@@ -140,10 +148,5 @@
       "<rootDir>/test",
       "<rootDir>/packages/client"
     ]
-  },
-  "overrides": {
-    "@opentelemetry/otlp-transformer": {
-      "protobufjs": "^8.2.0"
-    }
   }
 }

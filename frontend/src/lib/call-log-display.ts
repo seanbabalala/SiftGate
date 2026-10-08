@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next'
+import { legacyReportMoney, subtractCostReportMoney } from '../../../src/pricing/cost-report-money'
 import type { CallLog, NodeDistribution, TierDistribution } from '@/types/api'
 
 export const CLIENT_CLOSED_AFTER_TOOL_CALL = 'client_closed_after_tool_call'
@@ -36,7 +37,7 @@ export function isProviderCacheLog(
 
 export function providerCacheSavingsUsd(
   log: Pick<CallLog, 'cost_usd' | 'cost_without_cache_usd'>,
-): number {
+): number | null {
   return providerCacheCostBreakdown(log).savedCostUsd
 }
 
@@ -49,25 +50,30 @@ export function providerCacheCostBreakdown(
       >
     >,
 ) {
-  const actualCostUsd = Number(log.cost_usd || 0)
-  const withoutCacheCostUsd = Number(log.cost_without_cache_usd || 0)
+  const money = (value: unknown) => typeof value === 'number' && legacyReportMoney(value) !== null ? value : null
+  const recordedCost = money(log.cost_usd)
+  const withoutCacheCostUsd = money(log.cost_without_cache_usd)
+  const comparable = recordedCost !== null && withoutCacheCostUsd !== null
+  const actualCostUsd = comparable ? recordedCost : null
   const cacheReadTokens = Number(log.cache_read_input_tokens || 0)
   const cacheCreationTokens = Number(log.cache_creation_input_tokens || 0)
   const cachedInputTokens = cacheReadTokens + cacheCreationTokens
   const inputTokens = Number(log.input_tokens || 0)
-  const savedCostUsd = Math.max(0, withoutCacheCostUsd - actualCostUsd)
+  const savedCostUsdExact = comparable ? subtractCostReportMoney(legacyReportMoney(withoutCacheCostUsd)!, legacyReportMoney(recordedCost)!) : null
+  const savedCostUsd = savedCostUsdExact === null ? null : Number(savedCostUsdExact)
 
   return {
     actualCostUsd,
     withoutCacheCostUsd,
     savedCostUsd,
+    savedCostUsdExact,
     cacheReadTokens,
     cacheCreationTokens,
     cachedInputTokens,
     cachedInputRatio: inputTokens > 0 ? cachedInputTokens / inputTokens : 0,
     hasProviderCacheTokens: cachedInputTokens > 0,
-    hasSavingsEstimate: savedCostUsd > 0,
-    hasNoCacheEstimate: withoutCacheCostUsd > 0,
+    hasSavingsEstimate: comparable,
+    hasNoCacheEstimate: withoutCacheCostUsd !== null,
   }
 }
 

@@ -1,3 +1,4 @@
+import type { VideoResultProfile } from "../pricing/video-result-profile.types";
 // ===================================================================
 // Gateway Configuration — Type Definitions
 // ===================================================================
@@ -23,6 +24,9 @@ export interface GatewayConfig {
   budget: BudgetConfig;
   cache?: CacheConfig;
   models_pricing: Record<string, ModelPricing>;
+
+  /** Host-wide pricing-management capacity limits; no effect on frozen request prices. */
+  pricing_limits?: PricingLimitsConfig;
 
   /** Plugin declarations — loaded at startup in order */
   plugins?: PluginConfigEntry[];
@@ -80,6 +84,23 @@ export interface GatewayConfig {
 
   /** Optional hosted control-plane connection — disabled by default */
   control_plane?: ControlPlaneConfig;
+}
+
+export interface PricingLimitsConfig {
+  /** Rules across unique current/scheduled price versions; default: 20000, hard maximum: 100000. */
+  max_published_rules?: number;
+  /** UTF-8 bytes of parsed JSON for pricing management actions; default/hard maximum: 1048576. */
+  max_request_body_bytes?: number;
+  /** Cumulative rows read by one historical replay. Default: 4096. */
+  max_replay_rows?: number;
+  /** Selected field UTF-8 bytes plus 64 bytes per field/read for metadata. Default: 64 MiB. */
+  max_replay_source_bytes?: number;
+  /** Complete replay response size. Default: 8 MiB. */
+  max_replay_result_bytes?: number;
+  /** Bounded replay calculation/serialization work. Default: 250000 units. */
+  max_replay_work?: number;
+  /** Cooperative replay deadline, including database queue/read time. Default: 2000 ms. */
+  max_replay_ms?: number;
 }
 
 export interface CatalogConfig {
@@ -260,13 +281,19 @@ export type AlertEventType =
   | 'error_spike'
   | 'latency_spike'
   | 'quality_gate_failed'
-  | 'cost_anomaly';
+  | 'cost_anomaly'
+  | 'gateway_unavailable' | 'gateway_recovered' | 'gateway_restart_attempt'
+  | 'gateway_restart_failed' | 'gateway_restart_unhealthy' | 'restart_rate_limited'
+  | 'disk_space_low' | 'database_size_high' | 'disk_check_failed' | 'database_size_check_failed'
+  | 'test';
+
+export type AlertConnectorType = 'webhook' | 'feishu' | 'wecom' | 'telegram';
 
 export interface AlertsConfig {
   /** Master switch for local alert dispatch (default: false) */
   enabled?: boolean;
-  /** Webhook-only OSS channel list. Empty by default. */
-  channels?: WebhookAlertChannelConfig[];
+  /** Operator-configured outbound connectors. Empty by default. */
+  channels?: AlertChannelConfig[];
   /** Recent alert delivery records retained for Dashboard (default: 50) */
   history_size?: number;
   /** Local sliding-window rule for error spikes. */
@@ -275,11 +302,17 @@ export interface AlertsConfig {
   latency_spike?: AlertLatencySpikeRuleConfig;
 }
 
-export interface WebhookAlertChannelConfig {
-  type: 'webhook';
+export interface AlertChannelConfig {
+  type: AlertConnectorType;
+  id?: string;
+  /** Legacy YAML channels are enabled unless explicitly disabled. */
+  enabled?: boolean;
   /** Stable display name used in Dashboard and debounce keys. */
   name?: string;
-  url: string;
+  url?: string;
+  signing_secret?: string;
+  bot_token?: string;
+  chat_id?: string;
   /** Optional outbound headers. Values may use environment references. */
   headers?: Record<string, string>;
   /** Events delivered by this channel. Unset means all supported events. */
@@ -288,6 +321,12 @@ export interface WebhookAlertChannelConfig {
   debounce_seconds?: number;
   /** Webhook retry and timeout controls. */
   retry?: AlertWebhookRetryConfig;
+}
+
+/** Backward-compatible public type for existing generic webhook integrations. */
+export interface WebhookAlertChannelConfig extends AlertChannelConfig {
+  type: 'webhook';
+  url: string;
 }
 
 export interface AlertWebhookRetryConfig {
@@ -789,6 +828,9 @@ export interface NodeConfig {
   rerank_models?: string[];
   /** Optional OpenAI-compatible image generation endpoint path (default: /v1/images/generations). */
   images_generations_endpoint?: string;
+  images_status_endpoint?: string;
+  images_content_endpoint?: string;
+  images_cancel_endpoint?: string;
   /** Optional OpenAI-compatible image edit endpoint path (default: /v1/images/edits). */
   images_edits_endpoint?: string;
   /** Optional OpenAI-compatible image variation endpoint path (default: /v1/images/variations). */
@@ -809,6 +851,8 @@ export interface NodeConfig {
   video_endpoint?: string;
   /** Optional endpoint path for async video job status lookups. */
   video_status_endpoint?: string;
+  /** Explicit versioned interpretation of video results; existing tasks retain their pinned profile. */
+  video_result_profile?: VideoResultProfile;
   /** Optional endpoint path for async video content retrieval. */
   video_content_endpoint?: string;
   /** Optional endpoint path for async video job cancellation. */

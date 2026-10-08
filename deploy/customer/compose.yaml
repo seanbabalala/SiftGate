@@ -1,0 +1,42 @@
+# Managed by the customer kit. No source build, cloud account or Docker socket mount.
+services:
+  siftgate:
+    image: ${SIFTGATE_IMAGE:?Run the installer first}
+    pull_policy: never
+    user: "${SIFTGATE_UID}:${SIFTGATE_GID}"
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 45s
+    ports:
+      - "${SIFTGATE_BIND_ADDRESS}:${SIFTGATE_PORT}:2099"
+    env_file:
+      - path: ${SIFTGATE_HOME}/provider.env
+        format: raw
+    environment:
+      TZ: ${SIFTGATE_TIMEZONE}
+      NODE_ENV: ${SIFTGATE_NODE_ENV}
+      SIFTGATE_HOST: 0.0.0.0
+      GATEWAY_CONFIG_PATH: /config/gateway.config.yaml
+      SIFTGATE_PLUGINS_CONFIG: /config/plugins.config.yaml
+      SIFTGATE_WATCHDOG_ALERTS_PATH: /app/data/alert-connectors.json
+      NODE_PATH: /app/node_modules
+    volumes:
+      - ${SIFTGATE_HOME}/config:/config
+      - ${SIFTGATE_HOME}/data:/app/data
+      - ${SIFTGATE_HOME}/state:/app/.siftgate
+      - ${SIFTGATE_HOME}/kit:/opt/siftgate-kit:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      # Readiness/database failure must not cause a restart storm.
+      test: [CMD, node, scripts/docker-healthcheck.js]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3

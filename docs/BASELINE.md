@@ -1,5 +1,83 @@
 # Current Engineering Baseline
 
+Reviewed: 2026-10-08
+Release: **v2.11.6**
+
+## Release Identity And Scope
+
+This release promotes the reviewed pricing application (`591ebb99`) and the
+customer installation/publication system. The annotated `v2.11.6` tag, exact
+main CI run and image index/child digests identify the final release. A package
+version by itself does not identify a deployed instance.
+
+- Pricing includes versioned rules, long-context/cache and time-window pricing,
+  media quantities, frozen FX, exact settlement, durable recovery and cost evidence.
+- Customer installations use an independently initialized database/configuration,
+  a pinned image, private directories and explicit timezone. They do not import
+  the maintainer's configuration, provider credentials or deployment bundle.
+- Node 22 (`>=22.13.0 <23`) is enforced for gateway development/builds. CI and
+  Docker share the contract; container-only customers do not need host Node.
+- The transitive `proxy-addr` 2.0.8 security fix closes GHSA-jqcg-44mw-7w3h.
+  Existing live images are not silently replaced by publishing this patch.
+- The release leaves existing running gateways untouched. See the
+  [customer runbook](customer-install.md) and [publication state gates](customer-release.md).
+
+## Required Acceptance Evidence
+
+The complete CI workflow now separates build/docs/audit, frontend, SDKs and eight
+SQLite/PostgreSQL test shards (four unit, four E2E). The previous combined job
+passed unit tests and continued passing HTTP suites until its 30-minute job
+limit; cancellation was not a complete validation result.
+
+Every shard retains normal Jest discovery and all original assertions. Schema
+and subprocess integration contracts use explicit 30-second execution budgets:
+the first PostgreSQL-enabled run hit six implicit 5-second defaults, and a later
+run exposed one remaining rollback case. All 26 shared schema cases now have
+the same bounded integration budget on SQLite and PostgreSQL, with byte-identical
+test bodies; data assertions and application latency/throughput targets are
+unchanged.
+Its report carries the exact commit and full discovered suite list. A final
+coverage gate requires all eight reports, exactly-once suite coverage, no skipped
+or failed tests, and at least 4,472 unit / 815 HTTP tests (including three new
+proxy-trust security regressions beyond the accepted 4,469-unit baseline).
+The pricing and shared-budget PostgreSQL suites use an isolated per-job database
+with normal durability, never a production URL.
+
+Run results, not this document's presence, establish a pass. The tag publisher
+requires a successful full main-push CI run for its exact commit and then native
+AMD64 and ARM64 customer-install/image tests. The release summary records image
+and installer identities. A manual branch CI or rehearsal is not permission to
+skip merge/main CI, publish an image, or update a running service.
+
+## Explicit Performance Exception
+
+The fixed pricing candidate `591ebb99acd1f5b85b5bfe7b9a0ed1eaecda5d22` was accepted
+on October 1, 2026 with one quantified exception: PostgreSQL JSON with a 50ms mock
+upstream added **15.031749ms p95** and lost **15.532176% throughput**, against
+original limits of 5ms and 5%. Seven of eight original scenarios met their targets.
+The exception is not a measured pass, a new benchmark, or a general SLA promise.
+This release's packaging/CI and bounded dependency-security changes do not claim
+a new performance improvement or a fresh benchmark of the final release.
+
+Earlier pricing documents are retained development checkpoints; their statements
+about unfinished experiments or pending acceptance must be interpreted at that
+checkpoint. They do not supersede this fixed-candidate acceptance and the actual
+release's current CI/image evidence. Private raw data and machine-specific
+handoffs must not become public Release attachments.
+
+## Deployment Boundary
+
+A source merge, a public image and a running instance are separate events.
+Publishing v2.11.6 does not restart 2099, change provider routing or copy production
+configuration into a customer installation. Record actual deployed commit/image,
+backups, approval and post-switch health separately. Never start an older binary
+against an upgraded database without verified compatibility and reconciliation.
+
+## Historical v2.11.5 Baseline (Retained Evidence)
+
+The section below is the previous release's record, not v2.11.6 test counts or
+current deployment status.
+
 Reviewed: 2026-09-20
 Release: **v2.11.5**
 

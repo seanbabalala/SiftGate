@@ -1,8 +1,8 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { HttpException, Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import type {
   AlertEventType,
-  WebhookAlertChannelConfig,
+  AlertChannelConfig,
 } from '../config/gateway.config';
 import type { CallLog } from '../database/entities/call-log.entity';
 import {
@@ -11,10 +11,13 @@ import {
   AlertsDashboardSnapshot,
   GatewayAlertEvent,
 } from './alert.types';
+import { ALERT_EVENTS, ConnectorError, sendAlert } from './alert-connector-runtime';
+import { AlertConnectorsService } from './alert-connectors.service';
 
 interface PendingWebhookDelivery {
   id: string;
-  channel: WebhookAlertChannelConfig;
+  channel: AlertChannelConfig;
+  channelId: string;
   channelName: string;
   event: Required<Pick<GatewayAlertEvent, 'timestamp'>> & GatewayAlertEvent;
 }
@@ -27,18 +30,7 @@ interface WindowSample {
   model: string;
 }
 
-const ALL_ALERT_EVENTS: AlertEventType[] = [
-  'budget_threshold',
-  'budget_exceeded',
-  'node_down',
-  'node_recovered',
-  'circuit_open',
-  'circuit_close',
-  'error_spike',
-  'latency_spike',
-  'quality_gate_failed',
-  'cost_anomaly',
-];
+const ALL_ALERT_EVENTS: AlertEventType[] = [...ALERT_EVENTS];
 
 @Injectable()
 export class AlertService implements OnModuleDestroy {
@@ -51,8 +43,10 @@ export class AlertService implements OnModuleDestroy {
   private processing = false;
   private drainTimer?: NodeJS.Timeout;
   private sequence = 0;
+  private readonly lastTests = new Map<string, number>();
+  private readonly testing = new Set<string>();
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService, @Optional() private readonly connectors?: AlertConnectorsService) {}
 
   onModuleDestroy(): void {
     if (this.drainTimer) {
@@ -67,14 +61,10 @@ export class AlertService implements OnModuleDestroy {
 
     const timestamp = event.timestamp || new Date().toISOString();
     const normalizedEvent = { ...event, timestamp };
-    const channels = alertsConfig.channels.filter(
-      (channel) =>
-        channel.type === 'webhook' &&
-        this.channelHandlesEvent(channel, normalizedEvent.type),
-    );
-
-    for (const [index, channel] of channels.entries()) {
+    for (const [index, channel] of alertsConfig.channels.entries()) {
+      if (channel.enabled === false || !this.channelHandlesEvent(channel, normalizedEvent.type)) continue;
       const channelName = this.channelName(channel, index);
+      const channelId = channel.id || `legacy-${index}`;
       const debounceKey = this.debounceKey(channelName, normalizedEvent);
       const debounceMs = Math.max(0, channel.debounce_seconds ?? 300) * 1000;
       const now = Date.now();
@@ -85,6 +75,7 @@ export class AlertService implements OnModuleDestroy {
           event: normalizedEvent.type,
           severity: normalizedEvent.severity,
           channel: channelName,
+          channel_id: channelId,
           status: 'debounced',
           attempts: 0,
           timestamp,
@@ -101,6 +92,7 @@ export class AlertService implements OnModuleDestroy {
       this.queue.push({
         id,
         channel,
+        channelId,
         channelName,
         event: normalizedEvent,
       });
@@ -109,6 +101,7 @@ export class AlertService implements OnModuleDestroy {
         event: normalizedEvent.type,
         severity: normalizedEvent.severity,
         channel: channelName,
+        channel_id: channelId,
         status: 'queued',
         attempts: 0,
         timestamp,
@@ -151,19 +144,19 @@ export class AlertService implements OnModuleDestroy {
   getDashboardSnapshot(): AlertsDashboardSnapshot {
     const alertsConfig = this.config.alerts;
     const channels = alertsConfig.channels
-      .filter((channel) => channel.type === 'webhook')
       .map((channel, index) => {
         const name = this.channelName(channel, index);
-        const status = this.channelStatuses.get(name);
+        const status = this.channelStatuses.get(channel.id || `legacy-${index}`);
         return {
           ...(status || {
             name,
-            type: 'webhook' as const,
+            type: channel.type,
             last_status: null,
             last_error: null,
             last_event: null,
             last_sent_at: null,
           }),
+          type: channel.type,
           events: this.channelEvents(channel),
         };
       });
@@ -174,6 +167,32 @@ export class AlertService implements OnModuleDestroy {
       channels,
       recent: [...this.recent],
     };
+  }
+
+  async testConnector(channelId: string, channel: AlertChannelConfig) {
+    const now = Date.now();
+    for (const [id, timestamp] of this.lastTests) if (now - timestamp > 60_000) this.lastTests.delete(id);
+    if (this.testing.size >= 3 || this.testing.has(channelId) || now - (this.lastTests.get(channelId) ?? 0) < 5000) {
+      throw new HttpException('Wait before sending another connector test.', 429);
+    }
+    this.testing.add(channelId);
+    this.lastTests.set(channelId, now);
+    const id = this.nextId('test');
+    const event: GatewayAlertEvent = { type: 'test', severity: 'info',
+      message: 'This is a test message explicitly requested from the SiftGate Dashboard.', timestamp: new Date().toISOString() };
+    this.recordStatus({ id, channel: channel.name || channel.type, channel_id: channelId,
+      event: 'test', severity: 'info', status: 'queued', attempts: 0, timestamp: event.timestamp!,
+      message: event.message, dedupe_key: null, last_error: null, sent_at: null });
+    try {
+      await this.sendWebhook(channel, { ...event, timestamp: event.timestamp! }, 5000);
+      const sentAt = new Date().toISOString();
+      this.updateStatus(id, { status: 'sent', attempts: 1, last_error: null, sent_at: sentAt });
+      return { status: 'sent' as const, delivery_id: id, error_code: null, sent_at: sentAt };
+    } catch (error) {
+      const code = error instanceof ConnectorError ? error.code : 'credentials_unavailable';
+      this.updateStatus(id, { status: 'failed', attempts: 1, last_error: code, sent_at: null });
+      return { status: 'failed' as const, delivery_id: id, error_code: code, sent_at: null };
+    } finally { this.testing.delete(channelId); }
   }
 
   async flushForTests(): Promise<void> {
@@ -297,12 +316,17 @@ export class AlertService implements OnModuleDestroy {
 
   private async deliverWebhook(item: PendingWebhookDelivery): Promise<void> {
     const retry = item.channel.retry || {};
-    const attempts = Math.max(1, Math.floor(retry.attempts ?? 3));
-    const backoffMs = Math.max(0, retry.backoff_ms ?? 1000);
-    const timeoutMs = Math.max(1, retry.timeout_ms ?? 5000);
+    const attempts = Math.min(5, Math.max(1, Math.floor(retry.attempts ?? 3)));
+    const backoffMs = Math.min(30000, Math.max(0, retry.backoff_ms ?? 1000));
+    const timeoutMs = Math.min(30000, Math.max(1, retry.timeout_ms ?? 5000));
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
+      const current = this.config.alerts.channels.find((channel, index) => (channel.id || `legacy-${index}`) === item.channelId);
+      if (!this.config.alerts.enabled || !current || current.enabled === false || JSON.stringify(current) !== JSON.stringify(item.channel)) {
+        this.updateStatus(item.id, { status: 'failed', attempts: attempt - 1, last_error: 'Connector disabled or changed before delivery.', sent_at: null });
+        return;
+      }
       try {
         await this.sendWebhook(item.channel, item.event, timeoutMs);
         this.updateStatus(item.id, {
@@ -332,39 +356,12 @@ export class AlertService implements OnModuleDestroy {
   }
 
   private async sendWebhook(
-    channel: WebhookAlertChannelConfig,
+    channel: AlertChannelConfig,
     event: Required<Pick<GatewayAlertEvent, 'timestamp'>> & GatewayAlertEvent,
     timeoutMs: number,
   ): Promise<void> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    timeout.unref?.();
-
-    try {
-      const response = await fetch(channel.url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(channel.headers || {}),
-        },
-        body: JSON.stringify(this.buildWebhookPayload(event)),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        throw new Error(
-          `HTTP ${response.status}${body ? `: ${body.slice(0, 160)}` : ''}`,
-        );
-      }
-    } catch (err) {
-      const error = err as Error;
-      if (error.name === 'AbortError') {
-        throw new Error(`Webhook timed out after ${timeoutMs}ms`);
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
+    const resolved = this.connectors ? await this.connectors.resolveChannel(channel) : channel;
+    await sendAlert(resolved, this.buildWebhookPayload(event), { timeoutMs });
   }
 
   private buildWebhookPayload(
@@ -423,7 +420,7 @@ export class AlertService implements OnModuleDestroy {
   private recordStatus(status: AlertDeliveryStatus): void {
     this.recent.unshift(status);
     this.trimRecent();
-    this.channelStatuses.set(status.channel, {
+    this.channelStatuses.set(status.channel_id || status.channel, {
       name: status.channel,
       type: 'webhook',
       events: this.channelStatuses.get(status.channel)?.events || ALL_ALERT_EVENTS,
@@ -441,8 +438,8 @@ export class AlertService implements OnModuleDestroy {
     const existing = this.recent.find((status) => status.id === id);
     if (!existing) return;
     Object.assign(existing, patch);
-    const previous = this.channelStatuses.get(existing.channel);
-    this.channelStatuses.set(existing.channel, {
+    const previous = this.channelStatuses.get(existing.channel_id || existing.channel);
+    this.channelStatuses.set(existing.channel_id || existing.channel, {
       name: existing.channel,
       type: 'webhook',
       events: previous?.events || ALL_ALERT_EVENTS,
@@ -461,7 +458,7 @@ export class AlertService implements OnModuleDestroy {
   }
 
   private channelHandlesEvent(
-    channel: WebhookAlertChannelConfig,
+    channel: AlertChannelConfig,
     event: AlertEventType,
   ): boolean {
     return !channel.events || channel.events.length === 0 || channel.events.includes(event);
@@ -469,15 +466,15 @@ export class AlertService implements OnModuleDestroy {
 
   private hasInterestedChannel(event: AlertEventType): boolean {
     return this.config.alerts.channels.some((channel) =>
-      this.channelHandlesEvent(channel, event),
+      channel.enabled !== false && this.channelHandlesEvent(channel, event),
     );
   }
 
-  private channelName(channel: WebhookAlertChannelConfig, index: number): string {
-    return channel.name || `webhook-${index + 1}`;
+  private channelName(channel: AlertChannelConfig, index: number): string {
+    return channel.name || `${channel.type}-${index + 1}`;
   }
 
-  private channelEvents(channel: WebhookAlertChannelConfig): AlertEventType[] {
+  private channelEvents(channel: AlertChannelConfig): AlertEventType[] {
     return channel.events && channel.events.length > 0
       ? [...channel.events]
       : [...ALL_ALERT_EVENTS];

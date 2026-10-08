@@ -47,7 +47,7 @@ export function setupOpenApi(app: INestApplication): void {
     .setDescription(
       'OpenAPI documentation for the MIT open-source SiftGate data plane, local dashboard API, and provider-compatible ingress endpoints.',
     )
-    .setVersion('2.11.5')
+    .setVersion('2.11.6')
     .addBearerAuth(
       {
         type: 'http',

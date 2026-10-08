@@ -55,7 +55,7 @@ export default [
     },
   },
   {
-    files: ['scripts/**/*.{js,cjs,mjs}'],
+    files: ['scripts/**/*.{js,cjs,mjs}', 'src/alerts/alert-connector-runtime.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

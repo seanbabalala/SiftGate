@@ -1,4 +1,4 @@
-import type { AlertEventType } from '../config/gateway.config';
+import type { AlertConnectorType, AlertEventType } from '../config/gateway.config';
 
 export type AlertSeverity = 'info' | 'warning' | 'critical';
 
@@ -18,6 +18,7 @@ export interface AlertDeliveryStatus {
   event: AlertEventType;
   severity: AlertSeverity;
   channel: string;
+  channel_id?: string;
   status: AlertDeliveryState;
   attempts: number;
   timestamp: string;
@@ -29,7 +30,7 @@ export interface AlertDeliveryStatus {
 
 export interface AlertChannelStatus {
   name: string;
-  type: 'webhook';
+  type: AlertConnectorType;
   events: AlertEventType[];
   last_status: AlertDeliveryState | null;
   last_error: string | null;

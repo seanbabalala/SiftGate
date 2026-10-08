@@ -1,0 +1,29 @@
+[Unit]
+Description=SiftGate gateway
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=900
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=siftgate
+Group=siftgate
+WorkingDirectory=/var/lib/siftgate
+Environment=GATEWAY_CONFIG_PATH=/etc/siftgate/gateway.config.yaml
+Environment=SIFTGATE_WATCHDOG_ALERTS_PATH=/var/lib/siftgate/alert-connectors.json
+EnvironmentFile=-/etc/siftgate/gateway.env
+ExecStart=/usr/bin/node /opt/siftgate/current/dist/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+# Permit dashboard-managed configuration writes explicitly if needed.
+ReadWritePaths=/var/lib/siftgate /etc/siftgate
+
+[Install]
+WantedBy=multi-user.target

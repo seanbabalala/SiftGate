@@ -120,7 +120,7 @@ describe('CacheSavingsService', () => {
 
     expect(callLogRepo.find).toHaveBeenCalledWith(
       expect.objectContaining({
-        order: { timestamp: 'ASC' },
+        order: { timestamp: 'ASC', id: 'ASC' },
         where: expect.objectContaining({
           api_key_id: 'key_1',
           namespace_id: 'team-a',
@@ -141,10 +141,10 @@ describe('CacheSavingsService', () => {
       hypothetical_no_cache_cost_usd: 0.006,
       savings_usd: 0.00035,
       savings_percentage: 5.83,
-      normal_input_cost_usd: 0.002,
-      cache_read_cost_usd: 0.0004,
-      cache_creation_cost_usd: 0.00025,
-      output_cost_usd: 0.003,
+      normal_input_cost_usd: null,
+      cache_read_cost_usd: null,
+      cache_creation_cost_usd: null,
+      output_cost_usd: null,
     });
     expect(result.groups).toEqual([
       expect.objectContaining({
@@ -180,7 +180,7 @@ describe('CacheSavingsService', () => {
     );
   });
 
-  it('falls back to current pricing when old rows do not have cost_without_cache_usd yet', async () => {
+  it('keeps an absent historical reference unknown instead of substituting current prices', async () => {
     const rows = [
       {
         request_id: 'req_legacy',
@@ -203,13 +203,13 @@ describe('CacheSavingsService', () => {
       total_requests: 1,
       provider_routed_requests: 1,
       requests_with_provider_cache_hit: 1,
-      actual_cost_usd: 0.0023,
-      hypothetical_no_cache_cost_usd: 0.0026,
-      savings_usd: 0.0003,
+      actual_cost_usd: null,
+      hypothetical_no_cache_cost_usd: null,
+      savings_usd: null,
     });
   });
 
-  it('recomputes provider cache savings for old rows logged before cache pricing was configured', async () => {
+  it('preserves old recorded costs rather than retroactively applying newly configured cache prices', async () => {
     const rows = [
       {
         request_id: 'req_old_cache_pricing',
@@ -228,12 +228,12 @@ describe('CacheSavingsService', () => {
 
     const result = await service.getSummary('1d', 'model');
 
-    expect(result.summary.actual_cost_usd).toBeCloseTo(0.035258, 6);
+    expect(result.summary.actual_cost_usd).toBeCloseTo(0.27115, 6);
     expect(result.summary.hypothetical_no_cache_cost_usd).toBeCloseTo(0.27115, 6);
-    expect(result.summary.savings_usd).toBeCloseTo(0.235892, 6);
+    expect(result.summary.savings_usd).toBe(0);
   });
 
-  it('recomputes OpenAI-compatible provider cache savings from cached input tokens', async () => {
+  it('does not replace a recorded OpenAI-compatible cost with a cheaper current estimate', async () => {
     const rows = [
       {
         request_id: 'req_openai_compatible_cache',
@@ -257,12 +257,12 @@ describe('CacheSavingsService', () => {
       total_output_tokens: 295,
       total_cache_read_tokens: 52_493,
       total_normal_input_tokens: 262,
-      actual_cost_usd: 0.031981,
+      actual_cost_usd: 0.2682,
       hypothetical_no_cache_cost_usd: 0.2682,
-      savings_usd: 0.236219,
-      normal_input_cost_usd: 0.00131,
-      cache_read_cost_usd: 0.026246,
-      output_cost_usd: 0.004425,
+      savings_usd: 0,
+      normal_input_cost_usd: null,
+      cache_read_cost_usd: null,
+      output_cost_usd: null,
     });
   });
 

@@ -1,3 +1,5 @@
+import { CacheReferenceNotice, CacheBreakdownUnavailable } from '@/components/pricing/cache-reference-notice'
+import { cacheComparisonAmount, formatCacheMoney, formatCachePercent } from '@/lib/cache-reference-display'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -74,7 +76,9 @@ function compactChartLabel(value: string, max = 22) {
 }
 
 export function AnalyticsPage() {
-  const { t } = useTranslation('analytics')
+  const { t, i18n } = useTranslation('analytics')
+  const formatCacheCost = (value: number | string | null | undefined) => formatCacheMoney(value, i18n.resolvedLanguage ?? i18n.language)
+  const formatCacheRate = (value: number | null | undefined) => formatCachePercent(value, i18n.resolvedLanguage ?? i18n.language)
   const [period, setPeriod] = useState('7d')
   const [apiKeyFilter, setApiKeyFilter] = useState('')
   const { data, isLoading, isError, error, refetch } = useCostAnalytics(
@@ -424,6 +428,7 @@ export function AnalyticsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
+          <CacheReferenceNotice data={providerCacheByNode} />
           {cacheNodeLoading || cacheModelLoading ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
@@ -448,26 +453,26 @@ export function AnalyticsPage() {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <MetricCard
                   label={t('cache.metrics.saved')}
-                  value={formatCost(providerCacheByNode.summary.savings_usd)}
+                  value={formatCacheCost(cacheComparisonAmount(providerCacheByNode.summary, 'savings'))}
                   subtitle={t('cache.metrics.savedPercent', {
-                    value: formatPercent(providerCacheByNode.summary.savings_percentage),
+                    value: formatCacheRate(providerCacheByNode.summary.savings_percentage),
                   })}
                   icon={TrendingDown}
                 />
                 <MetricCard
                   label={t('cache.metrics.hitRate')}
-                  value={formatPercent(providerCacheByNode.summary.cache_hit_rate)}
+                  value={formatCacheRate(providerCacheByNode.summary.cache_hit_rate)}
                   subtitle={t('cache.metrics.hitRequests', {
                     hits: formatNumber(providerCacheByNode.summary.requests_with_provider_cache_hit),
-                    total: formatNumber(providerCacheByNode.summary.provider_routed_requests),
+                    total: formatNumber(providerCacheByNode.summary.cache_eligible_requests),
                   })}
                   icon={Zap}
                 />
                 <MetricCard
                   label={t('cache.metrics.withoutCache')}
-                  value={formatCost(providerCacheByNode.summary.hypothetical_no_cache_cost_usd)}
+                  value={formatCacheCost(cacheComparisonAmount(providerCacheByNode.summary, 'reference'))}
                   subtitle={t('cache.metrics.withCache', {
-                    value: formatCost(providerCacheByNode.summary.actual_cost_usd),
+                    value: formatCacheCost(cacheComparisonAmount(providerCacheByNode.summary, 'actual')),
                   })}
                   icon={DollarSign}
                 />
@@ -685,7 +690,7 @@ export function AnalyticsPage() {
                   <CardTitle>{t('cache.costMix.title')}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={240}>
+                  {providerCacheByNode.groups.some(row => row.normal_input_cost_usd !== null) ? (<ResponsiveContainer width="100%" height={240}>
                     <BarChart
                       data={providerCacheByNode.groups.slice(0, 6)}
                       layout="vertical"
@@ -742,7 +747,7 @@ export function AnalyticsPage() {
                       <Bar dataKey="cache_creation_cost_usd" stackId="cost" fill={CACHE_STACK_COLORS.write} />
                       <Bar dataKey="output_cost_usd" stackId="cost" fill={CACHE_STACK_COLORS.output} radius={[0, 6, 6, 0]} />
                     </BarChart>
-                  </ResponsiveContainer>
+                  </ResponsiveContainer>) : <CacheBreakdownUnavailable />}
                 </CardContent>
               </Card>
             </>

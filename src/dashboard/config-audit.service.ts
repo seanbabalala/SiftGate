@@ -2,7 +2,8 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomUUID } from 'crypto';
 import * as yaml from 'js-yaml';
-import { Repository } from 'typeorm';
+import { Repository, type EntityManager } from 'typeorm';
+import { coordinatedRepositoryOperation, requireRepositoryTransaction } from '../database/coordinated-repository';
 import { ConfigService, ConfigReloadResult } from '../config/config.service';
 import {
   ConfigAuditEvent,
@@ -15,7 +16,7 @@ import {
   normalizeWorkspaceId,
   workspaceFindWhere,
 } from '../workspaces/workspace-scope';
-import { ManagementAuditService } from '../audit/management-audit.service';
+import { ManagementAuditService, type RecordManagementAuditInput } from '../audit/management-audit.service';
 
 const REDACTED = '[redacted]';
 
@@ -44,6 +45,7 @@ export interface RollbackConfigResult {
 @Injectable()
 export class ConfigAuditService implements OnModuleInit {
   private readonly logger = new Logger(ConfigAuditService.name);
+  private readScope = false;
 
   constructor(
     private readonly config: ConfigService,
@@ -54,6 +56,15 @@ export class ConfigAuditService implements OnModuleInit {
     private readonly eventRepo: Repository<ConfigAuditEvent>,
     private readonly managementAudit: ManagementAuditService,
   ) {}
+
+  private read<T>(action: (service: ConfigAuditService) => Promise<T>): Promise<T> {
+    return coordinatedRepositoryOperation(this.versionRepo, false, (manager) => {
+      if (!manager) return action(this);
+      const service = new ConfigAuditService(this.config, this.workspaceContext, manager.getRepository(ConfigVersion), manager.getRepository(ConfigAuditEvent), this.managementAudit);
+      service.readScope = true;
+      return action(service);
+    });
+  }
 
   async onModuleInit(): Promise<void> {
     if (!this.config.configAudit.enabled || !this.config.configAudit.capture_startup_snapshot) {
@@ -233,21 +244,22 @@ export class ConfigAuditService implements OnModuleInit {
     afterSummary?: Record<string, unknown> | null;
     failureReason?: string | null;
     metadata?: Record<string, unknown>;
-  }): Promise<ConfigAuditEvent | null> {
+  }, manager?: EntityManager): Promise<ConfigAuditEvent | null> {
+    if (manager) requireRepositoryTransaction(this.eventRepo, manager);
     const event = this.config.configAudit.enabled
       ? await this.recordEvent({
           action: input.action,
           target: input.target,
           source: input.source ?? 'dashboard',
-          actor: this.actorLabel(input.actor),
+          actor: this.actorLabel(input.actor ?? this.managementAudit.resolveActor?.()),
           result: input.result ?? 'success',
           beforeSummary: input.beforeSummary ?? null,
           afterSummary: input.afterSummary ?? null,
           failureReason: input.failureReason ?? null,
           metadata: input.metadata,
-        })
+        }, manager)
       : null;
-    await this.managementAudit.record({
+    const auditInput: RecordManagementAuditInput = {
       action: input.action,
       resourceType: this.resourceTypeFromTarget(input.target),
       resourceId: this.resourceIdFromTarget(input.target),
@@ -258,7 +270,9 @@ export class ConfigAuditService implements OnModuleInit {
       failureReason: input.failureReason ?? null,
       source: input.source ?? 'dashboard',
       metadata: input.metadata,
-    });
+    };
+    if (manager) await this.managementAudit.record(auditInput, manager);
+    else await this.managementAudit.record(auditInput);
     return event;
   }
 
@@ -381,6 +395,7 @@ export class ConfigAuditService implements OnModuleInit {
   }
 
   async listVersions(limit?: number): Promise<Record<string, unknown>> {
+    if (!this.readScope && this.versionRepo.manager?.connection) return this.read((service) => service.listVersions(limit));
     const safeLimit = this.limit(limit, this.config.configAudit.max_versions);
     const items = await this.versionRepo.find({
       where: workspaceFindWhere(this.workspaceId(), {}),
@@ -395,6 +410,7 @@ export class ConfigAuditService implements OnModuleInit {
   }
 
   async getVersion(versionId: string): Promise<Record<string, unknown> | null> {
+    if (!this.readScope && this.versionRepo.manager?.connection) return this.read((service) => service.getVersion(versionId));
     const version = await this.findVersion(versionId);
     if (!version) return null;
     return {
@@ -410,6 +426,7 @@ export class ConfigAuditService implements OnModuleInit {
     target?: string;
     result?: 'success' | 'failure';
   }): Promise<Record<string, unknown>> {
+    if (!this.readScope && this.eventRepo.manager?.connection) return this.read((service) => service.listEvents(input));
     const safeLimit = this.limit(input.limit, this.config.configAudit.max_events);
     const qb = this.eventRepo
       .createQueryBuilder('event')
@@ -441,15 +458,18 @@ export class ConfigAuditService implements OnModuleInit {
     source: ConfigVersionSource;
     createdBy: string;
     metadata?: Record<string, unknown>;
-  }): Promise<ConfigVersion | null> {
+  }, manager?: EntityManager): Promise<ConfigVersion | null> {
     if (!this.config.configAudit.enabled) return null;
+    if (!manager && this.versionRepo.manager?.connection) return coordinatedRepositoryOperation(this.versionRepo, true, (scoped) => this.recordVersion(input, scoped));
+    if (manager) requireRepositoryTransaction(this.versionRepo, manager);
+    const repo = manager?.getRepository(ConfigVersion) ?? this.versionRepo;
 
     const raw = this.config.readRawConfigYaml();
     const sanitizedYaml = this.sanitizeYaml(raw);
     const summary = this.summarizeYaml(raw);
     const checksum = createHash('sha256').update(sanitizedYaml).digest('hex');
     const snapshot = this.config.getSnapshot();
-    const version = this.versionRepo.create({
+    const version = repo.create({
       version_id: `cfgv_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`,
       workspace_id: this.workspaceId(),
       created_by: input.createdBy,
@@ -466,8 +486,8 @@ export class ConfigAuditService implements OnModuleInit {
       }),
       config_yaml: sanitizedYaml,
     });
-    const saved = await this.versionRepo.save(version);
-    await this.pruneVersions();
+    const saved = await repo.save(version);
+    await this.pruneVersions(repo);
     return saved;
   }
 
@@ -483,44 +503,54 @@ export class ConfigAuditService implements OnModuleInit {
     afterSummary?: unknown;
     failureReason?: string | null;
     metadata?: Record<string, unknown> | null;
-  }): Promise<ConfigAuditEvent | null> {
+  }, manager?: EntityManager): Promise<ConfigAuditEvent | null> {
     if (!this.config.configAudit.enabled) return null;
-    const event = this.eventRepo.create({
+    if (!manager && this.eventRepo.manager?.connection) return coordinatedRepositoryOperation(this.eventRepo, true, (scoped) => this.recordEvent(input, scoped));
+    if (manager) requireRepositoryTransaction(this.eventRepo, manager);
+    const repo = manager?.getRepository(ConfigAuditEvent) ?? this.eventRepo;
+    const event = repo.create({
       event_id: `cfge_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`,
       workspace_id: this.workspaceId(),
       actor: input.actor ?? 'dashboard:dashboard',
       action: input.action,
       target: input.target,
-      before_summary_json: input.beforeSummary === undefined ? null : this.safeStringify(input.beforeSummary),
-      after_summary_json: input.afterSummary === undefined ? null : this.safeStringify(input.afterSummary),
+      before_summary_json: input.beforeSummary === undefined ? null : this.safeStringify(this.sanitizeEventValue(input.beforeSummary)),
+      after_summary_json: input.afterSummary === undefined ? null : this.safeStringify(this.sanitizeEventValue(input.afterSummary)),
       result: input.result,
-      failure_reason: input.failureReason ?? null,
+      failure_reason: input.failureReason ? String(this.sanitizeEventValue(input.failureReason)) : null,
       source: input.source ?? null,
       version_id: input.versionId ?? null,
       previous_version_id: input.previousVersionId ?? null,
-      metadata_json: input.metadata ? this.safeStringify(this.sanitizeValue(input.metadata)) : null,
+      metadata_json: input.metadata ? this.safeStringify(this.sanitizeEventValue(input.metadata)) : null,
     });
-    return this.eventRepo.save(event);
+    return repo.save(event);
   }
 
-  private async pruneVersions(): Promise<void> {
+  private sanitizeEventValue(value: unknown): unknown {
+    // Event metadata uses the audit allowlist (numeric token limits are not secrets).
+    // YAML snapshot redaction and rehydration keep their existing separate rules.
+    return this.managementAudit.sanitize?.(value) ?? this.sanitizeValue(value);
+  }
+
+  private async pruneVersions(repo: Repository<ConfigVersion> = this.versionRepo): Promise<void> {
     const maxVersions = this.config.configAudit.max_versions;
-    const count = await this.versionRepo.count({
+    const count = await repo.count({
       where: workspaceFindWhere(this.workspaceId(), {}),
     });
     if (count <= maxVersions) return;
 
-    const oldVersions = await this.versionRepo.find({
+    const oldVersions = await repo.find({
       where: workspaceFindWhere(this.workspaceId(), {}),
       order: { created_at: 'ASC', id: 'ASC' },
       take: count - maxVersions,
     });
     if (oldVersions.length > 0) {
-      await this.versionRepo.delete(oldVersions.map((item) => item.id));
+      await repo.delete(oldVersions.map((item) => item.id));
     }
   }
 
   private async findVersion(versionId: string): Promise<ConfigVersion | null> {
+    if (!this.readScope && this.versionRepo.manager?.connection) return this.read((service) => service.findVersion(versionId));
     const numericId = Number(versionId);
     if (Number.isInteger(numericId) && numericId > 0) {
       const byId = await this.versionRepo.findOne({ where: { id: numericId } });
@@ -702,8 +732,10 @@ export class ConfigAuditService implements OnModuleInit {
     }
 
     const result: Record<string, unknown> = {};
+    const connector = ['webhook', 'feishu', 'wecom', 'telegram'].includes(String((value as Record<string, unknown>).type));
     for (const [key, child] of Object.entries(value)) {
-      result[key] = this.sanitizeValue(child, key);
+      result[key] = connector && ['url', 'headers', 'bot_token', 'signing_secret', 'chat_id'].includes(key)
+        ? REDACTED : this.sanitizeValue(child, key);
     }
     return result;
   }

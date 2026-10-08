@@ -953,5 +953,6 @@
   "mcp.setup.bullets.toolProxy": "Clients는 Gateway API key로 MCP proxy를 호출하고 SiftGate는 configured MCP servers로 전달합니다.",
   "mcp.setup.bullets.notModelRouting": "이 surface는 tool calls를 거버닝합니다. model selection은 routing, nodes, API key policy가 담당합니다.",
   "mcp.setup.bullets.endpointPermissions": "allowed_endpoints에 mcp, mcp:server, mcp:server:tool과 namespace allow-lists를 사용하세요.",
-  "mcp.setup.bullets.noPayloadStorage": "Audit은 method, tool, scope, status, latency, size만 저장하고 tool arguments/results, headers, secrets는 저장하지 않습니다."
+  "mcp.setup.bullets.noPayloadStorage": "Audit은 method, tool, scope, status, latency, size만 저장하고 tool arguments/results, headers, secrets는 저장하지 않습니다.",
+  "alerts.configure": "커넥터 설정"
 }

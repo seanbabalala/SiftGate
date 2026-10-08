@@ -1,4 +1,5 @@
 import { RealtimeProxyService } from '../../src/realtime/realtime-proxy.service';
+import { EventEmitter } from 'node:events';
 
 const realtimeConfig = {
   enabled: true,
@@ -77,6 +78,50 @@ function makeSession(overrides: Record<string, unknown> = {}) {
 }
 
 describe('RealtimeProxyService', () => {
+  it.each(['upgrades', 'pricingCloses'])('bounds %s work before admitting another client even when no socket remains active', async pendingKind => {
+    const service = makeService(); const pending = (service as any)[pendingKind] as Set<Promise<void>>;
+    for (let i = 0; i < realtimeConfig.max_connections; i++) pending.add(new Promise<void>(() => undefined));
+    const socket = { destroyed: false, write: jest.fn(), destroy: jest.fn() };
+    await (service as any).handleUpgrade({ method: 'GET', url: '/v1/realtime', headers: { upgrade: 'websocket', 'sec-websocket-key': 'synthetic' } }, socket, Buffer.alloc(0));
+    expect(socket.write.mock.calls[0][0]).toContain('HTTP/1.1 429');
+    pending.clear();
+  });
+  it('classifies a socket close without a protocol close frame as uncertain', async () => {
+    const service = makeService();
+    const socket = Object.assign(new EventEmitter(), { destroyed: true, write: jest.fn(), end: jest.fn() });
+    const pricing = { close: jest.fn().mockResolvedValue(undefined) };
+    const session = makeSession({ socket, pricing });
+    (service as any).attachClientSocket(session);
+    socket.emit('close');
+    expect(pricing.close).toHaveBeenCalledWith(true, undefined);
+    expect(service.getStatus('workspace-a').recent[0].close_reason).toBe('client_error');
+    await service.onModuleDestroy();
+  });
+
+  it('freezes close before queued accounting finishes and passes its pending promise to the pricing handle', async () => {
+    const service = makeService();
+    let resolve!: () => void;
+    const pending = new Promise<void>(done => { resolve = done; });
+    const pricing = { close: jest.fn((_abnormal: boolean, drain: Promise<void>) => drain) };
+    const session = makeSession({ pricing, pricingWork: pending });
+    (service as any).closeSession(session, 'client_closed', 1000);
+    expect(pricing.close).toHaveBeenCalledWith(false, pending);
+    resolve(); await service.onModuleDestroy();
+  });
+
+  it('captures event timing and client sequence before an earlier queued database write completes', async () => {
+    const service = makeService(); const upstream = new EventTarget();
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    const observed = { at: '2026-09-28T00:00:00.000Z', clientSequence: 1 };
+    const pricing = { observation: jest.fn(() => observed), observe: jest.fn().mockResolvedValue(true), close: jest.fn().mockResolvedValue(undefined) };
+    const session = makeSession({ pricing, pricingWork: pending });
+    (service as any).attachUpstreamSocket(session, upstream);
+    upstream.dispatchEvent(new MessageEvent('message', { data: '{"type":"response.created","response":{"id":"a"}}' }));
+    expect(pricing.observation).toHaveBeenCalledTimes(1); expect(pricing.observe).not.toHaveBeenCalled();
+    release(); await (session as any).pricingWork;
+    expect(pricing.observe).toHaveBeenCalledWith(expect.objectContaining({ responseId: 'a' }), observed);
+  });
   it.each([
     {
       statusCode: 429,

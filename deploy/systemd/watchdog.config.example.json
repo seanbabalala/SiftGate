@@ -1,0 +1,14 @@
+{
+  "enabled": false,
+  "allowRestart": false,
+  "manager": "systemd",
+  "service": "siftgate.service",
+  "healthUrl": "http://127.0.0.1:2099/live",
+  "stateDirectory": "/var/lib/siftgate-watchdog",
+  "maintenanceFile": "/var/lib/siftgate-watchdog/maintenance",
+  "dataDirectory": "/var/lib/siftgate",
+  "databasePath": "/var/lib/siftgate/gateway.db",
+  "alertChannelsFile": "/var/lib/siftgate/alert-connectors.json",
+  "minFreeBytes": 5368709120,
+  "maxDatabaseBytes": 4294967296
+}

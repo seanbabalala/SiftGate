@@ -251,5 +251,7 @@
   "concepts.providerCatalog.title": "การแสดง Provider Catalog ขึ้นกับความพร้อมของ catalog",
   "concepts.providerCatalog.description": "catalog แสดง provider projection ที่ active และ canonical เป็นค่าเริ่มต้น provider แบบ legacy, transport-only หรือรอ review อาจมีอยู่ แต่จะซ่อนจนกว่าจะตั้งค่า หรือเลือกแสดงเอง",
   "setupGuide.copy": "คัดลอก YAML",
-  "setupGuide.copied": "คัดลอกแล้ว"
+  "setupGuide.copied": "คัดลอกแล้ว",
+  "nav.alertConnectors": "ตัวเชื่อมต่อแจ้งเตือน",
+  "nav.pricing": "จัดการราคา"
 }

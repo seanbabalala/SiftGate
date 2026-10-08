@@ -677,8 +677,17 @@ export class VideoGenerationRequestDto {
   @ApiProperty({ example: 'auto', description: 'Use "auto" for SiftGate video routing or a configured video model.' })
   model!: string;
 
-  @ApiProperty({ example: 'A short product demo clip of a self-hosted AI gateway dashboard.' })
-  prompt!: string;
+  @ApiPropertyOptional({ example: 'A short product demo clip of a self-hosted AI gateway dashboard.', description: 'Generic video prompt. Native profiles instead require their documented request envelope.' })
+  prompt?: string;
+
+  @ApiPropertyOptional({ description: 'Gemini Veo REST input instances (one input). Requires an explicitly selected native result profile.' })
+  instances?: Record<string, unknown>[];
+
+  @ApiPropertyOptional({ description: 'Gemini Veo REST parameters, including durationSeconds and sampleCount.' })
+  parameters?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ description: 'Native Runway text prompt. Requires an explicitly selected native result profile.' })
+  promptText?: string;
 
   @ApiPropertyOptional({ example: '16:9' })
   aspect_ratio?: string;

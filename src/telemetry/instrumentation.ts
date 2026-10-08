@@ -26,6 +26,14 @@ interface TelemetryCfg {
 }
 
 let telemetryCfg: TelemetryCfg | null = null;
+let stopSdk: (() => Promise<void>) | undefined;
+let shutdownPromise: Promise<void> | undefined;
+
+/** The gateway shutdown owner calls this after HTTP/accounting/database teardown. */
+export function shutdownTelemetry(): Promise<void> {
+  return shutdownPromise ??= Promise.resolve().then(() => stopSdk?.());
+}
+
 try {
   if (fs.existsSync(configPath)) {
     const raw = yaml.load(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
@@ -68,15 +76,10 @@ if (telemetryCfg?.enabled) {
       ...samplerOpts,
     });
 
+    // Even a partially started SDK may own exporters that require cleanup.
+    // Never register process exit handlers here: doing so races request accounting.
+    stopSdk = () => sdk.shutdown();
     sdk.start();
-
-    // Graceful shutdown
-    const shutdown = async () => {
-      await sdk.shutdown();
-      process.exit(0);
-    };
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
 
     console.log(
       `[Telemetry] SDK started — traces -> ${traceEndpoint}, metrics -> :${prometheusPort}/metrics`,

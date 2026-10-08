@@ -251,5 +251,7 @@
   "concepts.providerCatalog.title": "Provider Catalog visibility follows catalog readiness",
   "concepts.providerCatalog.description": "The catalog shows active, canonical provider projections by default. Legacy, transport-only, or review-required providers can exist but are hidden until explicitly shown or configured.",
   "setupGuide.copy": "Copy YAML",
-  "setupGuide.copied": "Copied"
+  "setupGuide.copied": "Copied",
+  "nav.alertConnectors": "Alert connectors",
+  "nav.pricing": "Pricing"
 }

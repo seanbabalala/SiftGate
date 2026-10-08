@@ -271,7 +271,8 @@ The migrator:
   `route_decisions`, `config_versions`, `config_audit_events`,
   `management_audit_events`, `provider_compatibility_results`, `batch_jobs`,
   and `video_jobs`.
-- Creates a timestamped SQLite backup when `--backup` is set.
+- Creates a verified, WAL-aware SQLite snapshot using the SQLite online backup
+  API when `--backup` is set. It refuses to overwrite an existing backup.
 - Creates/updates the PostgreSQL schema through the OSS TypeORM entities before
   import.
 - Refuses to import into non-empty target tables unless `--force` is provided.
@@ -342,6 +343,13 @@ startup logs for `Applied schema patch:` entries.
 
 ## Health And Readiness
 
+Use `/live` for HTTP liveness and restart decisions. It does not query the
+database, budget, or providers. The runtime exits nonzero on an unexpected HTTP
+listener close, or after two missing-listener samples five seconds apart;
+intentional shutdown is excluded. Keep an independent external probe for event
+loop hangs. Plain Docker/Compose health checks do not themselves restart an
+unhealthy but still-running container.
+
 Use `/ready` for load balancer and Kubernetes readiness probes. It checks the
 runtime database only and returns `503` when SQLite/PostgreSQL is unavailable.
 Provider/node health is intentionally excluded so a degraded upstream does not
@@ -357,6 +365,9 @@ Use `/health` for dashboards and monitoring. It reports:
 
 This separation lets operators distinguish database outage from upstream
 provider outage during incidents.
+
+See [Reliability Operations](RELIABILITY_OPERATIONS.md) for staged deployment,
+external watchdogs, systemd, WAL-safe backup rotation, retention, and rollback.
 
 Future releases that change persistent schema should ship explicit TypeORM
 migration files. Production operators should run those release migrations as a

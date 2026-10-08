@@ -1,3 +1,4 @@
+import { PricingModule } from '../pricing/pricing.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RoutingService } from './routing.service';
@@ -13,7 +14,7 @@ import { CallLog } from '../database/entities/call-log.entity';
 import { AlertsModule } from '../alerts/alerts.module';
 
 @Module({
-  imports: [ConfigModule, AlertsModule, TypeOrmModule.forFeature([CallLog])],
+  imports: [ConfigModule, AlertsModule, PricingModule, TypeOrmModule.forFeature([CallLog])],
   providers: [
     RoutingService,
     CircuitBreakerService,

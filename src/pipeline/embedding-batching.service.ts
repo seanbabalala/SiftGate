@@ -1,3 +1,8 @@
+import { randomUUID } from 'node:crypto';
+import { AsyncResource } from 'node:async_hooks';
+import { attachUsageEvidence, getUsageEvidence } from '../canonical/usage-evidence';
+import { allocateBatchUsage } from '../pricing/cost-allocation';
+import { normalizeCanonicalTokenUsage } from '../pricing/usage-normalizer';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '../config/config.service';
 import {
@@ -27,9 +32,12 @@ type EmbeddingBatchDispatch = (
   nodeId: string,
   model: string,
   routingMeta: EmbeddingRoutingMeta,
+  options?: { signal?: AbortSignal },
 ) => Promise<CanonicalEmbeddingResponse>;
 
 interface BatchEntry {
+  id: string;
+  key: string;
   canonical: CanonicalEmbeddingRequest;
   inputs: NormalizedEmbeddingInput;
   nodeId: string;
@@ -42,6 +50,7 @@ interface BatchEntry {
   signal?: AbortSignal;
   onAbort?: () => void;
   settled?: boolean;
+  updateSharedAbort?: () => void;
 }
 
 interface BatchQueue {
@@ -119,6 +128,8 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
 
     return new Promise((resolve, reject) => {
       const entry: BatchEntry = {
+        id: randomUUID(),
+        key,
         canonical,
         inputs,
         nodeId,
@@ -126,7 +137,7 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
         routingMeta,
         resolve,
         reject,
-        dispatch,
+        dispatch: AsyncResource.bind(dispatch),
         signal: options.signal,
       };
 
@@ -183,17 +194,18 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
       encoding_format: canonical.encoding_format ?? null,
       user: canonical.user ?? null,
       inputKind,
-      tenant: metadata.api_key_id || metadata.api_key_name || metadata.session_key || 'anonymous',
+      workspace: metadata.workspace_id ?? null,
+      namespace: metadata.namespace_id ?? null,
+      team: metadata.team_id ?? null,
+      tenant: metadata.api_key_id || metadata.api_key_name || 'anonymous',
+      session: metadata.session_key ?? null,
+      credential: metadata.provider_credential_id ?? null,
+      configVersion: this.config.getSnapshot?.().version ?? null,
     });
   }
 
   private cancelEntry(entry: BatchEntry, error: Error): void {
-    const key = this.buildBatchKey(
-      entry.canonical,
-      entry.nodeId,
-      entry.model,
-      entry.inputs.kind,
-    );
+    const key = entry.key;
     const queue = this.queues.get(key);
     if (queue) {
       const index = queue.entries.indexOf(entry);
@@ -208,6 +220,7 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
       }
     }
     this.settleEntry(entry, 'reject', error);
+    entry.updateSharedAbort?.();
   }
 
   private flushQueue(key: string): void {
@@ -241,6 +254,10 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
     entries: BatchEntry[],
   ): Promise<void> {
     const first = entries[0];
+    const sharedAbort = new AbortController();
+    for (const entry of entries) entry.updateSharedAbort = () => {
+      if (entries.every((member) => member.settled || member.signal?.aborted)) sharedAbort.abort();
+    };
     const offsets: { entry: BatchEntry; start: number; count: number; estimate: number }[] = [];
     const combinedInputs: EmbeddingInputItem[] = [];
 
@@ -269,12 +286,15 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
         first.nodeId,
         first.model,
         first.routingMeta,
+        { signal: sharedAbort.signal },
       );
       this.resolveBatchEntries(response, offsets);
     } catch (error) {
       for (const entry of entries) {
         this.settleEntry(entry, 'reject', error as Error);
       }
+    } finally {
+      for (const entry of entries) entry.updateSharedAbort = undefined;
     }
   }
 
@@ -284,11 +304,16 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
   ): void {
     const dataByIndex = new Map<number, CanonicalEmbedding>();
     for (const item of response.data) {
+      if (!Number.isSafeInteger(item.index) || item.index < 0 || dataByIndex.has(item.index)) throw new Error('Embedding batch response contains invalid or duplicate item indices.');
       dataByIndex.set(item.index, item);
     }
 
-    const totalEstimate = offsets.reduce((sum, item) => sum + item.estimate, 0);
-    let remainingTokens = response.usage.input_tokens || 0;
+    const evidence = getUsageEvidence(response.usage);
+    const physicalUsage = evidence?.usage ?? normalizeCanonicalTokenUsage(response.usage, {
+      adapter_id: 'legacy-embedding-batch', adapter_version: '1', source: 'heuristic', quality: 'estimated',
+    }, { absent_cache_is_zero: true });
+    const weights = offsets.map((offset) => ({ id: offset.entry.id, weight: String(Math.max(1, offset.estimate)) }));
+    const allocated = allocateBatchUsage(physicalUsage, weights);
 
     offsets.forEach((offset, offsetIndex) => {
       if (offset.entry.settled) return;
@@ -321,28 +346,19 @@ export class EmbeddingBatchingService implements OnModuleDestroy {
         });
       }
 
-      const isLast = offsetIndex === offsets.length - 1;
-      const inputTokens =
-        response.usage.input_tokens > 0 && totalEstimate > 0
-          ? isLast
-            ? remainingTokens
-            : Math.max(
-                0,
-                Math.round((response.usage.input_tokens * offset.estimate) / totalEstimate),
-              )
-          : offset.estimate;
-      remainingTokens = Math.max(0, remainingTokens - inputTokens);
+      const actual = allocated[offsetIndex].quantities.total_input_tokens?.value;
+      const inputTokens = actual == null ? offset.estimate : Number(actual);
+      const usage = { input_tokens: Number.isSafeInteger(inputTokens) ? inputTokens : 0, output_tokens: 0 };
+      attachUsageEvidence(usage, { ...evidence, usage: allocated[offsetIndex] });
 
       this.settleEntry(offset.entry, 'resolve', {
         id: response.id,
         object: 'list',
         data,
-        usage: {
-          input_tokens: inputTokens,
-          output_tokens: 0,
-        },
+        usage,
         model: response.model,
         routing: {
+          ...response.routing,
           ...offset.entry.routingMeta,
           node: offset.entry.nodeId,
           latency_ms: response.routing.latency_ms,

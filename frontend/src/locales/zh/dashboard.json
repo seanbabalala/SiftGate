@@ -953,5 +953,6 @@
   "mcp.setup.bullets.toolProxy": "客户端用 Gateway API key 调用 MCP proxy；SiftGate 转发到配置的 MCP server。",
   "mcp.setup.bullets.notModelRouting": "这里管控工具调用；模型选择仍由 routing、nodes 和 API key policy 负责。",
   "mcp.setup.bullets.endpointPermissions": "使用 allowed_endpoints，如 mcp、mcp:server、mcp:server:tool，并配合 namespace allow-list。",
-  "mcp.setup.bullets.noPayloadStorage": "审计只存 method、tool、scope、status、latency、size，不存工具参数、结果、headers 或 secrets。"
+  "mcp.setup.bullets.noPayloadStorage": "审计只存 method、tool、scope、status、latency、size，不存工具参数、结果、headers 或 secrets。",
+  "alerts.configure": "配置连接器"
 }

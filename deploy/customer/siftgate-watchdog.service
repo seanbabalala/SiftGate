@@ -1,0 +1,15 @@
+[Unit]
+Description=SiftGate customer installation HTTP watchdog
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+# Adapt these paths and User/Group to the owner of the installation.
+# The account needs access to Docker (equivalent to host root privileges).
+User=siftgate
+Group=siftgate
+ExecStart=/usr/bin/python3 /opt/siftgate/kit/siftgate.py --directory /opt/siftgate watchdog --recover
+TimeoutStartSec=120
+UMask=0077
+NoNewPrivileges=true
+# Do not make the installation read-only: the bounded restart history must persist.

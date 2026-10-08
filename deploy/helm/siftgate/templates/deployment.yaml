@@ -92,7 +92,7 @@ spec:
             {{- end }}
           livenessProbe:
             httpGet:
-              path: /health
+              path: /live
               port: http
             {{- toYaml .Values.probes.liveness | nindent 12 }}
           readinessProbe:

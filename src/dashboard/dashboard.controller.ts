@@ -1,3 +1,4 @@
+import { applyNodePricingUpdates } from "../config/node-pricing-update";
 // ===================================================================
 // DashboardController — Dashboard REST API + SSE
 // ===================================================================
@@ -52,8 +53,16 @@ import {
 } from "@nestjs/swagger";
 import { Request, Response } from "express";
 import { InjectRepository } from "@nestjs/typeorm";
-import { DataSource, FindOptionsWhere, In, MoreThanOrEqual, Repository } from "typeorm";
+import {
+  DataSource,
+  FindOptionsWhere,
+  In,
+  MoreThanOrEqual,
+  Repository,
+  type EntityManager,
+} from "typeorm";
 import { Observable, filter, interval, map, merge } from "rxjs";
+import { withCoordinatedRepository } from "../database/coordinated-repository";
 import { ConfigService } from "../config/config.service";
 import { CapabilityService } from "../config/capability.service";
 import { SecretReferenceResolverService } from "../config/secret-reference-resolver.service";
@@ -647,7 +656,8 @@ function deriveDashboardProviderType(
 ): DashboardProviderType {
   const id = provider.id.toLowerCase();
   const baseUrl = provider.base_url.toLowerCase();
-  if (provider.status === "custom" || id === "openai-compatible") return "custom";
+  if (provider.status === "custom" || id === "openai-compatible")
+    return "custom";
   if (provider.provider_type) return provider.provider_type;
   if (
     DASHBOARD_LOCAL_PROVIDER_IDS.has(id) ||
@@ -770,10 +780,6 @@ function usesGoogleApiKeyHeader(protocol: string, baseUrl: string): boolean {
     protocol === "gemini" ||
     baseUrl.toLowerCase().includes("generativelanguage.googleapis.com")
   );
-}
-
-function roundLogCost(value: number): number {
-  return Number(value.toFixed(10));
 }
 
 function dashboardProviderDocsUrl(provider: CatalogProvider): string | null {
@@ -929,7 +935,9 @@ function recommendModelsForBucket(
   models: ReturnType<typeof toDashboardCatalogModel>[];
   source: "recommended" | "fallback";
 } {
-  const eligibleModels = models.filter((model) => !dashboardModelIsLowConfidence(model));
+  const eligibleModels = models.filter(
+    (model) => !dashboardModelIsLowConfidence(model),
+  );
   if (eligibleModels.length === 0) {
     return { models: [], source: "fallback" };
   }
@@ -1040,7 +1048,9 @@ function dashboardModelHasPricing(
   return dashboardPricingHasAnyValue(model.pricing);
 }
 
-function dashboardPricingHasAnyValue(pricing: CatalogPricing | undefined): boolean {
+function dashboardPricingHasAnyValue(
+  pricing: CatalogPricing | undefined,
+): boolean {
   const reference: Partial<CatalogPricing> = pricing || {};
   return [
     reference.input,
@@ -1089,7 +1099,8 @@ function dashboardModelPricingTrust(input: {
     Boolean(pricing.review_reason) ||
     pricing.manual_review_required;
 
-  if (!hasNumericPricing) return hasReviewSource ? "review_required" : "missing";
+  if (!hasNumericPricing)
+    return hasReviewSource ? "review_required" : "missing";
 
   if (
     source === "openrouter-public-api" &&
@@ -1119,7 +1130,10 @@ function dashboardModelPricingTrust(input: {
   }
 
   if (source === "operator_required") return "review_required";
-  if (pricing.pricing_confidence === "low" || pricing.pricing_confidence === "unknown") {
+  if (
+    pricing.pricing_confidence === "low" ||
+    pricing.pricing_confidence === "unknown"
+  ) {
     return "review_required";
   }
   return "reference_estimate";
@@ -1256,12 +1270,15 @@ function dashboardProviderCanonicalCoverage(
   coverage_ratio: number;
 } {
   const totalModels = models.length;
-  const canonicalizedModels = models.filter((model) => Boolean(model.canonical_id))
-    .length;
+  const canonicalizedModels = models.filter((model) =>
+    Boolean(model.canonical_id),
+  ).length;
   const projectedModels = models.filter(
     (model) => model.projection_source === "canonical_projection",
   ).length;
-  const enrichedModels = models.filter((model) => Boolean(model.enrichment)).length;
+  const enrichedModels = models.filter((model) =>
+    Boolean(model.enrichment),
+  ).length;
   const benchmarkedModels = models.filter(
     (model) => model.benchmarks && Object.keys(model.benchmarks).length > 0,
   ).length;
@@ -1302,7 +1319,9 @@ function dashboardProviderPricingCoverage(
   coverage_ratio: number;
 } {
   const totalModels = models.length;
-  const pricedModels = models.filter((model) => dashboardModelHasPricing(model)).length;
+  const pricedModels = models.filter((model) =>
+    dashboardModelHasPricing(model),
+  ).length;
   const alignedEstimateModels = models.filter(
     (model) => model.pricing_trust === "aligned_estimate",
   ).length;
@@ -1316,7 +1335,9 @@ function dashboardProviderPricingCoverage(
     (model) => model.pricing_trust === "missing",
   ).length;
   const estimateReadyModels = alignedEstimateModels + referenceEstimateModels;
-  const recommendedIds = new Set(recommendedModels.map((entry) => entry.model_id));
+  const recommendedIds = new Set(
+    recommendedModels.map((entry) => entry.model_id),
+  );
   const recommendedPricedModels = models.filter(
     (model) => recommendedIds.has(model.id) && dashboardModelHasPricing(model),
   ).length;
@@ -1354,7 +1375,8 @@ function dashboardProviderPricingTrustSummary(
 } {
   let status: DashboardPricingTrustStatus = "missing";
   if (coverage.aligned_estimate_models > 0) status = "aligned_estimate";
-  else if (coverage.reference_estimate_models > 0) status = "reference_estimate";
+  else if (coverage.reference_estimate_models > 0)
+    status = "reference_estimate";
   else if (coverage.review_required_models > 0) status = "review_required";
   else if (models.length === 0) status = "missing";
   return {
@@ -1419,7 +1441,8 @@ function dashboardModelLifecycle(
   lifecycle.release_date ||=
     model.enrichment?.release_date || canonical?.enrichment?.release_date;
   lifecycle.announcement_date ||=
-    model.enrichment?.announcement_date || canonical?.enrichment?.announcement_date;
+    model.enrichment?.announcement_date ||
+    canonical?.enrichment?.announcement_date;
   return Object.values(lifecycle).some(Boolean) ? lifecycle : undefined;
 }
 
@@ -1441,7 +1464,8 @@ function dashboardModelSpecs(
     ...(model.enrichment?.specs || {}),
   };
   if (specs.throughput === undefined) {
-    specs.throughput = model.enrichment?.throughput || canonical?.enrichment?.throughput;
+    specs.throughput =
+      model.enrichment?.throughput || canonical?.enrichment?.throughput;
   }
   if (specs.multimodal === undefined) {
     specs.multimodal =
@@ -1468,8 +1492,9 @@ function dashboardModelBenchmarks(
 
 function dashboardPricingSourceSummary(
   pricing: CatalogPricing | undefined,
-  hasPricing: (pricing: CatalogPricing | undefined) => boolean =
-    dashboardPricingHasAnyValue,
+  hasPricing: (
+    pricing: CatalogPricing | undefined,
+  ) => boolean = dashboardPricingHasAnyValue,
 ):
   | {
       source: string;
@@ -1502,8 +1527,12 @@ function dashboardModelPricingSources(
   canonical: CatalogCanonicalModel | undefined,
 ): {
   effective: ReturnType<typeof dashboardPricingSourceSummary> | undefined;
-  primary_reference: ReturnType<typeof dashboardPricingSourceSummary> | undefined;
-  secondary_reference: ReturnType<typeof dashboardPricingSourceSummary> | undefined;
+  primary_reference:
+    | ReturnType<typeof dashboardPricingSourceSummary>
+    | undefined;
+  secondary_reference:
+    | ReturnType<typeof dashboardPricingSourceSummary>
+    | undefined;
   effective_source: string | null;
   primary_reference_source: string | null;
   secondary_reference_source: string | null;
@@ -1691,6 +1720,11 @@ export class DashboardController implements BeforeApplicationShutdown {
     @Optional()
     private readonly sqliteAnalytics?: SqliteAnalyticsService,
   ) {
+    if ((this.config.database.log_retention_days ?? 30) <= 0) {
+      this.logger.warn(
+        "Automatic call-log retention is disabled; monitor database growth and configure verified backups.",
+      );
+    }
     this.scheduleCleanup(60_000);
   }
 
@@ -1714,7 +1748,9 @@ export class DashboardController implements BeforeApplicationShutdown {
   }
 
   @Get("workspaces")
-  @ApiOperation({ summary: "List current organization and Dashboard workspaces" })
+  @ApiOperation({
+    summary: "List current organization and Dashboard workspaces",
+  })
   @ApiOkResponse({ type: WorkspaceStateResponseDto })
   async getWorkspaces(
     @Req()
@@ -1725,9 +1761,13 @@ export class DashboardController implements BeforeApplicationShutdown {
     },
   ) {
     const userId = req.dashboardUserId || "dashboard";
-    const accessibleWorkspaceIds = await this.accessibleWorkspaceIdsForUser(userId);
+    const accessibleWorkspaceIds =
+      await this.accessibleWorkspaceIdsForUser(userId);
     const currentRole = req.workspaceId
-      ? await this.workspaceMemberships().findActiveRole(userId, req.workspaceId)
+      ? await this.workspaceMemberships().findActiveRole(
+          userId,
+          req.workspaceId,
+        )
       : req.dashboardRole;
     const state = await this.workspaces.getState(
       this.workspaceContext.currentWorkspaceId(),
@@ -1748,7 +1788,9 @@ export class DashboardController implements BeforeApplicationShutdown {
 
   @Post("workspaces/switch")
   @RequireDashboardRole("viewer")
-  @ApiOperation({ summary: "Validate and switch the active Dashboard workspace" })
+  @ApiOperation({
+    summary: "Validate and switch the active Dashboard workspace",
+  })
   @ApiBody({
     schema: {
       type: "object",
@@ -1769,7 +1811,9 @@ export class DashboardController implements BeforeApplicationShutdown {
     @Body() body: { workspace_id?: string },
   ) {
     const userId = req.dashboardUserId || "dashboard";
-    const workspace = await this.workspaces.requireWorkspace(body?.workspace_id);
+    const workspace = await this.workspaces.requireWorkspace(
+      body?.workspace_id,
+    );
     const targetRole = await this.workspaceMemberships().findActiveRole(
       userId,
       workspace.id,
@@ -1792,7 +1836,11 @@ export class DashboardController implements BeforeApplicationShutdown {
     return {
       success: true,
       active_workspace: workspace,
-      state: await this.workspaceStateForDashboard(userId, targetRole, workspace.id),
+      state: await this.workspaceStateForDashboard(
+        userId,
+        targetRole,
+        workspace.id,
+      ),
     };
   }
 
@@ -1817,21 +1865,16 @@ export class DashboardController implements BeforeApplicationShutdown {
     },
     @Body() body: { name?: string; slug?: string },
   ) {
-    const created = await this.workspaces.createWorkspace({
-      name: body?.name || "",
-      slug: body?.slug,
-    });
-    await this.workspaceMemberships().ensureMembership({
-      userId: req.dashboardUserId || "dashboard",
-      organizationId: created.organization_id,
-      workspaceId: created.id,
-      role: "admin",
-    });
-    await this.recordWorkspaceMutationAudit({
-      action: "workspace.create",
-      actorId: req.dashboardUserId || "dashboard",
-      workspace: created,
-      afterSummary: created,
+    const created = await this.workspaces.withTransaction(async (workspaces, manager) => {
+      const item = await workspaces.createWorkspace({ name: body?.name || "", slug: body?.slug });
+      await this.workspaceMemberships().withTransaction((memberships) => memberships.ensureMembership({
+        userId: req.dashboardUserId || "dashboard",
+        organizationId: item.organization_id,
+        workspaceId: item.id,
+        role: "admin",
+      }), manager);
+      await this.recordWorkspaceMutationAudit({ action: "workspace.create", actorId: req.dashboardUserId || "dashboard", workspace: item, afterSummary: item }, manager);
+      return item;
     });
     return {
       success: true,
@@ -1867,17 +1910,14 @@ export class DashboardController implements BeforeApplicationShutdown {
     @Param("id") id: string,
     @Body() body: { name?: string; slug?: string },
   ) {
-    const existing = await this.requireWorkspaceAdminTarget(
-      id,
-      req.dashboardUserId || "dashboard",
-    );
-    const updated = await this.workspaces.renameWorkspace(id, body || {});
-    await this.recordWorkspaceMutationAudit({
-      action: "workspace.rename",
-      actorId: req.dashboardUserId || "dashboard",
-      workspace: updated,
-      beforeSummary: existing,
-      afterSummary: updated,
+    const updated = await this.workspaces.withTransaction(async (workspaces, manager) => {
+      await workspaces.lockWorkspace(id);
+      return this.workspaceMemberships().withTransaction(async (memberships) => {
+        const existing = await this.requireWorkspaceAdminTarget(id, req.dashboardUserId || "dashboard", false, workspaces, memberships);
+        const item = await workspaces.renameWorkspace(id, body || {});
+        await this.recordWorkspaceMutationAudit({ action: "workspace.rename", actorId: req.dashboardUserId || "dashboard", workspace: item, beforeSummary: existing, afterSummary: item }, manager);
+        return item;
+      }, manager);
     });
     return {
       success: true,
@@ -1903,17 +1943,14 @@ export class DashboardController implements BeforeApplicationShutdown {
     },
     @Param("id") id: string,
   ) {
-    const existing = await this.requireWorkspaceAdminTarget(
-      id,
-      req.dashboardUserId || "dashboard",
-    );
-    const updated = await this.workspaces.setWorkspaceStatus(id, "disabled");
-    await this.recordWorkspaceMutationAudit({
-      action: "workspace.disable",
-      actorId: req.dashboardUserId || "dashboard",
-      workspace: updated,
-      beforeSummary: existing,
-      afterSummary: updated,
+    const updated = await this.workspaces.withTransaction(async (workspaces, manager) => {
+      await workspaces.lockWorkspace(id);
+      return this.workspaceMemberships().withTransaction(async (memberships) => {
+        const existing = await this.requireWorkspaceAdminTarget(id, req.dashboardUserId || "dashboard", false, workspaces, memberships);
+        const item = await workspaces.setWorkspaceStatus(id, "disabled");
+        await this.recordWorkspaceMutationAudit({ action: "workspace.disable", actorId: req.dashboardUserId || "dashboard", workspace: item, beforeSummary: existing, afterSummary: item }, manager);
+        return item;
+      }, manager);
     });
     return {
       success: true,
@@ -1939,18 +1976,14 @@ export class DashboardController implements BeforeApplicationShutdown {
     },
     @Param("id") id: string,
   ) {
-    const existing = await this.requireWorkspaceAdminTarget(
-      id,
-      req.dashboardUserId || "dashboard",
-      true,
-    );
-    const updated = await this.workspaces.setWorkspaceStatus(id, "active");
-    await this.recordWorkspaceMutationAudit({
-      action: "workspace.reactivate",
-      actorId: req.dashboardUserId || "dashboard",
-      workspace: updated,
-      beforeSummary: existing,
-      afterSummary: updated,
+    const updated = await this.workspaces.withTransaction(async (workspaces, manager) => {
+      await workspaces.lockWorkspace(id);
+      return this.workspaceMemberships().withTransaction(async (memberships) => {
+        const existing = await this.requireWorkspaceAdminTarget(id, req.dashboardUserId || "dashboard", true, workspaces, memberships);
+        const item = await workspaces.setWorkspaceStatus(id, "active");
+        await this.recordWorkspaceMutationAudit({ action: "workspace.reactivate", actorId: req.dashboardUserId || "dashboard", workspace: item, beforeSummary: existing, afterSummary: item }, manager);
+        return item;
+      }, manager);
     });
     return {
       success: true,
@@ -1981,7 +2014,8 @@ export class DashboardController implements BeforeApplicationShutdown {
     role: WorkspaceMembershipRole,
     activeWorkspaceId?: string | null,
   ) {
-    const accessibleWorkspaceIds = await this.accessibleWorkspaceIdsForUser(userId);
+    const accessibleWorkspaceIds =
+      await this.accessibleWorkspaceIdsForUser(userId);
     const state = await this.workspaces.getState(activeWorkspaceId, {
       includeDisabled: role === "admin",
       workspaceIds: accessibleWorkspaceIds,
@@ -2001,13 +2035,14 @@ export class DashboardController implements BeforeApplicationShutdown {
     };
   }
 
-  private async accessibleWorkspaceIdsForUser(userId: string): Promise<string[]> {
+  private async accessibleWorkspaceIdsForUser(
+    userId: string,
+  ): Promise<string[]> {
     const memberships = await this.workspaceMemberships().listForUser(userId);
     return memberships
       .filter(
         (membership) =>
-          membership.user_id === userId &&
-          membership.status === "active",
+          membership.user_id === userId && membership.status === "active",
       )
       .map((membership) => membership.workspace_id);
   }
@@ -2016,8 +2051,10 @@ export class DashboardController implements BeforeApplicationShutdown {
     id: string,
     userId: string,
     allowDisabled = false,
+    workspaces = this.workspaces,
+    memberships = this.workspaceMemberships(),
   ) {
-    const state = await this.workspaces.getState(id, { includeDisabled: true });
+    const state = await workspaces.getState(id, { includeDisabled: true });
     const workspace = state.workspaces.find((item) => item.id === id);
     if (!workspace) {
       throw new HttpException(
@@ -2027,13 +2064,16 @@ export class DashboardController implements BeforeApplicationShutdown {
     }
     const role =
       workspace.status === "disabled" && allowDisabled
-        ? (await this.workspaceMemberships().listForUser(userId)).find(
+        ? (await memberships.listForUser(userId)).find(
             (membership) =>
               membership.workspace_id === workspace.id &&
               membership.role === "admin" &&
               membership.status === "active",
           )?.role || null
-        : await this.workspaceMemberships().findActiveRole(userId, workspace.id);
+        : await memberships.findActiveRole(
+            userId,
+            workspace.id,
+          );
     if (role !== "admin") {
       throw new HttpException(
         {
@@ -2065,7 +2105,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     };
     beforeSummary?: unknown;
     afterSummary?: unknown;
-  }) {
+  }, manager?: EntityManager) {
     await this.managementAudit.record({
       action: input.action,
       resourceType: "workspace",
@@ -2081,7 +2121,7 @@ export class DashboardController implements BeforeApplicationShutdown {
         status: input.workspace.status,
         is_default: input.workspace.is_default,
       },
-    });
+    }, manager);
   }
 
   @Get("members")
@@ -2095,7 +2135,9 @@ export class DashboardController implements BeforeApplicationShutdown {
         this.workspaceContext.currentWorkspaceId(),
       ),
       roles: ["admin", "operator", "viewer"],
-      mode: this.config.dashboardOidc.enabled ? "local_dashboard_oidc" : "local_dashboard",
+      mode: this.config.dashboardOidc.enabled
+        ? "local_dashboard_oidc"
+        : "local_dashboard",
     };
   }
 
@@ -2113,17 +2155,18 @@ export class DashboardController implements BeforeApplicationShutdown {
       status?: WorkspaceMembershipStatus;
     },
   ) {
-    const updated = await this.workspaceMemberships().update(id, body || {});
-    await this.configAudit.recordManagementEvent({
-      action: "workspace_member.update",
-      target: `workspace_member:${id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      afterSummary: {
-        user_id: updated.user_id,
-        role: updated.role,
-        status: updated.status,
-        workspace_id: updated.workspace_id,
-      },
+    const workspaceId = this.workspaceContext.currentWorkspaceId();
+    const updated = await this.workspaceMemberships().withTransaction(async (memberships, manager) => {
+      await memberships.lockWorkspace(workspaceId);
+      const before = (await memberships.list(workspaceId)).find((member) => member.id === id);
+      const item = await memberships.update(id, body || {}, workspaceId);
+      await this.configAudit.recordManagementEvent({
+        action: "workspace_member.update",
+        target: `workspace_member:${id}`,
+        beforeSummary: before ? { ...before } : null,
+        afterSummary: { user_id: item.user_id, role: item.role, status: item.status, workspace_id: item.workspace_id },
+      }, manager);
+      return item;
     });
     return {
       success: true,
@@ -2162,28 +2205,25 @@ export class DashboardController implements BeforeApplicationShutdown {
       expires_in_hours?: number;
     },
   ) {
-    const state = await this.workspaces.getState(
-      this.workspaceContext.currentWorkspaceId(),
-    );
-    const created = await this.workspaceInvitations().create({
-      organizationId: state.active_workspace.organization_id,
-      workspaceId: state.active_workspace.id,
-      role: body?.role || "viewer",
-      email: body?.email,
-      expiresInHours: body?.expires_in_hours,
-      createdByUserId: req.dashboardUserId || "dashboard",
-    });
-    await this.configAudit.recordManagementEvent({
-      action: "workspace_invitation.create",
-      target: `workspace_invitation:${created.id}`,
-      actor: { type: "dashboard", id: req.dashboardUserId || "dashboard" },
-      afterSummary: {
-        role: created.role,
-        status: created.status,
-        workspace_id: created.workspace_id,
-        email: created.email ? "[set]" : null,
-        expires_at: created.expires_at,
-      },
+    const created = await this.workspaces.withTransaction(async (workspaces, manager) => {
+      const workspaceId = this.workspaceContext.currentWorkspaceId();
+      await workspaces.lockWorkspace(workspaceId);
+      const workspace = await workspaces.requireWorkspace(workspaceId);
+      const item = await this.workspaceInvitations().withTransaction((invitations) => invitations.create({
+        organizationId: workspace.organization_id,
+        workspaceId: workspace.id,
+        role: body?.role || "viewer",
+        email: body?.email,
+        expiresInHours: body?.expires_in_hours,
+        createdByUserId: req.dashboardUserId || "dashboard",
+      }), manager);
+      await this.configAudit.recordManagementEvent({
+        action: "workspace_invitation.create",
+        target: `workspace_invitation:${item.id}`,
+        actor: { type: "dashboard", id: req.dashboardUserId || "dashboard" },
+        afterSummary: { role: item.role, status: item.status, workspace_id: item.workspace_id, email: item.email ? "[set]" : null, expires_at: item.expires_at },
+      }, manager);
+      return item;
     });
     return {
       success: true,
@@ -2204,16 +2244,15 @@ export class DashboardController implements BeforeApplicationShutdown {
     },
     @Param("id") id: string,
   ) {
-    const revoked = await this.workspaceInvitations().revoke(id);
-    await this.configAudit.recordManagementEvent({
-      action: "workspace_invitation.revoke",
-      target: `workspace_invitation:${id}`,
-      actor: { type: "dashboard", id: req.dashboardUserId || "dashboard" },
-      afterSummary: {
-        role: revoked.role,
-        status: revoked.status,
-        workspace_id: revoked.workspace_id,
-      },
+    const revoked = await this.workspaceInvitations().withTransaction(async (invitations, manager) => {
+      const item = await invitations.revoke(id, this.workspaceContext.currentWorkspaceId());
+      await this.configAudit.recordManagementEvent({
+        action: "workspace_invitation.revoke",
+        target: `workspace_invitation:${id}`,
+        actor: { type: "dashboard", id: req.dashboardUserId || "dashboard" },
+        afterSummary: { role: item.role, status: item.status, workspace_id: item.workspace_id },
+      }, manager);
+      return item;
     });
     return {
       success: true,
@@ -2264,33 +2303,47 @@ export class DashboardController implements BeforeApplicationShutdown {
     let deletedCallLogs = 0;
     let deletedRouteDecisions = 0;
 
-    while (true) {
-      const rows = await this.callLogRepo
-        .createQueryBuilder("log")
-        .select("log.id", "id")
-        .where("log.timestamp < :cutoff", { cutoff })
-        .orderBy("log.timestamp", "ASC")
-        .take(500)
-        .getRawMany<{ id: number }>();
-      if (rows.length === 0) break;
-      const result = await this.callLogRepo.delete(rows.map((row) => Number(row.id)));
-      deletedCallLogs += result.affected || 0;
+    while (!this.cleanupStopped) {
+      const batch = await withCoordinatedRepository(
+        this.callLogRepo,
+        true,
+        async (repo) => {
+          const rows = await repo
+            .createQueryBuilder("log")
+            .select("log.id", "id")
+            .where("log.timestamp < :cutoff", { cutoff })
+            .orderBy("log.timestamp", "ASC")
+            .take(500)
+            .getRawMany<{ id: number }>();
+          if (rows.length === 0) return { found: false, deleted: 0 };
+          const result = await repo.delete(rows.map((row) => Number(row.id)));
+          return { found: true, deleted: result.affected || 0 };
+        },
+      );
+      if (!batch.found) break;
+      deletedCallLogs += batch.deleted;
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
 
-    while (true) {
-      const rows = await this.routeDecisionRepo
-        .createQueryBuilder("decision")
-        .select("decision.id", "id")
-        .where("decision.timestamp < :cutoff", { cutoff })
-        .orderBy("decision.timestamp", "ASC")
-        .take(500)
-        .getRawMany<{ id: number }>();
-      if (rows.length === 0) break;
-      const result = await this.routeDecisionRepo.delete(
-        rows.map((row) => Number(row.id)),
+    while (!this.cleanupStopped) {
+      const batch = await withCoordinatedRepository(
+        this.routeDecisionRepo,
+        true,
+        async (repo) => {
+          const rows = await repo
+            .createQueryBuilder("decision")
+            .select("decision.id", "id")
+            .where("decision.timestamp < :cutoff", { cutoff })
+            .orderBy("decision.timestamp", "ASC")
+            .take(500)
+            .getRawMany<{ id: number }>();
+          if (rows.length === 0) return { found: false, deleted: 0 };
+          const result = await repo.delete(rows.map((row) => Number(row.id)));
+          return { found: true, deleted: result.affected || 0 };
+        },
       );
-      deletedRouteDecisions += result.affected || 0;
+      if (!batch.found) break;
+      deletedRouteDecisions += batch.deleted;
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
 
@@ -2581,7 +2634,10 @@ export class DashboardController implements BeforeApplicationShutdown {
       node: decision.selected_node_id,
       model: decision.selected_model,
       reason:
-        decision.fallback_reason || decision.strategy || decision.route_mode || null,
+        decision.fallback_reason ||
+        decision.strategy ||
+        decision.route_mode ||
+        null,
       is_fallback: decision.is_fallback,
       fallback_reason: decision.fallback_reason,
     };
@@ -2620,7 +2676,9 @@ export class DashboardController implements BeforeApplicationShutdown {
         virtual_model:
           decision.agent_virtual_model || trace?.agent?.virtual_model || null,
         requested_model:
-          decision.agent_requested_model || trace?.agent?.requested_model || null,
+          decision.agent_requested_model ||
+          trace?.agent?.requested_model ||
+          null,
         session_id:
           decision.agent_session_id || trace?.agent?.session_id || null,
         turn_id: decision.agent_turn_id || trace?.agent?.turn_id || null,
@@ -2680,7 +2738,8 @@ export class DashboardController implements BeforeApplicationShutdown {
   private groupLogsBySession(logs: CallLog[]): Map<string, CallLog[]> {
     const grouped = new Map<string, CallLog[]>();
     for (const log of logs) {
-      const sessionId = log.agent_session_id || log.session_id || log.session_key;
+      const sessionId =
+        log.agent_session_id || log.session_id || log.session_key;
       if (!sessionId) continue;
       const rows = grouped.get(sessionId) || [];
       rows.push(log);
@@ -2813,7 +2872,8 @@ export class DashboardController implements BeforeApplicationShutdown {
 
     return {
       request_id: log.request_id,
-      session_id: log.agent_session_id || log.session_id || log.session_key || null,
+      session_id:
+        log.agent_session_id || log.session_id || log.session_key || null,
       trace_id: log.trace_id || decision?.trace_id || trace?.trace_id || null,
       timestamp: log.timestamp,
       source_format: log.source_format,
@@ -3006,20 +3066,28 @@ export class DashboardController implements BeforeApplicationShutdown {
       take: 5000,
     });
 
-    const optimizerApplied = logs.filter(
-      (log) => Boolean((log as CallLog & { intelligence_optimizer_applied?: boolean }).intelligence_optimizer_applied),
+    const optimizerApplied = logs.filter((log) =>
+      Boolean(
+        (log as CallLog & { intelligence_optimizer_applied?: boolean })
+          .intelligence_optimizer_applied,
+      ),
     );
     const estimatedSavings = logs.reduce(
       (sum, log) =>
         sum +
         Number(
-          (log as CallLog & { intelligence_estimated_savings_usd?: number | null })
-            .intelligence_estimated_savings_usd || 0,
+          (
+            log as CallLog & {
+              intelligence_estimated_savings_usd?: number | null;
+            }
+          ).intelligence_estimated_savings_usd || 0,
         ),
       0,
     );
-    const asyncQueued = logs.filter(
-      (log) => Boolean((log as CallLog & { async_eval_queued?: boolean }).async_eval_queued),
+    const asyncQueued = logs.filter((log) =>
+      Boolean(
+        (log as CallLog & { async_eval_queued?: boolean }).async_eval_queued,
+      ),
     ).length;
     const tokenRisk = this.countBy(
       logs.map((log) =>
@@ -3037,11 +3105,13 @@ export class DashboardController implements BeforeApplicationShutdown {
         ),
       ),
     );
-    const byAgent = this.groupIntelligenceRows(logs, (log) =>
-      log.agent_virtual_model || log.agent_connector || "non_agent",
+    const byAgent = this.groupIntelligenceRows(
+      logs,
+      (log) => log.agent_virtual_model || log.agent_connector || "non_agent",
     );
-    const byNode = this.groupIntelligenceRows(logs, (log) =>
-      `${log.node_id || "unknown"}:${log.model || "unknown"}`,
+    const byNode = this.groupIntelligenceRows(
+      logs,
+      (log) => `${log.node_id || "unknown"}:${log.model || "unknown"}`,
     );
 
     return {
@@ -3076,15 +3146,18 @@ export class DashboardController implements BeforeApplicationShutdown {
     logs: CallLog[],
     keyFn: (log: CallLog) => string,
   ) {
-    const groups = new Map<string, {
-      key: string;
-      requests: number;
-      optimizer_applied: number;
-      estimated_savings_usd: number;
-      async_eval_queued: number;
-      quality_gate_failed: number;
-      near_or_over_budget: number;
-    }>();
+    const groups = new Map<
+      string,
+      {
+        key: string;
+        requests: number;
+        optimizer_applied: number;
+        estimated_savings_usd: number;
+        async_eval_queued: number;
+        quality_gate_failed: number;
+        near_or_over_budget: number;
+      }
+    >();
     for (const log of logs) {
       const key = keyFn(log);
       const group = groups.get(key) || {
@@ -3097,14 +3170,22 @@ export class DashboardController implements BeforeApplicationShutdown {
         near_or_over_budget: 0,
       };
       group.requests += 1;
-      if ((log as CallLog & { intelligence_optimizer_applied?: boolean }).intelligence_optimizer_applied) {
+      if (
+        (log as CallLog & { intelligence_optimizer_applied?: boolean })
+          .intelligence_optimizer_applied
+      ) {
         group.optimizer_applied += 1;
       }
       group.estimated_savings_usd += Number(
-        (log as CallLog & { intelligence_estimated_savings_usd?: number | null })
-          .intelligence_estimated_savings_usd || 0,
+        (
+          log as CallLog & {
+            intelligence_estimated_savings_usd?: number | null;
+          }
+        ).intelligence_estimated_savings_usd || 0,
       );
-      if ((log as CallLog & { async_eval_queued?: boolean }).async_eval_queued) {
+      if (
+        (log as CallLog & { async_eval_queued?: boolean }).async_eval_queued
+      ) {
         group.async_eval_queued += 1;
       }
       if (
@@ -3523,7 +3604,9 @@ export class DashboardController implements BeforeApplicationShutdown {
 
     if (cached) {
       void refresh.catch((error) => {
-        this.logger.warn(`Failed to refresh Dashboard stats: ${(error as Error).message}`);
+        this.logger.warn(
+          `Failed to refresh Dashboard stats: ${(error as Error).message}`,
+        );
       });
       return cached.value;
     }
@@ -3531,7 +3614,7 @@ export class DashboardController implements BeforeApplicationShutdown {
   }
 
   private normalizeStatsPeriod(period: string): string {
-    return ['1d', '7d', '30d', '90d'].includes(period) ? period : '1d';
+    return ["1d", "7d", "30d", "90d"].includes(period) ? period : "1d";
   }
 
   private async computeStats(
@@ -3737,12 +3820,7 @@ export class DashboardController implements BeforeApplicationShutdown {
         count: row.totalCalls,
         avgLatency: row.avgLatency,
       }));
-    return this.serializeStats(
-      aggregate,
-      tierRows,
-      nodeRows,
-      periodDays,
-    );
+    return this.serializeStats(aggregate, tierRows, nodeRows, periodDays);
   }
 
   private serializeStats(
@@ -3838,7 +3916,9 @@ export class DashboardController implements BeforeApplicationShutdown {
 
     const qb = this.callLogRepo
       .createQueryBuilder("log")
-      .where("(log.agent_session_id IS NOT NULL OR log.session_id IS NOT NULL OR log.session_key IS NOT NULL)")
+      .where(
+        "(log.agent_session_id IS NOT NULL OR log.session_id IS NOT NULL OR log.session_key IS NOT NULL)",
+      )
       .orderBy("log.timestamp", "DESC")
       .take(scanLimit);
     if (window.since)
@@ -3929,9 +4009,12 @@ export class DashboardController implements BeforeApplicationShutdown {
     const safeLimit = Math.min(Math.max(limit, 1), 500);
     const qb = this.callLogRepo
       .createQueryBuilder("log")
-      .where("(log.agent_session_id = :sessionId OR log.session_id = :sessionId OR log.session_key = :sessionId)", {
-        sessionId,
-      })
+      .where(
+        "(log.agent_session_id = :sessionId OR log.session_id = :sessionId OR log.session_key = :sessionId)",
+        {
+          sessionId,
+        },
+      )
       .orderBy("log.timestamp", "ASC")
       .take(safeLimit);
     if (window.since)
@@ -4139,14 +4222,10 @@ export class DashboardController implements BeforeApplicationShutdown {
         cost_usd: Number(Number(row.costUsd || 0).toFixed(6)),
         successes,
         success_rate:
-          requests > 0
-            ? Number(((successes / requests) * 100).toFixed(1))
-            : 0,
+          requests > 0 ? Number(((successes / requests) * 100).toFixed(1)) : 0,
         cache_hits: cacheHits,
         cache_rate:
-          requests > 0
-            ? Number(((cacheHits / requests) * 100).toFixed(1))
-            : 0,
+          requests > 0 ? Number(((cacheHits / requests) * 100).toFixed(1)) : 0,
       };
     });
 
@@ -4428,9 +4507,12 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiOkResponse({ description: "Full route decision trace for one request." })
   async getRouteDecision(@Param("requestId") requestId: string) {
     const item = await this.routeDecisionRepo.findOne({
-      where: workspaceFindWhereStrict(this.workspaceContext.currentWorkspaceId(), {
-        request_id: requestId,
-      }),
+      where: workspaceFindWhereStrict(
+        this.workspaceContext.currentWorkspaceId(),
+        {
+          request_id: requestId,
+        },
+      ),
     });
     if (!item) {
       throw new HttpException("Route decision not found", HttpStatus.NOT_FOUND);
@@ -4556,51 +4638,9 @@ export class DashboardController implements BeforeApplicationShutdown {
   }
 
   private enrichCallLogCostEstimates(log: CallLog): CallLog {
-    const cacheReadTokens = Number(log.cache_read_input_tokens || 0);
-    const cacheCreationTokens = Number(log.cache_creation_input_tokens || 0);
-    if (cacheReadTokens <= 0 && cacheCreationTokens <= 0) return log;
-
-    const pricing = this.config.getModelPricing(log.model, log.node_id);
-    if (!pricing) return log;
-
-    const inputTokens = Number(log.input_tokens || 0);
-    const outputTokens = Number(log.output_tokens || 0);
-    const normalInputTokens = Math.max(
-      0,
-      inputTokens - cacheReadTokens - cacheCreationTokens,
-    );
-    const cacheReadPrice =
-      pricing.cache_read_input ??
-      pricing.cache_read_per_1m_tokens ??
-      pricing.input;
-    const cacheCreationPrice =
-      pricing.cache_creation_input ??
-      pricing.cache_write_per_1m_tokens ??
-      pricing.input;
-    const actualCost = roundLogCost(
-      (normalInputTokens / 1_000_000) * pricing.input +
-        (cacheReadTokens / 1_000_000) * cacheReadPrice +
-        (cacheCreationTokens / 1_000_000) * cacheCreationPrice +
-        (outputTokens / 1_000_000) * pricing.output,
-    );
-    const noCacheCost = roundLogCost(
-      (inputTokens / 1_000_000) * pricing.input +
-        (outputTokens / 1_000_000) * pricing.output,
-    );
-    const storedCost = Number(log.cost_usd || 0);
-
-    if (
-      actualCost <= 0 ||
-      (storedCost > 0 && storedCost <= actualCost && log.cost_without_cache_usd)
-    ) {
-      return log;
-    }
-
-    return {
-      ...log,
-      cost_usd: actualCost,
-      cost_without_cache_usd: log.cost_without_cache_usd ?? noCacheCost,
-    };
+    // Historical amounts are evidence, not a view recomputed at today's prices.
+    // Explicit what-if replay lives in the pricing API and never rewrites these fields.
+    return log;
   }
 
   private normalizeLogPeriod(period: string | undefined): string | null {
@@ -4657,9 +4697,12 @@ export class DashboardController implements BeforeApplicationShutdown {
 
     const activity$ = this.logEventBus.activityEvents$.pipe(
       filter((activity) => activity.workspace_id === workspaceId),
-      map((activity) => ({
-        data: { type: "activity", activity },
-      }) as MessageEvent),
+      map(
+        (activity) =>
+          ({
+            data: { type: "activity", activity },
+          }) as MessageEvent,
+      ),
     );
 
     // Send an initial connected event
@@ -4827,9 +4870,10 @@ export class DashboardController implements BeforeApplicationShutdown {
       blockingOrder: BUDGET_SCOPE_ORDER.indexOf(scope) + 1,
       blockingRuleScope: rules.some((rule) => rule.isExceeded) ? scope : null,
       dailyResetAt: rules.find((rule) => rule.resetAt)?.resetAt ?? null,
-      alertThreshold: rules[0]?.alertThreshold !== undefined
-        ? Number((rules[0].alertThreshold * 100).toFixed(1))
-        : null,
+      alertThreshold:
+        rules[0]?.alertThreshold !== undefined
+          ? Number((rules[0].alertThreshold * 100).toFixed(1))
+          : null,
     };
   }
 
@@ -4877,7 +4921,8 @@ export class DashboardController implements BeforeApplicationShutdown {
     summary: "List local OSS Policy Namespaces and binding impact",
   })
   @ApiOkResponse({
-    description: "Local Policy Namespace policies with budget status and bound API key/team summaries.",
+    description:
+      "Local Policy Namespace policies with budget status and bound API key/team summaries.",
   })
   async getNamespaces() {
     const namespaces = await Promise.all(
@@ -5014,7 +5059,8 @@ export class DashboardController implements BeforeApplicationShutdown {
   @RequireDashboardRole("admin")
   @ApiTags("Policy Namespaces")
   @ApiOperation({
-    summary: "Delete a config-backed Policy Namespace after explicit impact acknowledgement",
+    summary:
+      "Delete a config-backed Policy Namespace after explicit impact acknowledgement",
   })
   @ApiParam({ name: "id", example: "team-a" })
   @ApiBody({ type: DeleteNamespaceDto, required: false })
@@ -5172,18 +5218,22 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiBody({ type: CreateTeamDto })
   @ApiOkResponse({ type: ActionResponseDto })
   async createTeam(@Body() body: CreateTeamDto) {
-    const created = await this.teams.create(body);
-    await this.configAudit.recordManagementEvent({
-      action: "team.create",
-      target: `team:${created.id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      afterSummary: this.teamAuditSummary(created),
+    return this.teams.withTransaction(async (teams, manager) => {
+      const created = await teams.create(body);
+      await this.configAudit.recordManagementEvent(
+        {
+          action: "team.create",
+          target: `team:${created.id}`,
+          afterSummary: this.teamAuditSummary(created),
+        },
+        manager,
+      );
+      return {
+        success: true,
+        message: "Team created",
+        item: created,
+      };
     });
-    return {
-      success: true,
-      message: "Team created",
-      item: created,
-    };
   }
 
   @Put("teams/:id")
@@ -5194,21 +5244,25 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiBody({ type: UpdateTeamDto })
   @ApiOkResponse({ type: ActionResponseDto })
   async updateTeam(@Param("id") id: string, @Body() body: UpdateTeamDto) {
-    const before = await this.teams.getSummary(id);
-    const updated = await this.teams.update(id, body);
-    await this.configAudit.recordManagementEvent({
-      action: "team.update",
-      target: `team:${id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      beforeSummary: this.teamAuditSummary(before),
-      afterSummary: this.teamAuditSummary(updated),
-      metadata: { fields: Object.keys(body || {}) },
+    return this.teams.withTransaction(async (teams, manager) => {
+      const before = await teams.getSummary(id);
+      const updated = await teams.update(id, body);
+      await this.configAudit.recordManagementEvent(
+        {
+          action: "team.update",
+          target: `team:${id}`,
+          beforeSummary: this.teamAuditSummary(before),
+          afterSummary: this.teamAuditSummary(updated),
+          metadata: { fields: Object.keys(body || {}) },
+        },
+        manager,
+      );
+      return {
+        success: true,
+        message: "Team updated",
+        item: updated,
+      };
     });
-    return {
-      success: true,
-      message: "Team updated",
-      item: updated,
-    };
   }
 
   @Delete("teams/:id")
@@ -5218,15 +5272,19 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiParam({ name: "id", example: "team_01h..." })
   @ApiOkResponse({ type: ActionResponseDto })
   async deleteTeam(@Param("id") id: string) {
-    const before = await this.teams.getSummary(id);
-    await this.teams.remove(id);
-    await this.configAudit.recordManagementEvent({
-      action: "team.delete",
-      target: `team:${id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      beforeSummary: this.teamAuditSummary(before),
+    return this.teams.withTransaction(async (teams, manager) => {
+      const before = await teams.getSummary(id);
+      await teams.remove(id);
+      await this.configAudit.recordManagementEvent(
+        {
+          action: "team.delete",
+          target: `team:${id}`,
+          beforeSummary: this.teamAuditSummary(before),
+        },
+        manager,
+      );
+      return { success: true, message: "Team deleted" };
     });
-    return { success: true, message: "Team deleted" };
   }
 
   @Get("api-keys")
@@ -5248,19 +5306,25 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiBody({ type: CreateGatewayApiKeyDto })
   @ApiOkResponse({ type: GatewayApiKeyCreatedResponseDto })
   async createApiKey(@Body() body: CreateGatewayApiKeyDto) {
-    const created = await this.gatewayApiKeys.create(body);
-    await this.configAudit.recordManagementEvent({
-      action: "api_key.create",
-      target: `api_key:${created.item.id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      afterSummary: this.apiKeyAuditSummary(created.item),
-    });
-    return {
-      success: true,
-      message: "Gateway API key created",
-      key: created.key,
-      item: created.item,
-    };
+    return this.gatewayApiKeys.withTransaction(
+      async (gatewayApiKeys, manager) => {
+        const created = await gatewayApiKeys.create(body);
+        await this.configAudit.recordManagementEvent(
+          {
+            action: "api_key.create",
+            target: `api_key:${created.item.id}`,
+            afterSummary: this.apiKeyAuditSummary(created.item),
+          },
+          manager,
+        );
+        return {
+          success: true,
+          message: "Gateway API key created",
+          key: created.key,
+          item: created.item,
+        };
+      },
+    );
   }
 
   @Put("api-keys/:id")
@@ -5274,21 +5338,27 @@ export class DashboardController implements BeforeApplicationShutdown {
     @Param("id") id: string,
     @Body() body: UpdateGatewayApiKeyDto,
   ) {
-    const before = await this.gatewayApiKeys.getSummary(id);
-    const updated = await this.gatewayApiKeys.update(id, body);
-    await this.configAudit.recordManagementEvent({
-      action: "api_key.update",
-      target: `api_key:${id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      beforeSummary: this.apiKeyAuditSummary(before),
-      afterSummary: this.apiKeyAuditSummary(updated),
-      metadata: { fields: Object.keys(body || {}) },
-    });
-    return {
-      success: true,
-      message: "Gateway API key updated",
-      item: updated,
-    };
+    return this.gatewayApiKeys.withTransaction(
+      async (gatewayApiKeys, manager) => {
+        const before = await gatewayApiKeys.getSummary(id);
+        const updated = await gatewayApiKeys.update(id, body);
+        await this.configAudit.recordManagementEvent(
+          {
+            action: "api_key.update",
+            target: `api_key:${id}`,
+            beforeSummary: this.apiKeyAuditSummary(before),
+            afterSummary: this.apiKeyAuditSummary(updated),
+            metadata: { fields: Object.keys(body || {}) },
+          },
+          manager,
+        );
+        return {
+          success: true,
+          message: "Gateway API key updated",
+          item: updated,
+        };
+      },
+    );
   }
 
   @Post("api-keys/:id/rotate")
@@ -5298,21 +5368,27 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiParam({ name: "id", example: "key_01h..." })
   @ApiOkResponse({ type: GatewayApiKeyCreatedResponseDto })
   async rotateApiKey(@Param("id") id: string) {
-    const before = await this.gatewayApiKeys.getSummary(id);
-    const rotated = await this.gatewayApiKeys.rotate(id);
-    await this.configAudit.recordManagementEvent({
-      action: "api_key.rotate",
-      target: `api_key:${id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      beforeSummary: this.apiKeyAuditSummary(before),
-      afterSummary: this.apiKeyAuditSummary(rotated.item),
-    });
-    return {
-      success: true,
-      message: "Gateway API key rotated",
-      key: rotated.key,
-      item: rotated.item,
-    };
+    return this.gatewayApiKeys.withTransaction(
+      async (gatewayApiKeys, manager) => {
+        const before = await gatewayApiKeys.getSummary(id);
+        const rotated = await gatewayApiKeys.rotate(id);
+        await this.configAudit.recordManagementEvent(
+          {
+            action: "api_key.rotate",
+            target: `api_key:${id}`,
+            beforeSummary: this.apiKeyAuditSummary(before),
+            afterSummary: this.apiKeyAuditSummary(rotated.item),
+          },
+          manager,
+        );
+        return {
+          success: true,
+          message: "Gateway API key rotated",
+          key: rotated.key,
+          item: rotated.item,
+        };
+      },
+    );
   }
 
   @Delete("api-keys/:id")
@@ -5322,15 +5398,21 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiParam({ name: "id", example: "key_01h..." })
   @ApiOkResponse({ type: ActionResponseDto })
   async deleteApiKey(@Param("id") id: string) {
-    const before = await this.gatewayApiKeys.getSummary(id);
-    await this.gatewayApiKeys.remove(id);
-    await this.configAudit.recordManagementEvent({
-      action: "api_key.delete",
-      target: `api_key:${id}`,
-      actor: { type: "dashboard", id: "dashboard" },
-      beforeSummary: this.apiKeyAuditSummary(before),
-    });
-    return { success: true, message: "Gateway API key deleted" };
+    return this.gatewayApiKeys.withTransaction(
+      async (gatewayApiKeys, manager) => {
+        const before = await gatewayApiKeys.getSummary(id);
+        await gatewayApiKeys.remove(id);
+        await this.configAudit.recordManagementEvent(
+          {
+            action: "api_key.delete",
+            target: `api_key:${id}`,
+            beforeSummary: this.apiKeyAuditSummary(before),
+          },
+          manager,
+        );
+        return { success: true, message: "Gateway API key deleted" };
+      },
+    );
   }
 
   @Get("agent-profiles")
@@ -5434,7 +5516,8 @@ export class DashboardController implements BeforeApplicationShutdown {
   @RequireDashboardRole("operator")
   @ApiTags("Agent Profiles")
   @ApiOperation({
-    summary: "Render redacted connector configuration for an Agent Gateway profile",
+    summary:
+      "Render redacted connector configuration for an Agent Gateway profile",
   })
   @ApiParam({ name: "id", example: "profile_01h..." })
   @ApiBody({ type: RenderAgentProfileDto })
@@ -5575,8 +5658,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     const budget = await this.budgetService.getStatus(null, null, namespace.id);
     return {
       ...this.namespaceAuditSummary(namespace),
-      rate_limit_per_minute:
-        namespace.rate_limit?.requests_per_minute || null,
+      rate_limit_per_minute: namespace.rate_limit?.requests_per_minute || null,
       budget_status: budget.map((item) => this.serializeBudgetStatus(item)),
       bindings: await this.namespaceBindings(namespace.id),
     };
@@ -5616,17 +5698,22 @@ export class DashboardController implements BeforeApplicationShutdown {
     };
   }
 
-  private namespaceUpdateInput(input: UpdateNamespaceDto): Partial<Omit<NamespaceConfig, "id">> {
+  private namespaceUpdateInput(
+    input: UpdateNamespaceDto,
+  ): Partial<Omit<NamespaceConfig, "id">> {
     const updates: Partial<Omit<NamespaceConfig, "id">> = {};
-    if (input.name !== undefined) updates.name = this.emptyStringToUndefined(input.name);
+    if (input.name !== undefined)
+      updates.name = this.emptyStringToUndefined(input.name);
     if (input.allowed_nodes !== undefined) {
       updates.allowed_nodes = this.cleanStringArray(input.allowed_nodes);
     }
     if (input.allowed_models !== undefined) {
       updates.allowed_models = this.cleanStringArray(input.allowed_models);
     }
-    if (input.budget !== undefined) updates.budget = this.namespaceBudgetInput(input.budget);
-    if (input.rate_limit !== undefined) updates.rate_limit = this.namespaceRateLimitInput(input.rate_limit);
+    if (input.budget !== undefined)
+      updates.budget = this.namespaceBudgetInput(input.budget);
+    if (input.rate_limit !== undefined)
+      updates.rate_limit = this.namespaceRateLimitInput(input.rate_limit);
     return updates;
   }
 
@@ -5635,10 +5722,16 @@ export class DashboardController implements BeforeApplicationShutdown {
   ): NamespaceConfig["budget"] | undefined {
     if (!input) return undefined;
     const budget: NonNullable<NamespaceConfig["budget"]> = {};
-    if (input.daily_token_limit !== undefined && input.daily_token_limit !== null) {
+    if (
+      input.daily_token_limit !== undefined &&
+      input.daily_token_limit !== null
+    ) {
       budget.daily_token_limit = Number(input.daily_token_limit);
     }
-    if (input.daily_cost_limit !== undefined && input.daily_cost_limit !== null) {
+    if (
+      input.daily_cost_limit !== undefined &&
+      input.daily_cost_limit !== null
+    ) {
       budget.daily_cost_limit = Number(input.daily_cost_limit);
     }
     if (input.alert_threshold !== undefined && input.alert_threshold !== null) {
@@ -5650,7 +5743,11 @@ export class DashboardController implements BeforeApplicationShutdown {
   private namespaceRateLimitInput(
     input: CreateNamespaceDto["rate_limit"] | UpdateNamespaceDto["rate_limit"],
   ): NamespaceConfig["rate_limit"] | undefined {
-    if (!input || input.requests_per_minute === undefined || input.requests_per_minute === null) {
+    if (
+      !input ||
+      input.requests_per_minute === undefined ||
+      input.requests_per_minute === null
+    ) {
       return undefined;
     }
     return { requests_per_minute: Number(input.requests_per_minute) };
@@ -5658,10 +5755,14 @@ export class DashboardController implements BeforeApplicationShutdown {
 
   private cleanStringArray(values: string[] | undefined): string[] {
     if (!Array.isArray(values)) return [];
-    return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+    return [
+      ...new Set(values.map((value) => String(value).trim()).filter(Boolean)),
+    ];
   }
 
-  private emptyStringToUndefined(value: string | undefined): string | undefined {
+  private emptyStringToUndefined(
+    value: string | undefined,
+  ): string | undefined {
     const normalized = (value || "").trim();
     return normalized || undefined;
   }
@@ -5699,7 +5800,11 @@ export class DashboardController implements BeforeApplicationShutdown {
       }));
     const boundTeamIds = new Set(boundTeams.map((team) => team.id));
     const boundDashboardKeys = apiKeys
-      .filter((key) => key.namespace_id === namespaceId || (key.team_id && boundTeamIds.has(key.team_id)))
+      .filter(
+        (key) =>
+          key.namespace_id === namespaceId ||
+          (key.team_id && boundTeamIds.has(key.team_id)),
+      )
       .map((key) => ({
         id: key.id,
         name: key.name,
@@ -5836,8 +5941,9 @@ export class DashboardController implements BeforeApplicationShutdown {
     const sanitizedNodes = full.nodes.map((node) => ({
       ...node,
       api_key: node.api_key ? maskSecretForDisplay(node.api_key) : undefined,
-      api_key_secret_reference:
-        node.api_key ? (this.secretResolver?.isReference(node.api_key) ?? false) : false,
+      api_key_secret_reference: node.api_key
+        ? (this.secretResolver?.isReference(node.api_key) ?? false)
+        : false,
       credentials: node.credentials?.map((credential) => ({
         ...credential,
         api_key: maskSecretForDisplay(credential.api_key),
@@ -5862,7 +5968,9 @@ export class DashboardController implements BeforeApplicationShutdown {
       budget: full.budget,
       namespaces: full.namespaces || [],
       shadow: this.shadowTraffic.getStatus(),
-      realtime: this.realtime?.getStatus(this.workspaceContext.currentWorkspaceId()) || {
+      realtime: this.realtime?.getStatus(
+        this.workspaceContext.currentWorkspaceId(),
+      ) || {
         enabled: false,
         experimental: true,
         path: "/v1/realtime",
@@ -6162,7 +6270,9 @@ export class DashboardController implements BeforeApplicationShutdown {
     let models = loaded.catalog.providers
       .filter((entry) => includeDashboardProvider(entry, showLegacy))
       .flatMap((entry) =>
-        entry.models.map((model) => toDashboardCatalogModel(model, entry, context)),
+        entry.models.map((model) =>
+          toDashboardCatalogModel(model, entry, context),
+        ),
       );
     if (provider)
       models = models.filter((model) => model.provider === provider);
@@ -6191,16 +6301,15 @@ export class DashboardController implements BeforeApplicationShutdown {
   @Post("provider-extensibility/templates/custom/preview")
   @RequireDashboardRole("operator")
   @ApiOperation({
-    summary: "Preview a custom provider node and catalog manifest without saving secrets",
+    summary:
+      "Preview a custom provider node and catalog manifest without saving secrets",
   })
   @ApiBody({ type: CustomProviderTemplatePreviewDto })
   @ApiOkResponse({
     description:
       "Sanitized custom provider node and catalog manifest preview. Provider API keys, raw headers, prompts, responses, media bytes, and tool payloads are never returned.",
   })
-  previewCustomProviderTemplate(
-    @Body() dto: CustomProviderTemplatePreviewDto,
-  ) {
+  previewCustomProviderTemplate(@Body() dto: CustomProviderTemplatePreviewDto) {
     return this.providerExtensibility.previewCustomProviderTemplate(dto);
   }
 
@@ -6221,7 +6330,8 @@ export class DashboardController implements BeforeApplicationShutdown {
   @Get("provider-health")
   @RequireDashboardRole("viewer")
   @ApiOperation({
-    summary: "Get workspace-scoped provider health, latency, errors, and pricing warnings",
+    summary:
+      "Get workspace-scoped provider health, latency, errors, and pricing warnings",
   })
   @ApiQuery({ name: "period", required: false, example: "24h" })
   @ApiOkResponse({
@@ -6484,9 +6594,13 @@ export class DashboardController implements BeforeApplicationShutdown {
         health_check: node.health_check ?? null,
         auth_type: node.auth_type || null,
         auth_header_name:
-          node.auth_type === "custom-header" ? node.auth_header_name || null : null,
+          node.auth_type === "custom-header"
+            ? node.auth_header_name || null
+            : null,
         auth_header_prefix:
-          node.auth_type === "custom-header" ? node.auth_header_prefix || null : null,
+          node.auth_type === "custom-header"
+            ? node.auth_header_prefix || null
+            : null,
         credentials: (node.credentials || []).map((credential) => ({
           id: credential.id,
           enabled: credential.enabled !== false,
@@ -6495,17 +6609,17 @@ export class DashboardController implements BeforeApplicationShutdown {
           api_key_secret_reference:
             this.secretResolver?.isReference(credential.api_key) ?? false,
         })),
-        credential_pool:
-          this.credentialPool?.getNodeStatus(node) || {
-            enabled: false,
-            strategy: node.credential_pool?.strategy || "least_in_flight",
-            sticky_by: node.credential_pool?.sticky_by || "agent_session",
-            cooldown_ms: node.credential_pool?.cooldown_ms ?? 60000,
-            max_failures: node.credential_pool?.max_failures ?? 3,
-            retry_on_status:
-              node.credential_pool?.retry_on_status || [429, 500, 502, 503, 504],
-            credentials: [],
-          },
+        credential_pool: this.credentialPool?.getNodeStatus(node) || {
+          enabled: false,
+          strategy: node.credential_pool?.strategy || "least_in_flight",
+          sticky_by: node.credential_pool?.sticky_by || "agent_session",
+          cooldown_ms: node.credential_pool?.cooldown_ms ?? 60000,
+          max_failures: node.credential_pool?.max_failures ?? 3,
+          retry_on_status: node.credential_pool?.retry_on_status || [
+            429, 500, 502, 503, 504,
+          ],
+          credentials: [],
+        },
         endpoints,
         models: node.models,
         embedding_models: node.embedding_models || [],
@@ -6524,6 +6638,7 @@ export class DashboardController implements BeforeApplicationShutdown {
         video_generations_endpoint: node.video_generations_endpoint || null,
         video_endpoint: node.video_endpoint || null,
         video_status_endpoint: node.video_status_endpoint || null,
+        video_result_profile: node.video_result_profile ?? "generic-v1",
         video_content_endpoint: node.video_content_endpoint || null,
         video_cancel_endpoint: node.video_cancel_endpoint || null,
         batch_endpoint: node.batch_endpoint || null,
@@ -6542,6 +6657,9 @@ export class DashboardController implements BeforeApplicationShutdown {
         capabilities: this.capabilityService.getNodeCapabilities(node.id),
         modalities: this.capabilityService.resolveNodeModalities(node.id),
         model_capabilities: modelCapabilities,
+        configured_pricing_models: Object.entries(node.model_capabilities ?? {})
+          .filter(([, capability]) => capability.pricing !== undefined)
+          .map(([model]) => model),
         tags: node.tags || [],
         aliases: node.model_aliases || {},
         upstream_model_aliases: node.upstream_model_aliases || {},
@@ -6810,14 +6928,18 @@ export class DashboardController implements BeforeApplicationShutdown {
     const startTime = Date.now();
     const timeoutMs = 15_000;
     try {
-      const response = await fetchWithTimeout(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      }, {
-        timeoutMs,
-        timeoutMessage: `Dashboard provider connectivity test timed out after ${timeoutMs}ms.`,
-      });
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        },
+        {
+          timeoutMs,
+          timeoutMessage: `Dashboard provider connectivity test timed out after ${timeoutMs}ms.`,
+        },
+      );
 
       const latencyMs = Date.now() - startTime;
       const responseText = await response.text().catch(() => "");
@@ -6990,6 +7112,7 @@ export class DashboardController implements BeforeApplicationShutdown {
             video_generations_endpoint: dto.video_generations_endpoint,
             video_endpoint: dto.video_endpoint,
             video_status_endpoint: dto.video_status_endpoint,
+            video_result_profile: dto.video_result_profile,
             video_content_endpoint: dto.video_content_endpoint,
             video_cancel_endpoint: dto.video_cancel_endpoint,
             batch_endpoint: dto.batch_endpoint,
@@ -7037,6 +7160,18 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiOkResponse({ type: ActionResponseDto })
   async updateNode(@Param("id") nodeId: string, @Body() dto: UpdateNodeDto) {
     try {
+      if (
+        dto.model_pricing_updates !== undefined &&
+        dto.model_capabilities !== undefined
+      )
+        throw new HttpException(
+          {
+            success: false,
+            message:
+              "Choose a lossless pricing patch or a full capability replacement, not both.",
+          },
+          HttpStatus.BAD_REQUEST,
+        );
       // Keep omitted fields intact. class-transformer may materialize optional
       // DTO properties as undefined, so strip them before merging into config.
       const updates: Partial<typeof dto> = {};
@@ -7062,7 +7197,10 @@ export class DashboardController implements BeforeApplicationShutdown {
           const apiKey = credential.api_key?.trim() || current?.api_key;
           if (!apiKey?.trim()) {
             throw new HttpException(
-              { success: false, message: "A new credential requires a non-blank api_key." },
+              {
+                success: false,
+                message: "A new credential requires a non-blank api_key.",
+              },
               HttpStatus.BAD_REQUEST,
             );
           }
@@ -7077,11 +7215,27 @@ export class DashboardController implements BeforeApplicationShutdown {
           actor: { type: "dashboard", id: "dashboard" },
           metadata: { fields: Object.keys(updates) },
         },
-        () =>
+        () => {
+          const { model_pricing_updates: pricingUpdates, ...nodeUpdates } =
+            updates;
+          if (pricingUpdates !== undefined) {
+            try {
+              nodeUpdates.model_capabilities = applyNodePricingUpdates(
+                this.config.getNode(nodeId)?.model_capabilities,
+                pricingUpdates,
+              );
+            } catch (error) {
+              throw new HttpException(
+                { success: false, message: (error as Error).message },
+                HttpStatus.BAD_REQUEST,
+              );
+            }
+          }
           this.config.updateNode(
             nodeId,
-            updates as Parameters<typeof this.config.updateNode>[1],
-          ),
+            nodeUpdates as Parameters<typeof this.config.updateNode>[1],
+          );
+        },
       );
       this.activeHealth.refreshSchedules();
       return { success: true, message: `Node "${nodeId}" updated` };

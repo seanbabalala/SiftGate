@@ -1,0 +1,54 @@
+name: Customer installation checks
+on:
+  pull_request:
+    paths:
+      - deploy/customer/**
+      - scripts/*customer*
+      - scripts/check-node-runtime.js
+      - scripts/check-ci-test-results.js
+      - test/customer/**
+      - test/runtime/**
+      - docs/customer-*
+      - .github/workflows/*.yml
+      - .nvmrc
+      - .npmrc
+      - frontend/.npmrc
+      - Dockerfile
+      - package.json
+      - package-lock.json
+      - frontend/package.json
+      - frontend/package-lock.json
+  push:
+    branches: [main, master, 'codex/**']
+    paths:
+      - deploy/customer/**
+      - scripts/*customer*
+      - scripts/check-node-runtime.js
+      - scripts/check-ci-test-results.js
+      - test/customer/**
+      - test/runtime/**
+      - docs/customer-*
+      - .github/workflows/*.yml
+      - .nvmrc
+      - .npmrc
+      - frontend/.npmrc
+      - Dockerfile
+      - package.json
+      - package-lock.json
+      - frontend/package.json
+      - frontend/package-lock.json
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: npm run runtime:check && npm run test:runtime
+      - run: python3 -m unittest discover -s test/customer -v
+      - run: python3 -m py_compile deploy/customer/siftgate.py scripts/package-customer-release.py scripts/smoke-customer-install.py scripts/upload-customer-assets.py
+      - run: node --check deploy/customer/container-ops.cjs

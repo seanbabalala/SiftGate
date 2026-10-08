@@ -1,3 +1,4 @@
+import { PricingModule } from '../pricing/pricing.module';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { PipelineService } from './pipeline.service';
@@ -23,6 +24,7 @@ import { CallLog, RouteDecisionLog } from '../database/entities';
     ScoringModule,
     RoutingModule,
     BudgetModule,
+    PricingModule,
     CacheModule,
     DashboardModule,
     ControlPlaneModule,

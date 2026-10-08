@@ -28,6 +28,8 @@ import {
   FileSearch,
   BrainCircuit,
   ReceiptText,
+  BookOpen,
+  BellRing,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHealth } from '@/hooks/use-health'
@@ -42,6 +44,7 @@ const navGroups = [
     items: [
       { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
       { to: '/logs', icon: ScrollText, labelKey: 'nav.logs' },
+      { to: '/alerts', icon: BellRing, labelKey: 'nav.alertConnectors' },
       { to: '/sessions', icon: Network, labelKey: 'nav.sessions' },
       { to: '/route-decisions', icon: GitFork, labelKey: 'nav.routeExplanation' },
       { to: '/analytics', icon: BarChart3, labelKey: 'nav.analytics' },
@@ -62,6 +65,7 @@ const navGroups = [
     items: [
       { to: '/semantic-platform', icon: BrainCircuit, labelKey: 'nav.semanticPlatform' },
       { to: '/cost-platform', icon: ReceiptText, labelKey: 'nav.costPlatform' },
+      { to: '/pricing', icon: BookOpen, labelKey: 'nav.pricing' },
       { to: '/budget', icon: Wallet, labelKey: 'nav.budget' },
       { to: '/experiments', icon: FlaskConical, labelKey: 'nav.experiments' },
       { to: '/shadow', icon: GitCompareArrows, labelKey: 'nav.shadow' },

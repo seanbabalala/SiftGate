@@ -953,5 +953,6 @@
   "mcp.setup.bullets.toolProxy": "Clients llaman al MCP proxy con Gateway API key; SiftGate reenvía a configured MCP servers.",
   "mcp.setup.bullets.notModelRouting": "Esta superficie gobierna tool calls. La selección de modelo sigue en routing, nodes y API key policy.",
   "mcp.setup.bullets.endpointPermissions": "Usa allowed_endpoints como mcp, mcp:server o mcp:server:tool junto con namespace allow-lists.",
-  "mcp.setup.bullets.noPayloadStorage": "Audit guarda method, tool, scope, status, latency y size, no tool arguments, results, headers ni secrets."
+  "mcp.setup.bullets.noPayloadStorage": "Audit guarda method, tool, scope, status, latency y size, no tool arguments, results, headers ni secrets.",
+  "alerts.configure": "Configurar conectores"
 }

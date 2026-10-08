@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
-import { Repository } from 'typeorm';
+import { Repository, type EntityManager } from 'typeorm';
+import {
+  coordinatedRepositoryOperation,
+  lockRepositoryWriter,
+  withCoordinatedRepository,
+} from '../database/coordinated-repository';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '../config/config.service';
 import type {
@@ -139,6 +144,7 @@ interface SemanticDashboardMetricRow extends Record<string, unknown> {
 
 @Injectable()
 export class SemanticPlatformService {
+  private promptTransaction?: EntityManager;
   constructor(
     private readonly config: ConfigService,
     private readonly workspaceContext: WorkspaceContextService,
@@ -231,14 +237,44 @@ export class SemanticPlatformService {
     };
   }
 
+  private promptWrite<T>(
+    action: (service: SemanticPlatformService) => Promise<T>,
+  ): Promise<T> {
+    return coordinatedRepositoryOperation(
+      this.promptTemplateRepo,
+      true,
+      (manager) => {
+        if (!manager) return action(this);
+        const scoped = new SemanticPlatformService(
+          this.config,
+          this.workspaceContext,
+          this.capabilityService,
+          this.cacheService,
+          manager.getRepository(PromptTemplate),
+          this.callLogRepo,
+          this.routeDecisionRepo,
+          this.sqliteAnalytics,
+        );
+        scoped.promptTransaction = manager;
+        return action(scoped);
+      },
+    );
+  }
+
   async listPromptTemplates(options: { limit?: number } = {}) {
-    const qb = this.promptTemplateRepo
-      .createQueryBuilder('template')
-      .orderBy('template.prompt_key', 'ASC')
-      .addOrderBy('template.version', 'DESC')
-      .take(Math.max(1, Math.min(200, options.limit || 100)));
-    applyWorkspaceQueryScope(qb, 'template', this.workspaceId());
-    const rows = await qb.getMany();
+    const rows = await withCoordinatedRepository(
+      this.promptTemplateRepo,
+      false,
+      async (repo) => {
+        const qb = repo
+          .createQueryBuilder('template')
+          .orderBy('template.prompt_key', 'ASC')
+          .addOrderBy('template.version', 'DESC')
+          .take(Math.max(1, Math.min(200, options.limit || 100)));
+        applyWorkspaceQueryScope(qb, 'template', this.workspaceId());
+        return qb.getMany();
+      },
+    );
     return {
       total: rows.length,
       items: rows.map((row) => this.toPromptTemplateSummary(row)),
@@ -246,15 +282,29 @@ export class SemanticPlatformService {
     };
   }
 
-  async createPromptTemplate(input: CreatePromptTemplateInput) {
+  createPromptTemplate(input: CreatePromptTemplateInput) {
+    return this.promptWrite((service) =>
+      service.createPromptTemplateInTransaction(input),
+    );
+  }
+
+  private async createPromptTemplateInTransaction(
+    input: CreatePromptTemplateInput,
+  ) {
     if (!this.config.semanticPlatform.prompt_registry.enabled) {
       throw new BadRequestException('Prompt Registry is disabled.');
     }
     const promptKey = sanitizeIdentifier(input.prompt_key, 120);
     if (!promptKey) throw new BadRequestException('prompt_key is required.');
     const template = typeof input.template === 'string' ? input.template : '';
-    if (!template.trim()) throw new BadRequestException('template is required.');
+    if (!template.trim())
+      throw new BadRequestException('template is required.');
     const workspaceId = this.workspaceId();
+    await lockRepositoryWriter(
+      this.promptTemplateRepo,
+      this.promptTransaction,
+      JSON.stringify([workspaceId, promptKey]),
+    );
     const latest = await this.promptTemplateRepo.findOne({
       where: workspaceFindWhere(workspaceId, { prompt_key: promptKey }),
       order: { version: 'DESC' },
@@ -272,7 +322,11 @@ export class SemanticPlatformService {
         status: 'active',
         template_content: canStoreContent ? template : null,
         template_hash: sha256(template),
-        variables_json: JSON.stringify((input.variables || []).map((item) => sanitizeIdentifier(item, 80)).filter(Boolean)),
+        variables_json: JSON.stringify(
+          (input.variables || [])
+            .map((item) => sanitizeIdentifier(item, 80))
+            .filter(Boolean),
+        ),
         route_policy_id: sanitizeIdentifier(input.route_policy_id, 120),
         ab_metadata_json: safeJson(input.ab_metadata),
         metadata_json: safeJson(input.metadata),
@@ -287,7 +341,19 @@ export class SemanticPlatformService {
     };
   }
 
-  async archivePromptTemplate(id: string) {
+  archivePromptTemplate(id: string) {
+    return this.promptWrite((service) =>
+      service.archivePromptTemplateInTransaction(id),
+    );
+  }
+
+  private async archivePromptTemplateInTransaction(id: string) {
+    const original = await this.findPromptTemplate(id);
+    await lockRepositoryWriter(
+      this.promptTemplateRepo,
+      this.promptTransaction,
+      JSON.stringify([this.workspaceId(), original.prompt_key]),
+    );
     const row = await this.findPromptTemplate(id);
     row.status = 'archived';
     const saved = await this.promptTemplateRepo.save(row);
@@ -460,19 +526,28 @@ export class SemanticPlatformService {
         route_policy_id: null,
         ab_metadata: null,
         content_available: false,
-        reason: enabled ? 'prompt_key_not_supplied' : 'prompt_registry_disabled',
+        reason: enabled
+          ? 'prompt_key_not_supplied'
+          : 'prompt_registry_disabled',
       };
     }
-    const requestedVersion = Number(canonical.metadata.raw_headers?.['x-siftgate-prompt-version']);
-    const row = await this.promptTemplateRepo.findOne({
-      where: workspaceFindWhere(this.workspaceId(), {
-        prompt_key: promptKey,
-        ...(Number.isFinite(requestedVersion) && requestedVersion > 0
-          ? { version: requestedVersion }
-          : {}),
-      }),
-      order: { version: 'DESC' },
-    });
+    const requestedVersion = Number(
+      canonical.metadata.raw_headers?.['x-siftgate-prompt-version'],
+    );
+    const row = await withCoordinatedRepository(
+      this.promptTemplateRepo,
+      false,
+      (repo) =>
+        repo.findOne({
+          where: workspaceFindWhere(this.workspaceId(), {
+            prompt_key: promptKey,
+            ...(Number.isFinite(requestedVersion) && requestedVersion > 0
+              ? { version: requestedVersion }
+              : {}),
+          }),
+          order: { version: 'DESC' },
+        }),
+    );
     if (!row || row.status !== 'active') {
       return {
         enabled,

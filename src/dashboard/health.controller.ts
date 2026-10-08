@@ -48,6 +48,13 @@ export class HealthController {
     private readonly databaseHealth?: DatabaseHealthService,
   ) {}
 
+  @Get('live')
+  @ApiOperation({ summary: 'Local HTTP liveness; independent of database and provider health' })
+  @ApiOkResponse({ description: 'The gateway HTTP event loop can serve requests.' })
+  live() {
+    return { status: 'alive' };
+  }
+
   @Get('health')
   @ApiOperation({ summary: 'Gateway health, database, budget, and circuit breaker status' })
   @ApiOkResponse({ type: HealthResponseDto })

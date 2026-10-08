@@ -4,7 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Not, Repository } from 'typeorm';
+import { FindOptionsWhere, Not, Repository, type EntityManager } from 'typeorm';
+import {
+  coordinatedRepositoryOperation,
+  isUniqueNameConflict,
+  withCoordinatedRepository,
+} from '../database/coordinated-repository';
 import { ConfigService } from '../config/config.service';
 import { WorkspaceContextService } from '../workspaces/workspace-context.service';
 import {
@@ -178,6 +183,8 @@ export interface AgentVirtualModelMatch {
 
 @Injectable()
 export class AgentProfileService {
+  private transactionManager?: EntityManager;
+  private checkedName?: string;
   constructor(
     private readonly config: ConfigService,
     private readonly gatewayApiKeys: GatewayApiKeyService,
@@ -186,15 +193,54 @@ export class AgentProfileService {
     private readonly profileRepo: Repository<AgentProfile>,
   ) {}
 
+  private writeProfile<T>(
+    action: (service: AgentProfileService) => Promise<T>,
+  ): Promise<T> {
+    return coordinatedRepositoryOperation(
+      this.profileRepo,
+      true,
+      async (manager) => {
+        const service = manager
+          ? new AgentProfileService(
+              this.config,
+              this.gatewayApiKeys,
+              this.workspaceContext,
+              manager.getRepository(AgentProfile),
+            )
+          : this;
+        service.transactionManager = manager;
+        try {
+          return await action(service);
+        } catch (error) {
+          if (
+            service.checkedName &&
+            isUniqueNameConflict(this.profileRepo, error)
+          )
+            throw new BadRequestException(
+              `Agent profile name already exists: ${service.checkedName}`,
+            );
+          throw error;
+        }
+      },
+    );
+  }
+
   async list(): Promise<AgentProfileSummary[]> {
-    const profiles = await this.profileRepo.find({
-      where: workspaceFindWhere(this.workspaceId(), {}),
-      order: { created_at: 'DESC' },
-    });
+    const profiles = await withCoordinatedRepository(
+      this.profileRepo,
+      false,
+      (repo) =>
+        repo.find({
+          where: workspaceFindWhere(this.workspaceId(), {}),
+          order: { created_at: 'DESC' },
+        }),
+    );
     return Promise.all(profiles.map((profile) => this.toSummary(profile)));
   }
 
   async create(dto: CreateAgentProfileDto): Promise<AgentProfileSummary> {
+    if (!this.transactionManager && this.profileRepo.manager?.connection)
+      return this.writeProfile((service) => service.create(dto));
     const normalized = await this.normalizeCreateDto(dto);
     const workspaceId = this.workspaceId();
     normalized.workspace_id = workspaceId;
@@ -208,10 +254,16 @@ export class AgentProfileService {
     id: string,
     dto: UpdateAgentProfileDto,
   ): Promise<AgentProfileSummary> {
+    if (!this.transactionManager && this.profileRepo.manager?.connection)
+      return this.writeProfile((service) => service.update(id, dto));
     const entity = await this.getById(id);
     const normalized = await this.normalizeUpdateDto(dto, entity);
     if (normalized.name && normalized.name !== entity.name) {
-      await this.assertUniqueName(normalized.name, id, this.entityWorkspaceId(entity));
+      await this.assertUniqueName(
+        normalized.name,
+        id,
+        this.entityWorkspaceId(entity),
+      );
     }
     Object.assign(entity, normalized);
     const saved = await this.profileRepo.save(entity);
@@ -219,6 +271,8 @@ export class AgentProfileService {
   }
 
   async remove(id: string): Promise<void> {
+    if (!this.transactionManager && this.profileRepo.manager?.connection)
+      return this.writeProfile((service) => service.remove(id));
     const entity = await this.getById(id);
     await this.profileRepo.remove(entity);
   }
@@ -227,6 +281,8 @@ export class AgentProfileService {
     id: string,
     dto: RenderAgentProfileDto = {},
   ): Promise<AgentProfileRenderedConfig> {
+    if (!this.transactionManager && this.profileRepo.manager?.connection)
+      return this.writeProfile((service) => service.render(id, dto));
     const entity = await this.getById(id);
     const summary = await this.toSummary(entity);
     entity.last_generated_at = new Date();
@@ -243,16 +299,21 @@ export class AgentProfileService {
     },
   ): Promise<AgentVirtualModel[]> {
     if (!apiKeyId || permissions?.allow_auto === false) return [];
-    const profiles = await this.profileRepo.find({
-      where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(
-        this.workspaceId(),
-        {
-          status: 'active',
-          api_key_id: apiKeyId,
-        },
-      ),
-      order: { updated_at: 'DESC' },
-    });
+    const profiles = await withCoordinatedRepository(
+      this.profileRepo,
+      false,
+      (repo) =>
+        repo.find({
+          where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(
+            this.workspaceId(),
+            {
+              status: 'active',
+              api_key_id: apiKeyId,
+            },
+          ),
+          order: { updated_at: 'DESC' },
+        }),
+    );
     const models: AgentVirtualModel[] = [];
     const seen = new Set<string>();
     for (const profile of profiles) {
@@ -283,14 +344,24 @@ export class AgentProfileService {
     return models;
   }
 
-  async hasActiveProfileForApiKey(apiKeyId: string | undefined): Promise<boolean> {
+  async hasActiveProfileForApiKey(
+    apiKeyId: string | undefined,
+  ): Promise<boolean> {
     if (!apiKeyId) return false;
-    const count = await this.profileRepo.count({
-      where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(this.workspaceId(), {
-        status: 'active',
-        api_key_id: apiKeyId,
-      }),
-    });
+    const count = await withCoordinatedRepository(
+      this.profileRepo,
+      false,
+      (repo) =>
+        repo.count({
+          where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(
+            this.workspaceId(),
+            {
+              status: 'active',
+              api_key_id: apiKeyId,
+            },
+          ),
+        }),
+    );
     return count > 0;
   }
 
@@ -300,22 +371,38 @@ export class AgentProfileService {
   ): Promise<AgentVirtualModelMatch | null> {
     const normalizedModel = (requestedModel || '').trim();
     if (!apiKeyId || !normalizedModel) return null;
-    let profile = await this.profileRepo.findOne({
-      where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(this.workspaceId(), {
-        status: 'active',
-        api_key_id: apiKeyId,
-        smart_model_id: normalizedModel,
-      }),
-      order: { updated_at: 'DESC' },
-    });
-    if (!profile && this.isCodingAgentVirtualModel(normalizedModel)) {
-      profile = await this.profileRepo.findOne({
-        where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(this.workspaceId(), {
-          status: 'active',
-          api_key_id: apiKeyId,
+    let profile = await withCoordinatedRepository(
+      this.profileRepo,
+      false,
+      (repo) =>
+        repo.findOne({
+          where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(
+            this.workspaceId(),
+            {
+              status: 'active',
+              api_key_id: apiKeyId,
+              smart_model_id: normalizedModel,
+            },
+          ),
+          order: { updated_at: 'DESC' },
         }),
-        order: { updated_at: 'DESC' },
-      });
+    );
+    if (!profile && this.isCodingAgentVirtualModel(normalizedModel)) {
+      profile = await withCoordinatedRepository(
+        this.profileRepo,
+        false,
+        (repo) =>
+          repo.findOne({
+            where: workspaceFindWhere<FindOptionsWhere<AgentProfile>>(
+              this.workspaceId(),
+              {
+                status: 'active',
+                api_key_id: apiKeyId,
+              },
+            ),
+            order: { updated_at: 'DESC' },
+          }),
+      );
     }
     if (!profile) return null;
     const summary = await this.toSummary(profile);
@@ -767,9 +854,18 @@ export class AgentProfileService {
   }
 
   private async getById(id: string): Promise<AgentProfile> {
-    const entity = await this.profileRepo.findOne({
-      where: workspaceFindWhere(this.workspaceId(), { id }),
-    });
+    const entity = await withCoordinatedRepository(
+      this.profileRepo,
+      false,
+      (repo) =>
+        repo.findOne({
+          where: workspaceFindWhere(this.workspaceId(), { id }),
+          ...(this.transactionManager &&
+          this.profileRepo.manager.connection.options.type === 'postgres'
+            ? { lock: { mode: 'pessimistic_write' as const } }
+            : {}),
+        }),
+    );
     if (!entity) throw new NotFoundException(`Agent profile not found: ${id}`);
     return entity;
   }
@@ -779,12 +875,20 @@ export class AgentProfileService {
     exceptId?: string,
     workspaceId = this.workspaceId(),
   ): Promise<void> {
+    this.checkedName = name;
     const where = exceptId ? { name, id: Not(exceptId) } : { name };
-    const scopedExisting = await this.profileRepo.findOne({
-      where: workspaceFindWhere(workspaceId, where),
-    });
+    const scopedExisting = await withCoordinatedRepository(
+      this.profileRepo,
+      false,
+      (repo) =>
+        repo.findOne({
+          where: workspaceFindWhere(workspaceId, where),
+        }),
+    );
     if (scopedExisting) {
-      throw new BadRequestException(`Agent profile name already exists: ${name}`);
+      throw new BadRequestException(
+        `Agent profile name already exists: ${name}`,
+      );
     }
   }
 
@@ -888,7 +992,14 @@ export class AgentProfileService {
     strict = false,
   ): Promise<AgentProfileGatewayKeySummary | null> {
     try {
-      return this.toGatewayKeySummary(await this.gatewayApiKeys.getSummary(id));
+      return this.toGatewayKeySummary(
+        await (this.transactionManager
+          ? this.gatewayApiKeys.getSummaryInTransaction(
+              id,
+              this.transactionManager,
+            )
+          : this.gatewayApiKeys.getSummary(id)),
+      );
     } catch (_error) {
       if (strict) {
         throw new BadRequestException(`Unknown api_key_id: ${id}`);

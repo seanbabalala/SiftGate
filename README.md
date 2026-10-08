@@ -10,16 +10,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/seanbabalala/ai-gateway/releases/tag/v2.11.5"><img alt="Release" src="https://img.shields.io/badge/release-v2.11.5-22d7a8"></a>
+  <a href="https://github.com/seanbabalala/ai-gateway/releases/tag/v2.11.6"><img alt="Release" src="https://img.shields.io/badge/release-v2.11.6-22d7a8"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-062f25"></a>
   <a href="docs/SECURITY.md"><img alt="Privacy default" src="https://img.shields.io/badge/privacy-metadata--only%20by%20default-22d7a8"></a>
   <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-7%20languages-062f25"></a>
 </p>
 
 <p align="center">
-  Current release: <strong>v2.11.5</strong>
+  Current release: <strong>v2.11.6</strong>
 </p>
-<!-- Current release: **v2.11.5** -->
+<!-- Current release: **v2.11.6** -->
 
 <table>
   <tr>
@@ -581,9 +581,13 @@ code, diffs, hidden reasoning text, or resolved secrets by default.
 
 ## Quick Start
 
+For a versioned, persistent customer Docker installation, see the [customer install kit](docs/customer-install.md) ([中文](docs/customer-install.zh-cn.md)). Source availability does not imply that the newest image is already published. Maintainers: follow the [formal image release runbook](docs/customer-release.md) ([中文](docs/customer-release.zh-cn.md)). Check its S0–S3 state gate first: files on a feature branch do not mean main is release-ready.
+
 ```bash
 git clone https://github.com/seanbabalala/ai-gateway.git
 cd ai-gateway
+# Select Node >=22.13.0 <23 using .nvmrc (nvm install && nvm use when available).
+npm run runtime:check
 npm install
 cd frontend && npm install && cd ..
 cp gateway.config.example.yaml gateway.config.yaml

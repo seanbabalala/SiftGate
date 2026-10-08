@@ -25,6 +25,7 @@ import {
   WorkspaceMembership,
 } from "../database/entities";
 import { buildTypeOrmDatabaseOptions } from "../database/database-options";
+import { backupSqliteDatabase } from "../database/sqlite-backup";
 import {
   DEFAULT_ORGANIZATION_ID,
   DEFAULT_ORGANIZATION_NAME,
@@ -340,7 +341,7 @@ export async function migrateSqliteToPostgres(
     const tables = await inspectSourceTables(source, warnings);
     const backupPath =
       options.backup && !dryRun
-        ? createSqliteBackup(sqlitePath, cwd, now, options.backupPath)
+        ? await createSqliteBackup(sqlitePath, cwd, now, options.backupPath)
         : undefined;
 
     const importTables = ensureWorkspaceCoreRows(tables);
@@ -1085,18 +1086,16 @@ function toJsonObjectOrNull(value: unknown): Record<string, unknown> | null {
   }
 }
 
-function createSqliteBackup(
+async function createSqliteBackup(
   sqlitePath: string,
   cwd: string,
   now: () => Date,
   requestedPath?: string,
-): string {
+): Promise<string> {
   const backupPath = requestedPath
     ? resolvePath(cwd, requestedPath)
     : `${sqlitePath}.backup-${formatTimestamp(now())}.db`;
-  fs.mkdirSync(path.dirname(backupPath), { recursive: true });
-  fs.copyFileSync(sqlitePath, backupPath, fs.constants.COPYFILE_EXCL);
-  return backupPath;
+  return backupSqliteDatabase(sqlitePath, backupPath);
 }
 
 function formatTimestamp(date: Date): string {

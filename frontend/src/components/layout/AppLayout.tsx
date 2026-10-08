@@ -1,4 +1,4 @@
-import { Outlet, useLocation } from 'react-router-dom'
+import { useLocation, useOutlet } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { Sidebar } from './Sidebar'
@@ -9,6 +9,9 @@ export function AppLayout() {
   const { t } = useTranslation('common')
   const sidebar = useSidebar()
   const location = useLocation()
+  // Preserve the exiting route's element. A live <Outlet> would render the new
+  // page inside the old animation key, then remount it and discard early input.
+  const outlet = useOutlet()
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-[var(--background)]">
@@ -42,7 +45,7 @@ export function AppLayout() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <Outlet />
+              {outlet}
             </motion.div>
           </AnimatePresence>
         </main>

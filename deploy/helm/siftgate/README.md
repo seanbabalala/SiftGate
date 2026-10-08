@@ -23,7 +23,7 @@ Secrets, external ConfigMaps, resource limits, and persistence are opt-in.
   owns `gateway.config.yaml`.
 - Switch `config.data.database` to PostgreSQL before setting
   `postgres.enabled=true`.
-- Use `/ready` for readiness and `/health` for liveness/monitoring. `/ready`
+- Use `/ready` for readiness, `/live` for liveness, and `/health` for monitoring. `/ready`
   checks database availability only; provider degradation stays visible in
   `/health` without evicting pods.
 - Switch `config.data.state.backend` to `redis` before setting

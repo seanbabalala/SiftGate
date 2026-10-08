@@ -55,6 +55,9 @@ start with the [engineering baseline](BASELINE.md).
 | --- | --- |
 | Product overview | [../README.md](../README.md) |
 | Quickstart | [QUICKSTART.md](QUICKSTART.md) |
+| Customer installation | [English](customer-install.md), [中文](customer-install.zh-cn.md) |
+| Formal image release | [English](customer-release.md), [中文](customer-release.zh-cn.md) |
+| Release command card (state-gated) | [Commands / 命令](customer-release-quickref.md) |
 | Docker quickstart | [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) |
 | Dashboard | [DASHBOARD.md](DASHBOARD.md) |
 | OSS concepts | [OSS_CONCEPTS.md](OSS_CONCEPTS.md) |
@@ -77,7 +80,7 @@ start with the [engineering baseline](BASELINE.md).
 | Security | [SECURITY.md](SECURITY.md) |
 | Performance | [PERFORMANCE.md](PERFORMANCE.md) |
 | Billing loop | [BILLING_LOOP.md](BILLING_LOOP.md) |
-| Webhook alerts | [WEBHOOK_ALERTS.md](WEBHOOK_ALERTS.md) |
+| Alert connectors: Feishu, WeCom, Telegram, webhook | [WEBHOOK_ALERTS.md](WEBHOOK_ALERTS.md) |
 | Log sinks | [LOG_SINKS.md](LOG_SINKS.md) |
 | Optional Control Plane Contract | [CONTROL_PLANE.md](CONTROL_PLANE.md) |
 

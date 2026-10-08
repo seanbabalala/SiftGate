@@ -51,6 +51,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { NodeFormModal } from '@/components/nodes/NodeFormModal'
 import { DeleteNodeDialog } from '@/components/nodes/DeleteNodeDialog'
 import { QuickModelReference } from '@/components/nodes/QuickModelReference'
+import { ModelPricingList } from '@/components/nodes/model-pricing-list'
 import { useNodes } from '@/hooks/use-nodes'
 import { useProviderCatalogProviders } from '@/hooks/use-provider-catalog'
 import { useProviderHealth } from '@/hooks/use-provider-extensibility'
@@ -183,7 +184,6 @@ function capabilityTokens(capability: ModelCapabilityInfo | undefined, t: TFunct
   if (capability.max_context_tokens) tokens.push(t('capabilityTokens.context', { value: formatLargeNumber(capability.max_context_tokens) }))
   if (capability.max_file_size) tokens.push(t('capabilityTokens.file', { value: formatFileSize(capability.max_file_size) }))
   if (capability.dimensions) tokens.push(dimensionsLabel(capability.dimensions, t))
-  if (capability.pricing) tokens.push(`$${capability.pricing.input}/${capability.pricing.output}`)
   return tokens
 }
 
@@ -1063,6 +1063,7 @@ export function NodesPage() {
                     </button>
                   </div>
 
+                  {workspaceState && <ModelPricingList key={workspaceState.active_workspace.id} workspace={workspaceState.active_workspace.id} node={node} canManage={canAdmin} />}
                   {configuredCompatibility(node.compatibility_matrix).length > 0 && (
                     <div className="lg:col-span-5">
                       <div className="mt-1 rounded-lg border border-[var(--divider-dim)] bg-[var(--background-secondary)]/70 px-3 py-3">

@@ -1,4 +1,8 @@
+import { VIDEO_RESULT_PROFILES, type VideoResultProfile } from "../../pricing/video-result-profile.types";
 import {
+  ArrayMaxSize,
+  ValidateIf,
+  MaxLength,
   IsString,
   IsNotEmpty,
   IsIn,
@@ -12,6 +16,22 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class NodePricingUpdateDto {
+  @IsString() @IsNotEmpty() @MaxLength(256)
+  model!: string;
+
+  @IsIn(['set', 'inherit'])
+  action!: 'set' | 'inherit';
+
+  @ValidateIf((value: NodePricingUpdateDto) => value.action === 'set')
+  @IsNumber({ allowInfinity: false, allowNaN: false }) @Min(0)
+  input?: number;
+
+  @ValidateIf((value: NodePricingUpdateDto) => value.action === 'set')
+  @IsNumber({ allowInfinity: false, allowNaN: false }) @Min(0)
+  output?: number;
+}
 
 export class HealthCheckDto {
   @IsOptional()
@@ -259,6 +279,11 @@ export class CreateNodeDto {
   @IsOptional()
   @IsString()
   video_status_endpoint?: string;
+
+  @ApiPropertyOptional({ enum: VIDEO_RESULT_PROFILES })
+  @IsOptional()
+  @IsIn(VIDEO_RESULT_PROFILES)
+  video_result_profile?: VideoResultProfile;
 
   @ApiPropertyOptional({ type: [String], example: ['gpt-4o-realtime-preview'] })
   @IsOptional()
@@ -678,6 +703,11 @@ export class UpdateNodeDto {
   @IsString()
   video_status_endpoint?: string;
 
+  @ApiPropertyOptional({ enum: VIDEO_RESULT_PROFILES })
+  @IsOptional()
+  @IsIn(VIDEO_RESULT_PROFILES)
+  video_result_profile?: VideoResultProfile;
+
   @ApiPropertyOptional({ type: [String], example: ['gpt-4o-realtime-preview'] })
   @IsOptional()
   @IsArray()
@@ -852,6 +882,11 @@ export class UpdateNodeDto {
   @IsOptional()
   @IsObject()
   model_capabilities?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ type: [NodePricingUpdateDto], description: 'Lossless legacy base-price patch. Inherit explicitly removes the whole node-model price override; all other capabilities are retained.' })
+  @IsOptional() @IsArray() @ArrayMaxSize(256) @ValidateNested({ each: true }) @Type(() => NodePricingUpdateDto)
+  model_pricing_updates?: NodePricingUpdateDto[];
+
 
   @ApiPropertyOptional({ enum: ['bearer', 'x-api-key', 'custom-header'], example: 'bearer' })
   @IsOptional()

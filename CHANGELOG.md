@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+## 2.11.6 - 2026-10-08
+
+### Added
+
+- Unified versioned pricing configuration for token/context tiers, cache usage,
+  calendar/time-window policies, currencies/FX and supported media quantities.
+  Dashboard pricing controls and cost evidence are available in all seven locales.
+- Immutable request pricing snapshots, exact budget/ledger settlement, retained
+  outcomes, reconciliation and read-only replay across SQLite and PostgreSQL.
+- Customer Docker installation, explicit timezone and private initialization,
+  persistent configuration directories, verified SQLite backups, opt-in rotation,
+  safe image upgrades and restore-to-new-directory recovery.
+- Versioned native AMD64/ARM64 GHCR publication, fixed digest receipts, checksummed
+  installer assets, public-download checks and resumable Draft-to-public releases.
+
+### Reliability And Operations
+
+- Update transitive `proxy-addr` to 2.0.8 for GHSA-jqcg-44mw-7w3h, preserving
+  correctly scoped proxy trust while preventing IPv4-mapped IPv6 trust bypass.
+  Three bounded regression cases protect subnet and forwarded-header behavior.
+- Actual HTTP/listener checks, bounded watchdog recovery, self-service alert
+  connectors, timed call-log retention and WAL-aware backup tooling.
+- Node 22 (`>=22.13.0 <23`) development/build contract shared by CI and Docker;
+  SDK consumers do not inherit a new package-engine restriction.
+- Complete maintainer/customer runbooks, release-state gates and a command card.
+- Full CI test discovery is retained while unit and HTTP tests run in four shards
+  each. Isolated PostgreSQL coverage is enabled, and a final accounting job
+  rejects missing/duplicate suites, failures or skipped tests. The 30-minute job
+  limit and all data assertions remain intact. Real schema/subprocess
+  integration contracts receive explicit 30-second test execution budgets instead of the
+  implicit 5-second Jest default; they perform repeated DDL/rollback operations
+  and are not request-latency or throughput gates. Business performance targets
+  are unchanged.
+
+### Upgrade And Acceptance Boundaries
+
+- Review pricing migrations and take a verified backup before upgrading. New
+  pricing controls require explicit operator configuration; do not treat example
+  prices as current vendor prices or overwrite existing operator configuration.
+- The accepted pricing application originated at commit `591ebb99`. Its measured
+  PostgreSQL JSON/50ms case added 15.031749ms p95 and lost 15.532176% throughput,
+  exceeding the original 5ms/5% targets. This was accepted by explicit exception
+  on October 1, 2026, not relabeled as a performance pass or universal SLA.
+- The release requires successful exact-commit main CI plus both native image
+  gates. GitHub run results and the release summary are the final evidence;
+  historical development checkpoints are not current release status.
+- Publication does not restart or migrate an existing gateway. Single-instance
+  upgrades require a separate maintenance decision, and rollback must preserve
+  business data accepted after the backup. No production secrets/data are shipped.
+
 ## 2.11.5 - 2026-09-20
 
 ### Fixed

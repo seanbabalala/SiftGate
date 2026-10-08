@@ -1,3 +1,4 @@
+import { attachTokenPricingEvidence } from '../pricing-usage-evidence';
 import { CanonicalStreamEvent, TokenUsage } from '../../canonical/canonical.types';
 import {
   extractUsageBySchema,
@@ -26,6 +27,9 @@ import {
  */
 export class ResponsesStreamParser {
   private buffer = '';
+  private pricingUsage?: TokenUsage;
+
+  getPricingUsage(): TokenUsage | undefined { return this.pricingUsage; }
   private currentEvent = '';
   private hasSentStop = false;
   private readonly startedFunctionCalls = new Set<string>();
@@ -61,7 +65,7 @@ export class ResponsesStreamParser {
             yield {
               type: 'stop',
               stop_reason: 'end_turn',
-              usage: { input_tokens: 0, output_tokens: 0 },
+              usage: this.resolveUsage({}),
             };
           }
           this.currentEvent = '';
@@ -204,6 +208,9 @@ export class ResponsesStreamParser {
         break;
 
       case 'response.failed': {
+        // A failed generation can still report billable usage. Retain it for
+        // the attempt observer without emitting a client-visible success stop.
+        this.resolveUsage(data);
         this.hasSentStop = true;
         const error = this.unwrapError(data);
         yield {
@@ -305,7 +312,7 @@ export class ResponsesStreamParser {
       ? extractUsageBySchema(schemaSource, this.usageSchema)
       : { input_tokens: 0, output_tokens: 0 };
     const knownUsage = extractUsageByKnownFields(schemaSource);
-    return {
+    const result: TokenUsage = {
       input_tokens:
         schemaUsage.input_tokens ||
         knownUsage.input_tokens ||
@@ -327,6 +334,9 @@ export class ResponsesStreamParser {
         fallbackUsage.cache_read_input_tokens ||
         0,
     };
+    attachTokenPricingEvidence(schemaSource, result, this.usageSchema);
+    this.pricingUsage = result;
+    return result;
   }
 
   private unwrapResponse(data: Record<string, unknown>): Record<string, unknown> {

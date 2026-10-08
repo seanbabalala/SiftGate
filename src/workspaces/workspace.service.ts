@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
-import { FindOptionsWhere, In, IsNull, Repository } from 'typeorm';
+import { FindOptionsWhere, In, IsNull, Repository, type EntityManager } from 'typeorm';
+import { coordinatedRepositoryOperation, requireRepositoryTransaction, isUniqueColumnsConflict } from '../database/coordinated-repository';
+import { lockWorkspaceWriter, lockOrganizationBootstrap } from './workspace-writer-lock';
 import { Organization, Workspace, type WorkspaceStatus } from '../database/entities';
 import {
   DEFAULT_ORGANIZATION_ID,
@@ -66,6 +68,8 @@ export interface RenameWorkspaceInput {
 
 @Injectable()
 export class WorkspaceService {
+  private databaseScope: { manager: EntityManager; write: boolean } | null = null;
+  private checkedSlug?: string;
   constructor(
     @InjectRepository(Organization)
     private readonly organizations: Repository<Organization>,
@@ -73,10 +77,45 @@ export class WorkspaceService {
     private readonly workspaces: Repository<Workspace>,
   ) {}
 
+  withTransaction<T>(action: (service: WorkspaceService, manager?: EntityManager) => Promise<T>, manager?: EntityManager): Promise<T> {
+    if (manager) {
+      requireRepositoryTransaction(this.workspaces, manager);
+      return action(this.scoped(manager, true), manager);
+    }
+    if (this.databaseScope) {
+      if (!this.databaseScope.write) throw new Error('Cannot promote a read scope to a write transaction');
+      return action(this, this.databaseScope.manager);
+    }
+    return coordinatedRepositoryOperation(this.workspaces, true, async (transaction) => {
+      const service = transaction ? this.scoped(transaction, true) : this;
+      try { return await action(service, transaction); }
+      catch (error) {
+        if (service.checkedSlug && isUniqueColumnsConflict(this.workspaces, error, ['organization_id', 'slug'], ['idx_workspaces_org_slug'])) throw new ConflictException(`Workspace slug already exists: ${service.checkedSlug}`);
+        throw error;
+      }
+    });
+  }
+
+  private scoped(manager: EntityManager, write: boolean): WorkspaceService {
+    const service = new WorkspaceService(manager.getRepository(Organization), manager.getRepository(Workspace));
+    service.databaseScope = { manager, write };
+    return service;
+  }
+  private needsDatabaseScope(): boolean { return !this.databaseScope && Boolean(this.workspaces.manager?.connection); }
+  private read<T>(action: (service: WorkspaceService) => Promise<T>): Promise<T> {
+    return coordinatedRepositoryOperation(this.workspaces, false, (manager) => action(manager ? this.scoped(manager, false) : this));
+  }
+
+  async lockWorkspace(workspaceId: string): Promise<void> {
+    if (!this.databaseScope?.write && this.workspaces.manager?.connection) throw new Error('Workspace lock requires a write scope');
+    await lockWorkspaceWriter(this.databaseScope?.manager, normalizeId(workspaceId) || workspaceId);
+  }
+
   async getState(
     activeWorkspaceId?: string | null,
     options: ListWorkspacesOptions = {},
   ): Promise<WorkspaceState> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.getState(activeWorkspaceId, options));
     const organization = await this.getDefaultOrganization();
     const allWorkspaces = await this.listWorkspaces(options);
     const activeId = await this.resolveWorkspaceId(activeWorkspaceId);
@@ -112,6 +151,7 @@ export class WorkspaceService {
     requested?: string | null,
     fallback?: string | null,
   ): Promise<string> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.resolveWorkspaceId(requested, fallback));
     const candidate = normalizeId(requested) || normalizeId(fallback);
     if (!candidate) return DEFAULT_WORKSPACE_ID;
     const found = await this.findActiveWorkspace(candidate);
@@ -119,6 +159,7 @@ export class WorkspaceService {
   }
 
   async requireWorkspace(id: string | null | undefined): Promise<WorkspaceSummary> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.requireWorkspace(id));
     const workspaceId = normalizeId(id);
     if (!workspaceId) {
       throw new NotFoundException('Workspace not found');
@@ -133,6 +174,7 @@ export class WorkspaceService {
   async listWorkspaces(
     options: ListWorkspacesOptions = {},
   ): Promise<WorkspaceSummary[]> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.listWorkspaces(options));
     const workspaceIds = normalizeWorkspaceIds(options.workspaceIds);
     if (workspaceIds && workspaceIds.length === 0) return [];
 
@@ -151,6 +193,8 @@ export class WorkspaceService {
   }
 
   async createWorkspace(input: CreateWorkspaceInput): Promise<WorkspaceSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.createWorkspace(input));
+    await lockOrganizationBootstrap(this.databaseScope?.manager);
     const organization = await this.ensureDefaultOrganization();
     const name = normalizeName(input.name);
     const slug = normalizeSlug(input.slug || name);
@@ -173,6 +217,8 @@ export class WorkspaceService {
     id: string,
     input: RenameWorkspaceInput,
   ): Promise<WorkspaceSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.renameWorkspace(id, input));
+    await this.lockWorkspace(id);
     const workspace = await this.findWorkspace(id);
     if (!workspace) {
       throw new NotFoundException(`Workspace not found: ${id}`);
@@ -204,6 +250,8 @@ export class WorkspaceService {
     id: string,
     status: WorkspaceStatus,
   ): Promise<WorkspaceSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.setWorkspaceStatus(id, status));
+    await this.lockWorkspace(id);
     if (status !== 'active' && status !== 'disabled') {
       throw new BadRequestException(`Invalid workspace status: ${status}`);
     }
@@ -268,6 +316,7 @@ export class WorkspaceService {
     slug: string,
     currentWorkspaceId?: string,
   ): Promise<void> {
+    this.checkedSlug = slug;
     const existing = await this.workspaces.findOne({
       where: { organization_id: organizationId, slug },
     });

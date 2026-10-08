@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Equal, IsNull, Or, Repository } from 'typeorm';
+import { coordinatedRepositoryOperation } from '../database/coordinated-repository';
 import { BatchJob } from '../database/entities';
 import type { GatewayApiKeyContext } from '../auth/gateway-api-key.service';
 import { TelemetryService } from '../telemetry/telemetry.service';
@@ -9,6 +10,7 @@ import { WorkspaceContextService } from '../workspaces/workspace-context.service
 import {
   applyWorkspaceQueryScope,
   normalizeWorkspaceId,
+  workspaceFindWhere,
 } from '../workspaces/workspace-scope';
 import { extractBatchProviderError } from './batch-error-redaction';
 import { batchDashboardItem } from './batch.types';
@@ -16,12 +18,29 @@ import type { BatchDashboardResponse } from './batch.types';
 
 @Injectable()
 export class BatchJobStoreService {
+  private databaseScoped = false;
   constructor(
     private readonly workspaceContext: WorkspaceContextService,
     @InjectRepository(BatchJob)
     private readonly batchJobs: Repository<BatchJob>,
     private readonly telemetry?: TelemetryService,
   ) {}
+
+  private database<T>(
+    write: boolean,
+    action: (service: BatchJobStoreService) => Promise<T>,
+  ): Promise<T> {
+    return coordinatedRepositoryOperation(this.batchJobs, write, (manager) => {
+      if (!manager) return action(this);
+      const scoped = new BatchJobStoreService(
+        this.workspaceContext,
+        manager.getRepository(BatchJob),
+        this.telemetry,
+      );
+      scoped.databaseScoped = true;
+      return action(scoped);
+    });
+  }
 
   async createFromProvider(input: {
     requestId: string;
@@ -31,7 +50,14 @@ export class BatchJobStoreService {
     providerBody: Record<string, unknown>;
     apiKey?: GatewayApiKeyContext;
   }): Promise<BatchJob> {
-    const extracted = this.extractJobFields(input.providerBody, input.requestBody);
+    if (!this.databaseScoped && this.batchJobs.manager?.connection)
+      return this.database(true, (service) =>
+        service.createFromProvider(input),
+      );
+    const extracted = this.extractJobFields(
+      input.providerBody,
+      input.requestBody,
+    );
     const entity = this.batchJobs.create({
       request_id: input.requestId,
       provider_batch_id: extracted.providerBatchId,
@@ -47,20 +73,41 @@ export class BatchJobStoreService {
       request_counts_completed: extracted.requestCounts.completed,
       request_counts_failed: extracted.requestCounts.failed,
       workspace_id: normalizeWorkspaceId(
-        input.apiKey?.workspace_id || this.workspaceContext.currentWorkspaceId(),
+        input.apiKey?.workspace_id ||
+          this.workspaceContext.currentWorkspaceId(),
       ),
       api_key_id: input.apiKey?.id || null,
       api_key_name: input.apiKey?.name || null,
       namespace_id: input.apiKey?.namespace_id || null,
       namespace_name: input.apiKey?.namespace_name || null,
-      status: extracted.status,
+      status: extracted.status || 'validating',
       error: extracted.error,
       expires_at: extracted.expiresAt,
     });
     return this.batchJobs.save(entity);
   }
 
-  async updateFromProvider(job: BatchJob, providerBody: Record<string, unknown>): Promise<BatchJob> {
+  async updateFromProvider(
+    job: BatchJob,
+    providerBody: Record<string, unknown>,
+  ): Promise<BatchJob> {
+    if (!this.databaseScoped && this.batchJobs.manager?.connection)
+      return this.database(true, (service) =>
+        service.updateFromProvider(job, providerBody),
+      );
+    if (this.databaseScoped) {
+      const current = await this.batchJobs.findOne({
+        where: workspaceFindWhere(normalizeWorkspaceId(job.workspace_id), {
+          id: job.id,
+          request_id: job.request_id,
+        }),
+        ...(this.batchJobs.manager.connection.options.type === 'postgres'
+          ? { lock: { mode: 'pessimistic_write' as const } }
+          : {}),
+      });
+      if (!current) throw new NotFoundException('Batch job not found.');
+      job = current;
+    }
     const extracted = this.extractJobFields(providerBody, {});
     job.provider_batch_id = extracted.providerBatchId || job.provider_batch_id;
     job.endpoint = extracted.endpoint || job.endpoint;
@@ -68,21 +115,39 @@ export class BatchJobStoreService {
     job.output_file_id = extracted.outputFileId || job.output_file_id;
     job.error_file_id = extracted.errorFileId || job.error_file_id;
     job.completion_window = extracted.completionWindow || job.completion_window;
-    job.request_counts_total = extracted.requestCounts.total || job.request_counts_total;
-    job.request_counts_completed = extracted.requestCounts.completed || job.request_counts_completed;
-    job.request_counts_failed = extracted.requestCounts.failed || job.request_counts_failed;
+    job.request_counts_total =
+      extracted.requestCounts.total || job.request_counts_total;
+    job.request_counts_completed =
+      extracted.requestCounts.completed || job.request_counts_completed;
+    job.request_counts_failed =
+      extracted.requestCounts.failed || job.request_counts_failed;
     job.status = extracted.status || job.status;
     job.error = extracted.error;
     job.expires_at = extracted.expiresAt || job.expires_at;
     return this.batchJobs.save(job);
   }
 
-  async findAccessible(id: string, apiKey?: GatewayApiKeyContext): Promise<BatchJob | null> {
+  async findAccessible(
+    id: string,
+    apiKey?: GatewayApiKeyContext,
+  ): Promise<BatchJob | null> {
+    if (!apiKey) return null;
+    if (!this.databaseScoped && this.batchJobs.manager?.connection)
+      return this.database(false, (service) =>
+        service.findAccessible(id, apiKey),
+      );
     const job = await this.batchJobs.findOne({
-      where: [{ request_id: id }, { provider_batch_id: id }],
+      where: [{ request_id: id }, { provider_batch_id: id }].flatMap((where) =>
+        workspaceFindWhere(normalizeWorkspaceId(apiKey.workspace_id), {
+          ...where,
+          api_key_id: Or(IsNull(), Equal(apiKey.id)),
+          namespace_id: apiKey.namespace_id
+            ? Or(IsNull(), Equal(apiKey.namespace_id))
+            : IsNull(),
+        }),
+      ),
     });
     if (!job) return null;
-    if (!apiKey) return null;
     if (
       normalizeWorkspaceId(job.workspace_id) !==
       normalizeWorkspaceId(apiKey.workspace_id)
@@ -90,12 +155,28 @@ export class BatchJobStoreService {
       return null;
     }
     if (job.api_key_id && job.api_key_id !== apiKey.id) return null;
-    if (job.namespace_id && job.namespace_id !== (apiKey.namespace_id || null)) return null;
+    if (job.namespace_id && job.namespace_id !== (apiKey.namespace_id || null))
+      return null;
     return job;
   }
 
-  async save(job: BatchJob): Promise<BatchJob> {
-    return this.batchJobs.save(job);
+  async markCancelled(job: BatchJob): Promise<BatchJob> {
+    if (!this.databaseScoped && this.batchJobs.manager?.connection)
+      return this.database(true, (service) => service.markCancelled(job));
+    const current = this.databaseScoped
+      ? await this.batchJobs.findOne({
+          where: workspaceFindWhere(normalizeWorkspaceId(job.workspace_id), {
+            id: job.id,
+            request_id: job.request_id,
+          }),
+          ...(this.batchJobs.manager.connection.options.type === 'postgres'
+            ? { lock: { mode: 'pessimistic_write' as const } }
+            : {}),
+        })
+      : job;
+    if (!current) throw new NotFoundException('Batch job not found.');
+    current.status = 'cancelled';
+    return this.batchJobs.save(current);
   }
 
   async dashboardSummary(filters: {
@@ -106,11 +187,17 @@ export class BatchJobStoreService {
     api_key_id?: string;
     limit?: number;
   }): Promise<BatchDashboardResponse> {
+    if (!this.databaseScoped && this.batchJobs.manager?.connection)
+      return this.database(false, (service) =>
+        service.dashboardSummary(filters),
+      );
     const period = filters.period || '24h';
-    const qb = this.batchJobs
-      .createQueryBuilder('batch')
-      .where('1 = 1');
-    applyWorkspaceQueryScope(qb, 'batch', this.workspaceContext.currentWorkspaceId());
+    const qb = this.batchJobs.createQueryBuilder('batch').where('1 = 1');
+    applyWorkspaceQueryScope(
+      qb,
+      'batch',
+      this.workspaceContext.currentWorkspaceId(),
+    );
     const since = periodStart(period);
     if (since) {
       qb.andWhere('batch.created_at >= :since', { since });
@@ -122,10 +209,14 @@ export class BatchJobStoreService {
       qb.andWhere('batch.node_id = :node', { node: filters.node });
     }
     if (filters.namespace) {
-      qb.andWhere('batch.namespace_id = :namespace', { namespace: filters.namespace });
+      qb.andWhere('batch.namespace_id = :namespace', {
+        namespace: filters.namespace,
+      });
     }
     if (filters.api_key_id) {
-      qb.andWhere('batch.api_key_id = :apiKeyId', { apiKeyId: filters.api_key_id });
+      qb.andWhere('batch.api_key_id = :apiKeyId', {
+        apiKeyId: filters.api_key_id,
+      });
     }
 
     const items = await qb
@@ -138,8 +229,10 @@ export class BatchJobStoreService {
         acc.total += 1;
         if (isActiveStatus(job.status)) acc.active += 1;
         else if (job.status === 'completed') acc.completed += 1;
-        else if (job.status === 'cancelled' || job.status === 'canceled') acc.cancelled += 1;
-        else if (job.status === 'failed' || job.status === 'expired') acc.failed += 1;
+        else if (job.status === 'cancelled' || job.status === 'canceled')
+          acc.cancelled += 1;
+        else if (job.status === 'failed' || job.status === 'expired')
+          acc.failed += 1;
         return acc;
       },
       { total: 0, active: 0, completed: 0, failed: 0, cancelled: 0 },
@@ -180,7 +273,7 @@ export class BatchJobStoreService {
         completed: numberField(requestCounts.completed),
         failed: numberField(requestCounts.failed),
       },
-      status: firstString(providerBody.status, providerBody.state) || 'validating',
+      status: firstString(providerBody.status, providerBody.state),
       error: extractBatchProviderError(providerBody.error, this.batchRedactionTelemetry()),
       expiresAt: epochOrString(providerBody.expires_at),
     };

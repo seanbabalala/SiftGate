@@ -1,7 +1,10 @@
+import { VIDEO_RESULT_PROFILES } from "../pricing/video-result-profile.types";
 import * as fs from 'fs';
 import * as path from 'path';
 import * as yaml from 'js-yaml';
 import type { GatewayConfig } from './gateway.config';
+import { pricingLimitsIssues } from './pricing-limits';
+import { ALERT_EVENTS as CONNECTOR_EVENTS, CONNECTOR_TYPES, validateChannel } from '../alerts/alert-connector-runtime';
 import { buildNodeModelDiagnostics } from './config-diagnostics';
 import {
   assessCatalogPricing,
@@ -70,6 +73,7 @@ const CREDENTIAL_STICKY_MODES = new Set(['none', 'agent_session', 'api_key', 'te
 const LOAD_BALANCING_STRATEGIES = new Set(['weighted', 'round_robin', 'least_latency', 'random']);
 const ROUTING_OPTIMIZATIONS = new Set(['cost', 'latency', 'balanced', 'quality']);
 const ALERT_EVENTS = new Set([
+  ...CONNECTOR_EVENTS,
   'budget_threshold',
   'budget_exceeded',
   'node_down',
@@ -328,6 +332,9 @@ export function validateConfigObject(
   validateCluster(config.cluster, config.state, issues);
   validateSecretManager(config.secret_manager, issues);
   validatePricing(config.models_pricing, issues);
+  for (const entry of pricingLimitsIssues(config.pricing_limits)) {
+    issues.push(issue('error', 'invalid_pricing_limits', entry.message, entry.path));
+  }
   validateCatalogConfig(config.catalog, issues);
   validateConfigAudit(config.config_audit, issues);
   validateControlPlane(config.control_plane, issues);
@@ -1396,6 +1403,9 @@ function validateNodes(
     validateOptionalEndpoint(node, basePath, 'video_generations_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'video_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'video_status_endpoint', issues);
+    if (node.video_result_profile !== undefined && !(VIDEO_RESULT_PROFILES as readonly unknown[]).includes(node.video_result_profile)) {
+      issues.push(issue('error', 'invalid_video_result_profile', 'Choose a supported versioned video result profile.', `${basePath}.video_result_profile`));
+    }
     validateOptionalEndpoint(node, basePath, 'video_content_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'video_cancel_endpoint', issues);
     validateOptionalEndpoint(node, basePath, 'batch_endpoint', issues);
@@ -4910,17 +4920,17 @@ function validateAlertChannels(
       );
       return;
     }
-    if (channel.type !== 'webhook') {
+    if (!CONNECTOR_TYPES.includes(channel.type as never)) {
       issues.push(
         issue(
           'error',
           'invalid_alert_channel_type',
-          'Open-source alert channels currently support only type "webhook".',
+          'Supported alert connectors: webhook, feishu, wecom, telegram.',
           `${channelPath}.type`,
         ),
       );
     }
-    if (!isNonEmptyString(channel.url)) {
+    if (channel.type !== 'telegram' && !isNonEmptyString(channel.url)) {
       issues.push(
         issue(
           'error',
@@ -4929,7 +4939,7 @@ function validateAlertChannels(
           `${channelPath}.url`,
         ),
       );
-    } else if (!containsEnvReference(channel.url)) {
+    } else if (isNonEmptyString(channel.url) && !containsEnvReference(channel.url)) {
       validateHttpUrl(
         channel.url,
         `${channelPath}.url`,
@@ -4963,6 +4973,9 @@ function validateAlertChannels(
     validateAlertChannelHeaders(channel.headers, channelPath, issues);
     validateAlertChannelEvents(channel.events, channelPath, issues);
     validateAlertChannelRetry(channel.retry, channelPath, issues);
+    try { validateChannel(channel, { allowReferences: true }); } catch (error) {
+      issues.push(issue('error', 'invalid_alert_channel', (error as Error).message, channelPath));
+    }
   });
 }
 
@@ -6918,7 +6931,17 @@ function validateSecretReferences(
   backends: Record<SecretReferenceBackend, boolean>,
 ): void {
   if (typeof value === 'string') {
-    const scan = scanSecretReferences(value);
+    // Endpoint slots are literal routing tokens, not secret references. Protect
+    // actual ${...} expressions first; malformed/nested expressions still fail.
+    const videoGeneration = /^nodes\[\d+\]\.video_(?:endpoint|generations_endpoint)$/.test(currentPath);
+    const videoControl = /^nodes\[\d+\]\.video_(?:status|content|cancel)_endpoint$/.test(currentPath);
+    const scanned = videoGeneration || videoControl
+      ? value.replace(/\$\{[^}]*\}|\{(?:id|model)\}/g, token => {
+          if (token.startsWith('${')) return token;
+          return (videoGeneration && token === '{model}') || (videoControl && token === '{id}') ? '__VIDEO_ENDPOINT_SLOT__' : token;
+        })
+      : value;
+    const scan = scanSecretReferences(scanned);
     for (const invalid of scan.invalid) {
       const envLike = invalid.reason.startsWith('Environment references');
       issues.push(

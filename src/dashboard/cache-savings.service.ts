@@ -1,495 +1,143 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository } from 'typeorm';
+import { And, LessThanOrEqual, MoreThanOrEqual, Repository } from 'typeorm';
 import { ConfigService } from '../config/config.service';
-import { ModelPricing } from '../config/gateway.config';
+import { resolvePricingLimits } from '../config/pricing-limits';
 import { CallLog } from '../database/entities';
+import { withCoordinatedRepository } from '../database/coordinated-repository';
+import { legacyReportMoney, subtractCostReportMoney, sumCostReportMoney } from '../pricing/cost-report-money';
 import { WorkspaceContextService } from '../workspaces/workspace-context.service';
 import { workspaceFindWhereStrict } from '../workspaces/workspace-scope';
+import type { CacheSavingsGroupBy, CacheSavingsScope, CacheSavingsMetrics, CacheSavingsSummaryResponse } from './cache-savings.types';
+export type { CacheSavingsGroupBy, CacheSavingsScope, CacheSavingsMetrics, CacheSavingsSummaryResponse, CacheSavingsGroupRow, CacheSavingsTrendRow } from './cache-savings.types';
 
-export type CacheSavingsGroupBy =
-  | 'node'
-  | 'model'
-  | 'namespace'
-  | 'team'
-  | 'api_key';
-
-export interface CacheSavingsScope {
-  api_key?: string;
-  api_key_id?: string;
-  namespace?: string;
-  team_id?: string;
+interface MutableMetrics {
+  total_requests: number; provider_routed_requests: number; cache_eligible_requests: number;
+  requests_with_provider_cache_hit: number; total_input_tokens: number; total_output_tokens: number;
+  total_cache_read_tokens: number; total_cache_creation_tokens: number; total_normal_input_tokens: number;
+  comparable_requests: number; unavailable_reference_requests: number; excluded_requests: number;
+  actual: string; reference: string;
 }
-
-export interface CacheSavingsMetrics {
-  total_requests: number;
-  provider_routed_requests: number;
-  requests_with_provider_cache_hit: number;
-  cache_hit_rate: number;
-  total_input_tokens: number;
-  total_output_tokens: number;
-  total_cache_read_tokens: number;
-  total_cache_creation_tokens: number;
-  total_normal_input_tokens: number;
-  actual_cost_usd: number;
-  hypothetical_no_cache_cost_usd: number;
-  savings_usd: number;
-  savings_percentage: number;
-  normal_input_cost_usd: number;
-  cache_read_cost_usd: number;
-  cache_creation_cost_usd: number;
-  output_cost_usd: number;
-}
-
-export interface CacheSavingsGroupRow extends CacheSavingsMetrics {
-  group_value: string;
-  group_label: string;
-}
-
-export interface CacheSavingsTrendRow extends CacheSavingsMetrics {
-  date: string;
-}
-
-export interface CacheSavingsSummaryResponse {
-  period: string;
-  period_days: number;
-  group_by: CacheSavingsGroupBy;
-  filters: {
-    api_key_id: string | null;
-    api_key_name: string | null;
-    namespace_id: string | null;
-    team_id: string | null;
-  };
-  summary: CacheSavingsMetrics;
-  groups: CacheSavingsGroupRow[];
-  daily_trend: CacheSavingsTrendRow[];
-}
-
-interface MutableCacheSavingsMetrics extends CacheSavingsMetrics {}
-
-interface RowCostComponents {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  normalInputTokens: number;
-  actualCostUsd: number;
-  hypotheticalNoCacheCostUsd: number;
-  normalInputCostUsd: number;
-  cacheReadCostUsd: number;
-  cacheCreationCostUsd: number;
-  outputCostUsd: number;
-}
-
 const NON_PROVIDER_NODE_IDS = new Set(['cache', 'semantic_cache', 'hook']);
+const TOKEN_OPERATIONS = new Set(['chat_completions', 'responses', 'messages', 'gemini_generate_content', 'embeddings']);
 
 @Injectable()
 export class CacheSavingsService {
   constructor(
-    @InjectRepository(CallLog)
-    private readonly callLogRepo: Repository<CallLog>,
+    @InjectRepository(CallLog) private readonly callLogRepo: Repository<CallLog>,
     private readonly config: ConfigService,
     private readonly workspaceContext: WorkspaceContextService,
   ) {}
 
-  async getSummary(
-    period: string = '7d',
-    groupBy: CacheSavingsGroupBy = 'node',
-    scope: CacheSavingsScope = {},
-  ): Promise<CacheSavingsSummaryResponse> {
+  async getSummary(period = '7d', groupBy: CacheSavingsGroupBy = 'node', scope: CacheSavingsScope = {}): Promise<CacheSavingsSummaryResponse> {
     const window = resolvePeriod(period);
-    const rows = await this.callLogRepo.find({
-      where: this.buildWhere(window.since, scope),
-      select: {
-        timestamp: true,
-        node_id: true,
-        model: true,
-        input_tokens: true,
-        output_tokens: true,
-        cost_usd: true,
-        cost_without_cache_usd: true,
-        cache_creation_input_tokens: true,
-        cache_read_input_tokens: true,
-        namespace_id: true,
-        team_id: true,
-        api_key_id: true,
-        api_key_name: true,
-      },
-      order: { timestamp: 'ASC' },
-    });
-
-    const summary = createMetrics();
-    const groups = new Map<string, MutableCacheSavingsMetrics>();
-    const dailyTrend = new Map<string, MutableCacheSavingsMetrics>();
-
-    for (const date of enumerateUtcDates(window.since, new Date())) {
-      dailyTrend.set(date, createMetrics());
-    }
-
+    const limit = resolvePricingLimits(this.config.pricingLimits).max_replay_rows;
+    const now = new Date();
+    const selected = await withCoordinatedRepository(this.callLogRepo, false, repo => repo.find({
+      where: workspaceFindWhereStrict(this.workspaceContext.currentWorkspaceId(), {
+        timestamp: And(MoreThanOrEqual(window.since), LessThanOrEqual(now)),
+        ...(scope.api_key_id ? { api_key_id: scope.api_key_id } : {}),
+        ...(!scope.api_key_id && scope.api_key ? { api_key_name: scope.api_key } : {}),
+        ...(scope.namespace ? { namespace_id: scope.namespace } : {}),
+        ...(scope.team_id ? { team_id: scope.team_id } : {}),
+      }),
+      select: { id: true, request_id: true, source_format: true, timestamp: true, node_id: true, model: true,
+        input_tokens: true, output_tokens: true, cost_usd: true, cost_without_cache_usd: true,
+        cache_creation_input_tokens: true, cache_read_input_tokens: true, namespace_id: true, team_id: true,
+        api_key_id: true, api_key_name: true },
+      order: { timestamp: 'ASC', id: 'ASC' },
+      take: limit + 1,
+    }));
+    const truncated = selected.length > limit, rows = selected.slice(0, limit);
+    const summary = createMetrics(), groups = new Map<string, { metrics: MutableMetrics; label: string }>();
+    const days = new Map(enumerateUtcDates(window.since, now).map(date => [date, createMetrics()]));
     for (const row of rows) {
-      this.accumulate(summary, row);
-
-      const group = groupDescriptor(groupBy, row);
-      const groupMetrics = groups.get(group.value) || createMetrics();
-      this.accumulate(groupMetrics, row);
-      groups.set(group.value, groupMetrics);
-
-      const date = toUtcDateKey(row.timestamp);
-      const dayMetrics = dailyTrend.get(date) || createMetrics();
-      this.accumulate(dayMetrics, row);
-      dailyTrend.set(date, dayMetrics);
+      accumulate(summary, row);
+      const value = groupValue(groupBy, row);
+      const group = groups.get(value) ?? { metrics: createMetrics(), label: groupBy === 'api_key' ? row.api_key_name || row.api_key_id || value : value };
+      accumulate(group.metrics, row); groups.set(value, group);
+      const date = dateKey(row.timestamp), metrics = days.get(date) ?? createMetrics();
+      accumulate(metrics, row); days.set(date, metrics);
     }
-
     return {
-      period: window.label,
-      period_days: window.days,
-      group_by: groupBy,
-      filters: {
-        api_key_id: scope.api_key_id || null,
-        api_key_name: scope.api_key || null,
-        namespace_id: scope.namespace || null,
-        team_id: scope.team_id || null,
-      },
-      summary: finalizeMetrics(summary),
-      groups: [...groups.entries()]
-        .map(([value, metrics]) => ({
-          group_value: value,
-          group_label: groupLabel(groupBy, value, rows),
-          ...finalizeMetrics(metrics),
-        }))
-        .filter((group) => group.provider_routed_requests > 0)
-        .sort(
-          (a, b) =>
-            b.savings_usd - a.savings_usd ||
-            b.actual_cost_usd - a.actual_cost_usd ||
-            b.total_requests - a.total_requests,
-        ),
-      daily_trend: [...dailyTrend.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([date, metrics]) => ({
-          date,
-          ...finalizeMetrics(metrics),
-        })),
-    };
-  }
-
-  private buildWhere(since: Date, scope: CacheSavingsScope) {
-    return workspaceFindWhereStrict(this.workspaceContext.currentWorkspaceId(), {
-      timestamp: MoreThanOrEqual(since),
-      ...(scope.api_key_id ? { api_key_id: scope.api_key_id } : {}),
-      ...(!scope.api_key_id && scope.api_key ? { api_key_name: scope.api_key } : {}),
-      ...(scope.namespace ? { namespace_id: scope.namespace } : {}),
-      ...(scope.team_id ? { team_id: scope.team_id } : {}),
-    });
-  }
-
-  private accumulate(metrics: MutableCacheSavingsMetrics, row: CallLog): void {
-    metrics.total_requests += 1;
-    if (!isProviderRoutedLog(row)) return;
-
-    const components = this.rowCostComponents(row);
-    metrics.provider_routed_requests += 1;
-    if (components.cacheReadTokens > 0) {
-      metrics.requests_with_provider_cache_hit += 1;
-    }
-    metrics.total_input_tokens += components.inputTokens;
-    metrics.total_output_tokens += components.outputTokens;
-    metrics.total_cache_read_tokens += components.cacheReadTokens;
-    metrics.total_cache_creation_tokens += components.cacheCreationTokens;
-    metrics.total_normal_input_tokens += components.normalInputTokens;
-    metrics.actual_cost_usd += components.actualCostUsd;
-    metrics.hypothetical_no_cache_cost_usd +=
-      components.hypotheticalNoCacheCostUsd;
-    metrics.normal_input_cost_usd += components.normalInputCostUsd;
-    metrics.cache_read_cost_usd += components.cacheReadCostUsd;
-    metrics.cache_creation_cost_usd += components.cacheCreationCostUsd;
-    metrics.output_cost_usd += components.outputCostUsd;
-  }
-
-  private rowCostComponents(row: CallLog): RowCostComponents {
-    const inputTokens = toNumber(row.input_tokens);
-    const outputTokens = toNumber(row.output_tokens);
-    const cacheReadTokens = toNumber(row.cache_read_input_tokens);
-    const cacheCreationTokens = toNumber(row.cache_creation_input_tokens);
-    const normalInputTokens = Math.max(
-      0,
-      inputTokens - cacheReadTokens - cacheCreationTokens,
-    );
-
-    const pricing = this.config.getModelPricing(row.model, row.node_id);
-    const actualCostFromPricing = pricing
-      ? calculateCacheAwareCost(
-          {
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            cache_read_input_tokens: cacheReadTokens,
-            cache_creation_input_tokens: cacheCreationTokens,
-          },
-          pricing,
-        )
-      : 0;
-    const storedCostUsd = toNumber(row.cost_usd);
-    const shouldUseComputedCacheCost =
-      pricing !== undefined &&
-      (cacheReadTokens > 0 || cacheCreationTokens > 0) &&
-      actualCostFromPricing > 0 &&
-      (storedCostUsd <= 0 || actualCostFromPricing < storedCostUsd);
-    const actualCostUsd = toCurrency(
-      shouldUseComputedCacheCost
-        ? actualCostFromPricing
-        : hasPositiveNumber(row.cost_usd)
-          ? row.cost_usd
-          : actualCostFromPricing,
-    );
-
-    const hypotheticalFromPricing = pricing
-      ? calculateNoCacheCost(
-          {
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-          },
-          pricing,
-        )
-      : 0;
-    const hypotheticalNoCacheCostUsd = toCurrency(
-      row.cost_without_cache_usd !== null &&
-        row.cost_without_cache_usd !== undefined
-        ? row.cost_without_cache_usd
-        : hypotheticalFromPricing,
-    );
-
-    if (!pricing) {
-      return {
-        inputTokens,
-        outputTokens,
-        cacheReadTokens,
-        cacheCreationTokens,
-        normalInputTokens,
-        actualCostUsd,
-        hypotheticalNoCacheCostUsd,
-        normalInputCostUsd: actualCostUsd,
-        cacheReadCostUsd: 0,
-        cacheCreationCostUsd: 0,
-        outputCostUsd: 0,
-      };
-    }
-
-    return {
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-      normalInputTokens,
-      actualCostUsd,
-      hypotheticalNoCacheCostUsd,
-      normalInputCostUsd: toCurrency(
-        (normalInputTokens / 1_000_000) * pricing.input,
-      ),
-      cacheReadCostUsd: toCurrency(
-        (cacheReadTokens / 1_000_000) *
-          (pricing.cache_read_input ??
-            pricing.cache_read_per_1m_tokens ??
-            pricing.input),
-      ),
-      cacheCreationCostUsd: toCurrency(
-        (cacheCreationTokens / 1_000_000) *
-          (pricing.cache_creation_input ??
-            pricing.cache_write_per_1m_tokens ??
-            pricing.input),
-      ),
-      outputCostUsd: toCurrency(
-        (outputTokens / 1_000_000) * pricing.output,
-      ),
+      period: window.label, period_days: window.days, group_by: groupBy,
+      filters: { api_key_id: scope.api_key_id || null, api_key_name: scope.api_key || null, namespace_id: scope.namespace || null, team_id: scope.team_id || null },
+      scan: { row_limit: limit, scanned_rows: rows.length, has_more: truncated },
+      summary: finalize(summary, truncated),
+      groups: [...groups].map(([value, group]) => ({ group_value: value, group_label: group.label, ...finalize(group.metrics, truncated) }))
+        .filter(group => group.provider_routed_requests > 0)
+        .sort((a, b) => b.known_savings_usd - a.known_savings_usd || b.known_actual_cost_usd - a.known_actual_cost_usd || b.total_requests - a.total_requests),
+      daily_trend: [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, metrics]) => ({ date, ...finalize(metrics, truncated) })),
     };
   }
 }
 
-function createMetrics(): MutableCacheSavingsMetrics {
-  return {
-    total_requests: 0,
-    provider_routed_requests: 0,
-    requests_with_provider_cache_hit: 0,
-    cache_hit_rate: 0,
-    total_input_tokens: 0,
-    total_output_tokens: 0,
-    total_cache_read_tokens: 0,
-    total_cache_creation_tokens: 0,
-    total_normal_input_tokens: 0,
-    actual_cost_usd: 0,
-    hypothetical_no_cache_cost_usd: 0,
-    savings_usd: 0,
-    savings_percentage: 0,
-    normal_input_cost_usd: 0,
-    cache_read_cost_usd: 0,
-    cache_creation_cost_usd: 0,
-    output_cost_usd: 0,
-  };
+function accumulate(metrics: MutableMetrics, row: CallLog): void {
+  metrics.total_requests++;
+  if (NON_PROVIDER_NODE_IDS.has(row.node_id || '')) return;
+  metrics.provider_routed_requests++;
+  // Older log rows predate the source-format field and used the token-only contract.
+  if (!TOKEN_OPERATIONS.has(row.source_format || 'chat_completions')) { metrics.excluded_requests++; return; }
+  metrics.cache_eligible_requests++;
+  const input = count(row.input_tokens), output = count(row.output_tokens), read = count(row.cache_read_input_tokens), write = count(row.cache_creation_input_tokens);
+  if (read > 0) metrics.requests_with_provider_cache_hit++;
+  metrics.total_input_tokens += input; metrics.total_output_tokens += output;
+  metrics.total_cache_read_tokens += read; metrics.total_cache_creation_tokens += write;
+  metrics.total_normal_input_tokens += Math.max(0, input - read - write);
+  const actual = money(row.cost_usd), reference = money(row.cost_without_cache_usd);
+  // A null baseline is deliberate on immutable-ledger projections. Never substitute
+  // current token rates, infer a media baseline, or "repair" a historical actual cost.
+  if (actual === null || reference === null) { metrics.unavailable_reference_requests++; return; }
+  metrics.comparable_requests++;
+  metrics.actual = sumCostReportMoney(metrics.actual, actual);
+  metrics.reference = sumCostReportMoney(metrics.reference, reference);
 }
 
-function finalizeMetrics(
-  metrics: MutableCacheSavingsMetrics,
-): CacheSavingsMetrics {
-  const savings = metrics.hypothetical_no_cache_cost_usd - metrics.actual_cost_usd;
-  const hitRate =
-    metrics.provider_routed_requests > 0
-      ? (metrics.requests_with_provider_cache_hit /
-          metrics.provider_routed_requests) *
-        100
-      : 0;
-  const savingsPercentage =
-    metrics.hypothetical_no_cache_cost_usd > 0
-      ? (savings / metrics.hypothetical_no_cache_cost_usd) * 100
-      : 0;
-
-  return {
-    total_requests: metrics.total_requests,
-    provider_routed_requests: metrics.provider_routed_requests,
-    requests_with_provider_cache_hit: metrics.requests_with_provider_cache_hit,
-    cache_hit_rate: round(hitRate, 2),
-    total_input_tokens: metrics.total_input_tokens,
-    total_output_tokens: metrics.total_output_tokens,
-    total_cache_read_tokens: metrics.total_cache_read_tokens,
-    total_cache_creation_tokens: metrics.total_cache_creation_tokens,
-    total_normal_input_tokens: metrics.total_normal_input_tokens,
-    actual_cost_usd: round(metrics.actual_cost_usd, 6),
-    hypothetical_no_cache_cost_usd: round(
-      metrics.hypothetical_no_cache_cost_usd,
-      6,
-    ),
-    savings_usd: round(savings, 6),
-    savings_percentage: round(savingsPercentage, 2),
-    normal_input_cost_usd: round(metrics.normal_input_cost_usd, 6),
-    cache_read_cost_usd: round(metrics.cache_read_cost_usd, 6),
-    cache_creation_cost_usd: round(metrics.cache_creation_cost_usd, 6),
-    output_cost_usd: round(metrics.output_cost_usd, 6),
+function money(value: unknown): string | null {
+  return typeof value === 'number' ? legacyReportMoney(value) : null;
+}
+function count(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : 0;
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+function createMetrics(): MutableMetrics {
+  return { total_requests: 0, provider_routed_requests: 0, cache_eligible_requests: 0, requests_with_provider_cache_hit: 0,
+    total_input_tokens: 0, total_output_tokens: 0, total_cache_read_tokens: 0, total_cache_creation_tokens: 0,
+    total_normal_input_tokens: 0, comparable_requests: 0, unavailable_reference_requests: 0, excluded_requests: 0,
+    actual: '0.000000000000000000', reference: '0.000000000000000000' };
+}
+function finalize(metrics: MutableMetrics, truncated: boolean): CacheSavingsMetrics {
+  const { actual, reference, ...counts } = metrics;
+  const complete = !truncated && metrics.comparable_requests === metrics.provider_routed_requests;
+  const status = !truncated && !metrics.provider_routed_requests ? 'empty' : complete ? 'complete' : metrics.comparable_requests ? 'partial' : 'unavailable';
+  const delta = subtractCostReportMoney(reference, actual), numeric = (value: string) => Number(Number(value).toFixed(6));
+  const knownActual = numeric(actual), knownReference = numeric(reference), knownSavings = numeric(delta);
+  return { ...counts, comparison_basis: 'recorded_log_estimates', comparison_status: status,
+    cache_hit_rate: !truncated && metrics.cache_eligible_requests ? Number((metrics.requests_with_provider_cache_hit / metrics.cache_eligible_requests * 100).toFixed(2)) : !metrics.provider_routed_requests && !truncated ? 0 : null,
+    actual_cost_usd: complete ? knownActual : null, hypothetical_no_cache_cost_usd: complete ? knownReference : null,
+    savings_usd: complete ? knownSavings : null,
+    savings_percentage: complete && Number(reference) > 0 ? Number((Number(delta) / Number(reference) * 100).toFixed(2)) : null,
+    known_actual_cost_usd: knownActual, known_hypothetical_no_cache_cost_usd: knownReference, known_savings_usd: knownSavings,
+    exact: { comparable_actual_usd: actual, comparable_no_cache_usd: reference, comparable_savings_usd: delta },
+    normal_input_cost_usd: null, cache_read_cost_usd: null, cache_creation_cost_usd: null, output_cost_usd: null,
   };
 }
-
 function resolvePeriod(period: string) {
-  const normalized = `${period || '7d'}`.trim().toLowerCase();
-  if (normalized === '1d') return { label: '1d', days: 1, since: daysAgo(1) };
-  if (normalized === '30d') return { label: '30d', days: 30, since: daysAgo(30) };
-  if (normalized === '90d') return { label: '90d', days: 90, since: daysAgo(90) };
-  return { label: '7d', days: 7, since: daysAgo(7) };
+  const value = `${period || '7d'}`.trim().toLowerCase();
+  const days = value === '1d' ? 1 : value === '30d' ? 30 : value === '90d' ? 90 : 7;
+  const since = new Date(); since.setUTCHours(0, 0, 0, 0); since.setUTCDate(since.getUTCDate() - days + 1);
+  return { label: `${days}d`, days, since };
 }
-
-function daysAgo(days: number): Date {
-  const date = new Date();
-  date.setUTCHours(0, 0, 0, 0);
-  date.setUTCDate(date.getUTCDate() - Math.max(0, days - 1));
-  return date;
-}
-
+function dateKey(value: Date | string): string { return new Date(value).toISOString().slice(0, 10); }
 function enumerateUtcDates(start: Date, end: Date): string[] {
-  const values: string[] = [];
-  const cursor = new Date(start);
-  cursor.setUTCHours(0, 0, 0, 0);
-  const limit = new Date(end);
-  limit.setUTCHours(0, 0, 0, 0);
-
-  while (cursor.getTime() <= limit.getTime()) {
-    values.push(toUtcDateKey(cursor));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
-
-  return values;
+  const dates: string[] = [], cursor = new Date(start), limit = new Date(end); limit.setUTCHours(0, 0, 0, 0);
+  while (cursor <= limit) { dates.push(dateKey(cursor)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
+  return dates;
 }
-
-function toUtcDateKey(value: Date | string): string {
-  const date = value instanceof Date ? value : new Date(value);
-  return date.toISOString().slice(0, 10);
-}
-
-function isProviderRoutedLog(row: CallLog): boolean {
-  return !NON_PROVIDER_NODE_IDS.has(`${row.node_id || ''}`);
-}
-
-function groupDescriptor(groupBy: CacheSavingsGroupBy, row: CallLog) {
-  switch (groupBy) {
-    case 'model':
-      return { value: row.model || 'unknown' };
-    case 'namespace':
-      return { value: row.namespace_id || 'unscoped' };
-    case 'team':
-      return { value: row.team_id || 'unassigned' };
-    case 'api_key':
-      return { value: row.api_key_id || row.api_key_name || 'anonymous' };
-    case 'node':
-    default:
-      return { value: row.node_id || 'unknown' };
-  }
-}
-
-function groupLabel(
-  groupBy: CacheSavingsGroupBy,
-  value: string,
-  rows: CallLog[],
-): string {
-  if (groupBy !== 'api_key') return value;
-  const match = rows.find(
-    (row) => (row.api_key_id || row.api_key_name || 'anonymous') === value,
-  );
-  return match?.api_key_name || match?.api_key_id || value;
-}
-
-function calculateCacheAwareCost(
-  usage: {
-    input_tokens: number;
-    output_tokens: number;
-    cache_read_input_tokens: number;
-    cache_creation_input_tokens: number;
-  },
-  pricing: ModelPricing,
-): number {
-  const regularInput = Math.max(
-    0,
-    usage.input_tokens -
-      usage.cache_read_input_tokens -
-      usage.cache_creation_input_tokens,
-  );
-  const cacheReadPrice =
-    pricing.cache_read_input ??
-    pricing.cache_read_per_1m_tokens ??
-    pricing.input;
-  const cacheCreationPrice =
-    pricing.cache_creation_input ??
-    pricing.cache_write_per_1m_tokens ??
-    pricing.input;
-  return (
-    (regularInput / 1_000_000) * pricing.input +
-    (usage.cache_read_input_tokens / 1_000_000) * cacheReadPrice +
-    (usage.cache_creation_input_tokens / 1_000_000) * cacheCreationPrice +
-    (usage.output_tokens / 1_000_000) * pricing.output
-  );
-}
-
-function calculateNoCacheCost(
-  usage: { input_tokens: number; output_tokens: number },
-  pricing: ModelPricing,
-): number {
-  return (
-    (usage.input_tokens / 1_000_000) * pricing.input +
-    (usage.output_tokens / 1_000_000) * pricing.output
-  );
-}
-
-function toCurrency(value: unknown): number {
-  return round(toNumber(value), 6);
-}
-
-function hasPositiveNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0;
-}
-
-function toNumber(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim().length > 0) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return 0;
-}
-
-function round(value: number, digits: number): number {
-  return Number(value.toFixed(digits));
+function groupValue(group: CacheSavingsGroupBy, row: CallLog): string {
+  if (group === 'model') return row.model || 'unknown';
+  if (group === 'namespace') return row.namespace_id || 'unscoped';
+  if (group === 'team') return row.team_id || 'unassigned';
+  if (group === 'api_key') return row.api_key_id || row.api_key_name || 'anonymous';
+  return row.node_id || 'unknown';
 }

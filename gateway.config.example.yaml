@@ -42,11 +42,24 @@ server:
   #   origin: false              # false = same-origin only; use ["https://example.com"] for browser clients
   #   credentials: false
 
+# Optional host-wide pricing-management ceilings. These do not activate pricing.
+# Limits apply to new publications/actions, not frozen requests or historical prices.
+# pricing_limits:
+#   max_published_rules: 20000     # Unique current/scheduled version rules; range 1..100000
+#   max_request_body_bytes: 1048576 # Parsed JSON UTF-8 bytes; range 1024..1048576
+#   max_replay_rows: 4096          # Cumulative selected rows; range 1..20000
+#   max_replay_source_bytes: 67108864 # Field UTF-8 bytes + 64 bytes/field/read; max 134217728
+#   max_replay_result_bytes: 8388608 # Complete JSON response bytes; max 16777216
+#   max_replay_work: 250000        # Compilation/calculation/serialization units; max 2000000
+#   max_replay_ms: 2000            # Cooperative deadline (ms), including read queues; max 30000
+
 database:
   type: sqlite
   path: ./data/gateway.db
   # synchronize: true       # TypeORM schema sync; fine for local SQLite/dev
-  # log_retention_days: 30    # Auto-delete logs older than N days (default: 30, 0 = keep forever)
+  # log_retention_days: 30    # Default: 30; 0 explicitly keeps logs forever.
+  # Cleanup starts after 60 seconds, then runs every 6 hours in 500-row batches.
+  # Back up and confirm reporting retention before lowering this value.
   # sqlite_synchronous: FULL  # FULL is durable by default; NORMAL trades some crash durability for throughput
   # route_trace_write_behind: true # Keep full trace writes out of the client response path
   # For PostgreSQL:
@@ -878,11 +891,13 @@ budget:
 #     sample_max_chars: 4000  # Samples are redacted and truncated when explicit storage is enabled
 
 # ============================================================
-# Alerts — local webhook alerting (optional)
+# Alerts — local notification connectors (optional)
 # ============================================================
 # Disabled by default. Alert delivery is asynchronous and payloads are
 # sanitized: prompts, responses, provider API keys, and raw headers are
 # never included.
+# Configure Feishu/Lark, WeCom, Telegram, or generic webhooks in Dashboard >
+# Alert connectors. Nothing is configured or sent by default. See docs/WEBHOOK_ALERTS.md.
 # ============================================================
 # alerts:
 #   enabled: false

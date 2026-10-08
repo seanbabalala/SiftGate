@@ -8,10 +8,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   backend:
-    name: Backend, Docs, E2E, Audit
-    runs-on: ubuntu-latest
+    name: Backend build, docs and audit
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
@@ -19,9 +22,15 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
+
+      - name: Check Node runtime contract
+        run: npm run runtime:check
+
+      - name: Check runtime and customer release tooling
+        run: npm run test:runtime && npm run test:customer
 
       - name: Install dependencies
         run: npm ci
@@ -38,12 +47,6 @@ jobs:
       - name: Build backend
         run: npm run build
 
-      - name: Run unit tests
-        run: npm test -- --runInBand
-
-      - name: Run e2e tests
-        run: npm run test:e2e
-
       - name: Validate example config
         run: npm run validate:config -- --config gateway.config.example.yaml
 
@@ -59,9 +62,86 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=critical
 
+  tests:
+    name: ${{ matrix.kind }} (${{ matrix.shard }}/4, SQLite + PostgreSQL)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        kind: [unit, e2e]
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: siftgate
+          POSTGRES_PASSWORD: siftgate_ci
+          POSTGRES_DB: pricing_goal_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U siftgate -d pricing_goal_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SIFTGATE_PRICING_TEST_POSTGRES_URL: postgres://siftgate:siftgate_ci@127.0.0.1:5432/pricing_goal_ci
+      SIFTGATE_TEST_POSTGRES_URL: postgres://siftgate:siftgate_ci@127.0.0.1:5432/pricing_goal_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Run every test in this deterministic shard
+        env:
+          TEST_KIND: ${{ matrix.kind }}
+          TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p output/ci-tests
+          config=()
+          if [[ "$TEST_KIND" == e2e ]]; then config=(--config test/jest-e2e.json); fi
+          npx --no-install jest "${config[@]}" --listTests --json --runInBand > output/ci-tests/discovery.json
+          node -e 'require("fs").writeFileSync("output/ci-tests/identity.json", JSON.stringify({kind:process.env.TEST_KIND,shard:Number(process.env.TEST_SHARD),totalShards:4,commit:process.env.GITHUB_SHA}))'
+          npx --no-install jest "${config[@]}" --runInBand --shard="$TEST_SHARD/4" \
+            --json --outputFile=output/ci-tests/results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-tests-${{ matrix.kind }}-${{ matrix.shard }}
+          path: output/ci-tests/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  test-coverage:
+    name: All test shards accounted for
+    needs: tests
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ci-tests-*
+          path: output/ci-test-results
+      - name: Require all shards, all discovered suites, and no skipped tests
+        env:
+          TEST_JOB_RESULT: ${{ needs.tests.result }}
+        run: |
+          test "$TEST_JOB_RESULT" = success
+          node scripts/check-ci-test-results.js output/ci-test-results "$GITHUB_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+
   frontend:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     defaults:
@@ -73,7 +153,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -88,7 +168,7 @@ jobs:
 
   sdk:
     name: SDKs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -96,7 +176,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 

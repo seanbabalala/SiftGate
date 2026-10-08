@@ -251,5 +251,7 @@
   "concepts.providerCatalog.title": "Provider Catalog 可见性取决于 catalog readiness",
   "concepts.providerCatalog.description": "Catalog 默认展示 active、canonical 的 provider projection。Legacy、transport-only 或 review-required provider 可以存在，但默认隐藏，除非明确显示或配置。",
   "setupGuide.copy": "複製 YAML",
-  "setupGuide.copied": "已複製"
+  "setupGuide.copied": "已複製",
+  "nav.alertConnectors": "告警連接器",
+  "nav.pricing": "計價管理"
 }

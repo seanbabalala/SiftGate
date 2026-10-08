@@ -53,12 +53,12 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
 
   return (
     <header
-      className="relative z-10 flex h-[58px] shrink-0 items-center justify-between bg-[var(--background)] px-4 sm:px-6 lg:px-8"
+      className="relative z-10 flex h-[58px] shrink-0 items-center justify-between gap-3 bg-[var(--background)] px-4 sm:px-6 lg:px-8"
       style={{
         boxShadow: 'var(--header-shadow)',
       }}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 max-w-[20rem] flex-1 items-center gap-3">
         {/* Hamburger menu */}
         {showHamburger && (
           <button
@@ -75,9 +75,9 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
           role="search"
           aria-label={t('header.searchLabel')}
           onSubmit={handleSearchSubmit}
-          className="flex items-center gap-2.5 rounded-lg bg-[var(--background-secondary)] px-3.5 py-2 shadow-[0_1px_2px_rgba(5,46,36,0.05)] transition-all duration-200 focus-within:-translate-y-0.5 focus-within:shadow-[0_14px_32px_rgba(5,46,36,0.1)]"
+          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg bg-[var(--background-secondary)] px-3.5 py-2 shadow-[0_1px_2px_rgba(5,46,36,0.05)] transition-all duration-200 focus-within:-translate-y-0.5 focus-within:shadow-[0_14px_32px_rgba(5,46,36,0.1)]"
         >
-          <Search className="h-3.5 w-3.5 text-[var(--foreground-dim)]" />
+          <Search className="h-3.5 w-3.5 shrink-0 text-[var(--foreground-dim)]" />
           <input
             ref={searchRef}
             type="text"
@@ -85,7 +85,7 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
             onChange={(e) => setSearchValue(e.target.value)}
             placeholder={t('header.searchPlaceholder')}
             aria-label={t('header.searchLabel')}
-            className="w-40 sm:w-56 bg-transparent text-[13px] text-[var(--foreground)] placeholder:text-[var(--foreground-dim)] outline-none"
+            className="min-w-0 w-full bg-transparent text-[13px] text-[var(--foreground)] placeholder:text-[var(--foreground-dim)] outline-none"
           />
           <kbd className="hidden sm:inline-flex items-center rounded-md bg-[var(--background-tertiary)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--foreground-dim)]">
             /
@@ -94,7 +94,7 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
       </div>
 
       {/* Right section */}
-      <div className="hidden items-center gap-3 sm:flex">
+      <div className="hidden shrink-0 items-center gap-2 sm:flex xl:gap-3">
         <ThemeToggle />
 
         {workspaceState && (
@@ -104,12 +104,12 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
               title={t('workspace.activeWorkspace')}
             >
               <Building2 className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">{t('workspace.activeScope')}</span>
+              <span className="hidden 2xl:inline">{t('workspace.activeScope')}</span>
               <select
                 value={workspaceState.active_workspace.id}
                 aria-label={t('workspace.switchWorkspace')}
                 onChange={(event) => void switchWorkspace(event.target.value)}
-                className="max-w-[160px] bg-transparent text-[11px] font-semibold text-[var(--foreground)] outline-none"
+                className="max-w-[120px] xl:max-w-[160px] bg-transparent text-[11px] font-semibold text-[var(--foreground)] outline-none"
               >
                 {switchableWorkspaces.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>
@@ -121,7 +121,7 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
             <Tooltip content={t(`rbac.roleDescriptions.${workspaceState.access?.role || 'viewer'}`)} side="bottom">
               <Badge
                 variant={workspaceState.access?.role === 'admin' ? 'emerald' : workspaceState.access?.role === 'operator' ? 'blue' : 'zinc'}
-                className="h-9 gap-1.5 rounded-lg px-2.5"
+                className="h-9 shrink-0 whitespace-nowrap gap-1.5 rounded-lg px-2.5"
               >
                 <ShieldCheck className="h-3 w-3" />
                 {t(`rbac.roles.${workspaceState.access?.role || 'viewer'}`)}
@@ -132,13 +132,13 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
 
         {/* Notification bell replaced with "Coming soon" tooltip */}
         <Tooltip content={t('header.notificationsComingSoon')} side="bottom">
-          <div className={cn(headerControlClass, 'relative w-9 justify-center text-[var(--foreground-dim)] transition-all duration-200 hover:-translate-y-0.5 hover:text-[var(--foreground-muted)] hover:shadow-[0_14px_30px_rgba(5,46,36,0.09)] cursor-default opacity-60')}>
+          <div className={cn(headerControlClass, 'relative hidden w-9 justify-center text-[var(--foreground-dim)] transition-all duration-200 hover:-translate-y-0.5 hover:text-[var(--foreground-muted)] hover:shadow-[0_14px_30px_rgba(5,46,36,0.09)] cursor-default opacity-60 2xl:flex')}>
             <Bell className="h-4 w-4" />
           </div>
         </Tooltip>
 
         {/* Gateway status pill */}
-        <div className={cn(headerControlClass, 'hidden gap-2 px-3 sm:flex')}>
+        <div className={cn(headerControlClass, 'hidden gap-2 px-3 xl:flex')}>
           <StatusDot
             status={
               health?.status === 'healthy'
@@ -169,7 +169,7 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
             className={cn(headerControlClass, 'gap-1.5 px-3 text-[11px] font-medium text-[var(--foreground-dim)] transition-all duration-200 hover:-translate-y-0.5 hover:text-[var(--foreground)] hover:shadow-[0_14px_30px_rgba(5,46,36,0.09)] cursor-pointer')}
           >
             <LogOut className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{t('action.signOut')}</span>
+            <span className="hidden xl:inline">{t('action.signOut')}</span>
           </button>
         ) : (
           <div

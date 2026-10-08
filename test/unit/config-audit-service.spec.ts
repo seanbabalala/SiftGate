@@ -208,6 +208,34 @@ function makeService(rawRef: { value: string }, overrides: Record<string, unknow
 }
 
 describe('ConfigAuditService', () => {
+  it('redacts secret webhook paths, query keys, arbitrary headers and chat credentials', async () => {
+    const raw = { value: `
+server: { port: 3000 }
+database: { type: sqlite, path: ':memory:' }
+nodes: []
+routing: { tiers: {} }
+alerts:
+  channels:
+    - type: wecom
+      url: https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=private-hook-query
+    - type: webhook
+      url: https://hooks.example.test/private-hook-path
+      headers: { X-Ops-Auth: private-header-value }
+    - type: telegram
+      bot_token: private-bot-token
+      chat_id: private-chat-id
+` };
+    const { service } = makeService(raw);
+    raw.value += '    - type: feishu\n      url: "${FEISHU_HOOK:-https://open.feishu.cn/open-apis/bot/v2/hook/private-fallback-hook}"\n';
+    await service.trackChange({ action: 'config.alerts.update', target: 'alerts' }, () => undefined);
+    const versions = await service.listVersions(10);
+    const detail = await service.getVersion((versions.data as Array<Record<string, unknown>>)[0].version_id as string);
+    const output = JSON.stringify(detail);
+    for (const secret of ['private-hook-query', 'private-hook-path', 'private-header-value', 'private-bot-token', 'private-chat-id', 'private-fallback-hook']) {
+      expect(output).not.toContain(secret);
+    }
+  });
+
   it('records redacted config versions and audit events around mutations', async () => {
     const raw = {
       value: `

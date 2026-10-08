@@ -953,5 +953,6 @@
   "mcp.setup.bullets.toolProxy": "Clients เรียก MCP proxy ด้วย Gateway API key แล้ว SiftGate forward ไปยัง configured MCP servers",
   "mcp.setup.bullets.notModelRouting": "หน้านี้กำกับ tool calls ส่วน model selection ยังอยู่ใน routing, nodes และ API key policy",
   "mcp.setup.bullets.endpointPermissions": "ใช้ allowed_endpoints เช่น mcp, mcp:server หรือ mcp:server:tool พร้อม namespace allow-lists",
-  "mcp.setup.bullets.noPayloadStorage": "Audit เก็บเฉพาะ method, tool, scope, status, latency และ size ไม่เก็บ tool arguments/results, headers หรือ secrets"
+  "mcp.setup.bullets.noPayloadStorage": "Audit เก็บเฉพาะ method, tool, scope, status, latency และ size ไม่เก็บ tool arguments/results, headers หรือ secrets",
+  "alerts.configure": "ตั้งค่าตัวเชื่อมต่อ"
 }

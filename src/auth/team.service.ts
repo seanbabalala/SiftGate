@@ -4,7 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull, LessThanOrEqual, Or, type EntityManager } from 'typeorm';
+import { coordinatedRepositoryOperation, isUniqueNameConflict } from '../database/coordinated-repository';
+import { lockBudgetConfiguration } from '../budget/budget-config-writer';
 import { ConfigService } from '../config/config.service';
 import { BudgetRule } from '../database/entities/budget-rule.entity';
 import { CallLog } from '../database/entities/call-log.entity';
@@ -13,7 +15,6 @@ import {
   applyWorkspaceQueryScope,
   normalizeWorkspaceId,
   workspaceFindWhere,
-  workspaceFindWhereStrict,
 } from '../workspaces/workspace-scope';
 import {
   LocalTeam,
@@ -54,6 +55,8 @@ export interface TeamSummary {
 
 @Injectable()
 export class TeamService {
+  private databaseScope: { manager: EntityManager; write: boolean } | null = null;
+  private checkedName?: string;
   constructor(
     private readonly config: ConfigService,
     private readonly workspaceContext: WorkspaceContextService,
@@ -65,7 +68,34 @@ export class TeamService {
     private readonly callLogRepo: Repository<CallLog>,
   ) {}
 
+  withTransaction<T>(action: (service: TeamService, manager?: EntityManager) => Promise<T>): Promise<T> {
+    if (this.databaseScope) {
+      if (!this.databaseScope.write) throw new Error('Cannot promote a read scope to a write transaction');
+      return action(this, this.databaseScope.manager);
+    }
+    return coordinatedRepositoryOperation(this.teamRepo, true, async (manager) => {
+      const service = manager ? this.scoped(manager, true) : this;
+      try { return await action(service, manager); }
+      catch (error) {
+        if (service.checkedName && isUniqueNameConflict(this.teamRepo, error)) throw new BadRequestException(`Team name already exists: ${service.checkedName}`);
+        throw error;
+      }
+    });
+  }
+
+  private scoped(manager: EntityManager, write: boolean): TeamService {
+    const service = new TeamService(this.config, this.workspaceContext, manager.getRepository(LocalTeam), manager.getRepository(BudgetRule), manager.getRepository(CallLog));
+    service.databaseScope = { manager, write };
+    return service;
+  }
+
+  private needsDatabaseScope(): boolean { return !this.databaseScope && Boolean(this.teamRepo.manager?.connection); }
+  private read<T>(action: (service: TeamService) => Promise<T>): Promise<T> {
+    return coordinatedRepositoryOperation(this.teamRepo, false, (manager) => action(manager ? this.scoped(manager, false) : this));
+  }
+
   async create(dto: CreateTeamDto): Promise<TeamSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.create(dto));
     const normalized = this.normalizeCreateDto(dto);
     const workspaceId = this.workspaceId();
     normalized.workspace_id = workspaceId;
@@ -79,6 +109,7 @@ export class TeamService {
   }
 
   async list(): Promise<TeamSummary[]> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.list());
     const teams = await this.teamRepo.find({
       where: workspaceFindWhere(this.workspaceId(), {}),
       order: { created_at: 'DESC' },
@@ -87,10 +118,12 @@ export class TeamService {
   }
 
   async getSummary(id: string): Promise<TeamSummary> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.getSummary(id));
     return this.toSummary(await this.getById(id));
   }
 
   async update(id: string, dto: UpdateTeamDto): Promise<TeamSummary> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.update(id, dto));
     const entity = await this.getById(id);
     const normalized = this.normalizeUpdateDto(dto);
     if (normalized.name && normalized.name !== entity.name) {
@@ -103,15 +136,18 @@ export class TeamService {
   }
 
   async remove(id: string): Promise<void> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.remove(id));
     const entity = await this.getById(id);
+    await lockBudgetConfiguration(this.budgetRepo, this.entityWorkspaceId(entity), { team_id: id });
     await this.budgetRepo.update(
-      { team_id: id, workspace_id: this.entityWorkspaceId(entity) },
+      workspaceFindWhere(this.entityWorkspaceId(entity), { team_id: id }),
       { is_active: false },
     );
     await this.teamRepo.remove(entity);
   }
 
   async getActiveTeam(id: string | null | undefined): Promise<LocalTeam | null> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.getActiveTeam(id));
     if (!id) return null;
     const team = await this.teamRepo.findOne({
       where: workspaceFindWhere(this.workspaceId(), { id }),
@@ -124,14 +160,16 @@ export class TeamService {
   }
 
   async touchUsage(id: string | null | undefined, at = new Date()): Promise<void> {
+    if (this.needsDatabaseScope()) return this.withTransaction((service) => service.touchUsage(id, at));
     if (!id) return;
     await this.teamRepo.update(
-      workspaceFindWhereStrict(this.workspaceId(), { id }),
+      workspaceFindWhere(this.workspaceId(), { id, last_used_at: Or(IsNull(), LessThanOrEqual(at)) }),
       { last_used_at: at },
     );
   }
 
   async exists(id: string | null | undefined): Promise<boolean> {
+    if (this.needsDatabaseScope()) return this.read((service) => service.exists(id));
     if (!id) return true;
     return !!(await this.teamRepo.findOne({
       where: workspaceFindWhere(this.workspaceId(), { id }),
@@ -274,6 +312,7 @@ export class TeamService {
     exceptId?: string,
     workspaceId = this.workspaceId(),
   ): Promise<void> {
+    this.checkedName = name;
     const existing = await this.teamRepo.findOne({
       where: workspaceFindWhere(workspaceId, { name }),
     });
@@ -285,6 +324,7 @@ export class TeamService {
   private async getById(id: string): Promise<LocalTeam> {
     const entity = await this.teamRepo.findOne({
       where: workspaceFindWhere(this.workspaceId(), { id }),
+      ...(this.databaseScope?.write && this.teamRepo.manager.connection.options.type === 'postgres' ? { lock: { mode: 'pessimistic_write' as const } } : {}),
     });
     if (!entity) {
       throw new NotFoundException(`Team not found: ${id}`);
@@ -293,14 +333,17 @@ export class TeamService {
   }
 
   private async syncBudgetRules(entity: LocalTeam): Promise<void> {
-    await this.upsertBudgetRule(entity, 'daily_tokens', entity.daily_token_limit);
-    await this.upsertBudgetRule(entity, 'daily_cost', entity.daily_cost_limit);
+    await lockBudgetConfiguration(this.budgetRepo, this.entityWorkspaceId(entity), { team_id: entity.id });
+    const threshold = this.config.budget.alert_threshold;
+    await this.upsertBudgetRule(entity, 'daily_tokens', entity.daily_token_limit, threshold);
+    await this.upsertBudgetRule(entity, 'daily_cost', entity.daily_cost_limit, threshold);
   }
 
   private async upsertBudgetRule(
     entity: LocalTeam,
     type: string,
     limit: number | null,
+    threshold: number,
   ): Promise<void> {
     const existing = await this.budgetRepo.findOne({
       where: workspaceFindWhere(this.entityWorkspaceId(entity), {
@@ -311,27 +354,20 @@ export class TeamService {
 
     if (limit === null || entity.status !== 'active') {
       if (existing) {
-        existing.is_active = false;
-        await this.budgetRepo.save(existing);
+        await this.budgetRepo.update(workspaceFindWhere(this.entityWorkspaceId(entity), { id: existing.id }), { is_active: false });
       }
       return;
     }
 
     if (existing) {
-      existing.limit_value = limit;
-      existing.alert_threshold = this.config.budget.alert_threshold;
-      existing.api_key_name = null;
-      existing.api_key_id = null;
-      existing.namespace_id = null;
-      existing.is_active = true;
-      await this.budgetRepo.save(existing);
+      await this.budgetRepo.update(workspaceFindWhere(this.entityWorkspaceId(entity), { id: existing.id }), { limit_value: limit, alert_threshold: threshold, api_key_name: null, api_key_id: null, namespace_id: null, is_active: true });
       return;
     }
 
     await this.budgetRepo.save(this.budgetRepo.create({
       type,
       limit_value: limit,
-      alert_threshold: this.config.budget.alert_threshold,
+      alert_threshold: threshold,
       current_value: 0,
       period_start: this.startOfDay(new Date()),
       is_active: true,
