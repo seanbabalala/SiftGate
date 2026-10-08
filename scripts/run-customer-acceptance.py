@@ -48,6 +48,10 @@ def main():
         log=args.output/(name+".log")
         with log.open("w") as file:
             result=subprocess.run([sys.executable,str(ROOT/"scripts"/script),*map(str,arguments)],cwd=ROOT,stdout=file,stderr=file,timeout=1800)
+        if result.returncode:
+            # These are deliberately synthetic fixtures; never upload their
+            # config/data/SSH-key directories. Keep bounded command diagnostics.
+            print(log.read_text()[-16000:],file=sys.stderr)
         release.require(result.returncode==0,"native_"+name.replace("-","_")+"_failed")
         raw=log.read_text(); offset=raw.find("{")
         release.require(offset>=0,"native_receipt_missing")

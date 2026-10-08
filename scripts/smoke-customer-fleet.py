@@ -251,6 +251,10 @@ def main():
                 "fresh_plan_for_remaining_target","existing_keys_and_sessions_preserved","final_http_observed"]}
         kit.write_json(folder/"result.json",receipt); print(json.dumps(receipt,indent=2))
     finally:
+        if sys.exc_info()[0] is not None:
+            for endpoint in endpoints:
+                endpoint.log.flush()
+                print("Synthetic SSH diagnostics: "+(endpoint.folder/"sshd.log").read_text()[-2000:],file=sys.stderr)
         for endpoint in reversed(endpoints): endpoint.close()
         for install in reversed(installations): kit.Install.load(install.root).compose("down","--timeout","45",timeout=90)
         for path in (package/"image.tar",artifact/"export.tar",folder/"exported/image.tar"):

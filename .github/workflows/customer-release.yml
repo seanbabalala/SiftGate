@@ -81,6 +81,14 @@ jobs:
           cache-to: type=gha,mode=max,scope=customer-${{ matrix.arch }}
       - name: Complete native lifecycle acceptance (synthetic installs only)
         run: python3 scripts/run-customer-acceptance.py --image siftgate-customer:smoke --output output/customer-native
+      - name: Retain bounded native receipts and logs (never fixture secrets)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-native-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: output/customer-native
+          if-no-files-found: ignore
+          retention-days: 30
       - uses: docker/login-action@v3
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         with:

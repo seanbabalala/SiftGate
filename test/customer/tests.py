@@ -349,7 +349,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertGreaterEqual(len(guards), 4)
         for guard in guards:
             self.assertIn(guard, {"if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')",
-                "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && steps.proof.outputs.reuse_bundle != 'true'"})
+                "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && steps.proof.outputs.reuse_bundle != 'true'", "if: always()"})
         self.assertIn('"$GITHUB_EVENT_NAME" == push', workflow)
         self.assertIn('customer-image-${{ matrix.arch }}', workflow)
         self.assertIn('actions/workflows/ci.yml/runs', workflow)
@@ -362,6 +362,9 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('id-token: write',workflow)
         self.assertLess(workflow.index('run-customer-acceptance.py'),workflow.index('Publish tested architecture candidate'))
         self.assertLess(workflow.index('gh release edit "$GITHUB_REF_NAME" --draft=false'),workflow.index('scripts/verify-public-customer-release.py'))
+        self.assertEqual(workflow.count("if: always()"),1)
+        self.assertIn('name: Retain bounded native receipts and logs (never fixture secrets)\n        if: always()\n        uses: actions/upload-artifact@v4',workflow)
+        self.assertIn('path: output/customer-native',workflow)
 
     def test_customer_checks_survive_merge_and_runtime_changes(self):
         workflow = (SOURCE.parents[2] / ".github/workflows/customer-install.yml").read_text()
