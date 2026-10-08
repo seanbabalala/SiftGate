@@ -1,5 +1,6 @@
-// Real schema/subprocess contracts below retain all data assertions; explicit
-// 30s execution budgets account for hosted-runner DDL/child startup, not API SLOs.
+// Every case below is a real schema integration contract, not an API SLO.
+// Use a consistent 30s execution budget for repeated DDL/introspection/rollback;
+// keep test bodies, data assertions, database durability and job deadlines intact.
 import { DataSource, Table, TableIndex } from "typeorm";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -132,7 +133,7 @@ function schemaContract(
         ).slice(0, 14),
       ).toEqual(before);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
     it("adds014 reconciliation custody without changing thirteen frozen migrations", async () => {
       expect(PRICING_MIGRATIONS[12]).toMatchObject({
         version: "pricing-engine-013",
@@ -188,7 +189,7 @@ function schemaContract(
         ).slice(0, 13),
       ).toEqual(before);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
     it("adds supplier-event custody013 without changing the twelve prior migrations", async () => {
       expect(PRICING_MIGRATIONS[11].version).toBe("pricing-engine-012");
       expect(PRICING_MIGRATIONS[11].checksum).toBe(
@@ -244,7 +245,7 @@ function schemaContract(
         ).slice(0, 12),
       ).toEqual(before);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
     it("MIG-TEST-03 plans without writes, migrates explicitly, and checks idempotence", async () => {
       expect((await planPricingSchema(dataSource)).state).toBe("pending");
       expect((await planPricingSchema(dataSource)).create_tables).toEqual(
@@ -262,7 +263,7 @@ function schemaContract(
       expect(
         await dataSource.query("SELECT * FROM pricing_catalog_head"),
       ).toHaveLength(1);
-    });
+    }, 30_000);
 
     it("upgrades an existing 005 schema while preserving all five frozen migration checksums", async () => {
       const frozen = [
@@ -347,7 +348,7 @@ function schemaContract(
       ).toEqual(frozen);
       expect(rows).toHaveLength(PRICING_MIGRATIONS.length);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
 
     it("preserves all six frozen migrations when adding audited resolution and physical manifests", async () => {
       const frozen = [
@@ -435,7 +436,7 @@ function schemaContract(
             checksum: row.checksum,
           })),
       ).toEqual(frozen);
-    });
+    }, 30_000);
 
     it("adds durable runtime evidence to 007 without changing seven historical checksums", async () => {
       const frozen = [
@@ -528,7 +529,7 @@ function schemaContract(
         ).slice(0, 7),
       ).toEqual(before);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
     it("adds disposition 009 without changing eight historical migration markers", async () => {
       const frozen = [
         {
@@ -625,7 +626,7 @@ function schemaContract(
         ).slice(0, 8),
       ).toEqual(before);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
     it("adds complete-group custody to009 while preserving every prior marker", async () => {
       expect(PRICING_MIGRATIONS[8].checksum).toBe(
         "8aa568e9c08ae87a291cd11a59d15443c4390d082b9b2cc09ad02e5338e9a712",
@@ -677,7 +678,7 @@ function schemaContract(
         ).slice(0, 9),
       ).toEqual(before);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
     it("adds011 dispositions without changing the ten frozen migration markers", async () => {
       expect(PRICING_MIGRATIONS[9].checksum).toBe(
         "01402546fad2f52fd5227cc799dd667f43562ed62b50d6c9ad84ee291bd871ce",
@@ -728,7 +729,7 @@ function schemaContract(
           )
         ).slice(0, 10),
       ).toEqual(before);
-    });
+    }, 30_000);
     it("adds012 parent lineage without changing eleven frozen markers", async () => {
       expect(PRICING_MIGRATIONS[10].checksum).toBe(
         "011ece9482b2598c000a0b0fae526c7795de98090d38f422abc8c7c90a98c0b9",
@@ -779,7 +780,7 @@ function schemaContract(
           )
         ).slice(0, 11),
       ).toEqual(before);
-    });
+    }, 30_000);
     it("rejects a missing012 lineage table with its surviving marker", async () => {
       await applyPricingSchema(dataSource);
       const runner = dataSource.createQueryRunner();
@@ -790,7 +791,7 @@ function schemaContract(
       }
       expect((await planPricingSchema(dataSource)).state).toBe("conflict");
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
     it("rejects a missing011 disposition table with its surviving marker", async () => {
       await applyPricingSchema(dataSource);
       const runner = dataSource.createQueryRunner();
@@ -801,7 +802,7 @@ function schemaContract(
       }
       expect((await planPricingSchema(dataSource)).state).toBe("conflict");
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("detects missing010 membership custody instead of repairing a surviving marker", async () => {
       await applyPricingSchema(dataSource);
@@ -813,7 +814,7 @@ function schemaContract(
       }
       expect((await planPricingSchema(dataSource)).state).toBe("conflict");
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("detects missing disposition 009 tables rather than repairing surviving markers", async () => {
       await applyPricingSchema(dataSource);
@@ -827,7 +828,7 @@ function schemaContract(
         "Migration pricing-engine-009 has a marker but its tables are missing",
       );
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("rejects a missing 008 inbox and a wrongly ordered outcome index", async () => {
       await applyPricingSchema(dataSource);
@@ -856,7 +857,7 @@ function schemaContract(
         "Migration pricing-engine-008 has a marker but its tables are missing",
       );
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("upgrades a populated 001 catalog through all additive steps without changing its original checksum or data", async () => {
       const first = PRICING_MIGRATIONS[0];
@@ -924,7 +925,7 @@ function schemaContract(
       await expect(removeEmptyPricingSchema(dataSource)).rejects.toThrow(
         "nonempty",
       );
-    });
+    }, 30_000);
 
     it("upgrades an existing 002 ledger without changing exact balances or the earlier checksums", async () => {
       const runner = dataSource.createQueryRunner();
@@ -1012,7 +1013,7 @@ function schemaContract(
         ).slice(0, 2),
       ).toEqual(markers);
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
-    });
+    }, 30_000);
 
     it("MIG-TEST-03 can roll back an unused schema, but refuses to erase actual data", async () => {
       await applyPricingSchema(dataSource);
@@ -1038,7 +1039,7 @@ function schemaContract(
       expect(
         await dataSource.query("SELECT * FROM pricing_books"),
       ).toHaveLength(1);
-    });
+    }, 30_000);
 
     it("rejects an applied 006 marker whose orphan review table was lost", async () => {
       await applyPricingSchema(dataSource);
@@ -1052,7 +1053,7 @@ function schemaContract(
         "Migration pricing-engine-006 has a marker but its tables are missing",
       );
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("rejects a surviving migration marker when its recovery table is missing", async () => {
       await applyPricingSchema(dataSource);
@@ -1068,7 +1069,7 @@ function schemaContract(
         "Migration pricing-engine-003 has a marker but its tables are missing",
       );
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("detects a reordered workspace index instead of treating its column set as equivalent", async () => {
       await applyPricingSchema(dataSource);
@@ -1092,7 +1093,7 @@ function schemaContract(
         "Missing index idx_pricing_reservation_workspace_request",
       );
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("refuses a partial or tampered schema instead of silently synchronizing it", async () => {
       await dataSource.query(
@@ -1100,7 +1101,7 @@ function schemaContract(
       );
       expect((await planPricingSchema(dataSource)).state).toBe("conflict");
       await expect(applyPricingSchema(dataSource)).rejects.toThrow("conflict");
-    });
+    }, 30_000);
 
     it("enforces the book relation, version identity and persisted snapshot catalog reference", async () => {
       await applyPricingSchema(dataSource);
@@ -1171,7 +1172,7 @@ function schemaContract(
           .values(version)
           .execute(),
       ).rejects.toThrow();
-    });
+    }, 30_000);
   });
 }
 
