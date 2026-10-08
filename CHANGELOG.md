@@ -2,7 +2,44 @@
 
 ## Unreleased
 
+## 2.11.7 - 2026-10-08
+
+### Fixed
+
+- Verify the remote annotated release tag in an isolated temporary ref instead
+  of trusting the local tag ref that `actions/checkout` can flatten to a commit.
+  Reject lightweight, missing, renamed or wrong-commit remote tags without
+  rewriting any version tag or `FETCH_HEAD`.
+- Initialize the source SHA in the release-check shell as well as exporting it
+  for later steps. Retain exact-main CI, native AMD64/ARM64, immutable aliases,
+  anonymous download and Draft-to-public installer gates; manual runs stay test-only.
+- Add 12 offline Git regression cases, including the exact failing checkout
+  refspec; the customer tooling suite now has 37 cases.
+- Apply bounded 30-second case/fixture budgets consistently to the real media
+  budget and Realtime ASR database lifecycle contracts after hosted CI exposed a
+  remaining implicit-default timeout. All test bodies, data assertions and
+  business performance thresholds are unchanged; the global Jest default stays.
+- Correct missing-usage embedding mocks to use actual batch sizes, and reuse
+  bounded admission barriers in fixtures requiring a shared physical batch.
+  Two forced-split cases and a delayed-admission case retain HTTP success/failure,
+  exact fees and held-budget assertions. The full HTTP floor increases from 815
+  to 818 tests; runtime batching windows, deadlines and gateway code are unchanged.
+
+### Publication And Upgrade Boundary
+
+- Carry forward the v2.11.6 pricing/customer-install changes below. The v2.11.6
+  source tag is preserved, but its tag-only validation failed before image builds
+  and no image or GitHub Release was published for it. Use the verified successor
+  release, not that source tag, for customer image installation.
+- Apart from release/version metadata, this successor changes release tooling,
+  not gateway behavior. The quantified pricing performance exception below still
+  applies; this is not a new performance benchmark or a blanket cross-version
+  upgrade guarantee. Publication never restarts an existing 2099 instance.
+
 ## 2.11.6 - 2026-10-08
+
+**Source tag only:** image publication stopped at the tag-validation gate. The
+immutable tag is retained; v2.11.7 is the successor release candidate.
 
 ### Added
 

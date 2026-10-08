@@ -18,7 +18,7 @@ describe('release version sync', () => {
     );
     const pythonVersion = pythonPyproject.match(/^version = "([^"]+)"$/m)?.[1];
 
-    expect(rootPackage.version).toBe('2.11.6');
+    expect(rootPackage.version).toBe('2.11.7');
     expect(clientPackage.version).toBe(rootPackage.version);
     expect(pythonVersion).toBe(rootPackage.version);
   });

@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
 
-function checkResults(directory, commit, minimums = { unit: 4472, e2e: 815 }) {
+function checkResults(directory, commit, minimums = { unit: 4472, e2e: 818 }) {
   const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
   const summaries = [];
   for (const kind of ['unit', 'e2e']) {

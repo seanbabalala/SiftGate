@@ -1,3 +1,6 @@
+// Real database lifecycle cases and their fixtures use bounded 30s execution
+// budgets for schema setup, publication, settlement and cold recovery. Test
+// bodies and monetary/data assertions are unchanged; these are not API SLOs.
 import { pricingContentHash } from '../../src/pricing/pricing-json';
 import { DataSource } from "typeorm";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -29,8 +32,8 @@ function contract(label: string, connect: () => Promise<{ db: DataSource; cleanu
         { workspace_id: workspace, type: "daily_tokens", limit_value: 100000, current_value: 0, alert_threshold: 0.8, period_start: new Date(), is_active: true },
       ]);
       prices = new PricingRepository(db); ledger = makeLedger(); service = new RealtimePricingService(prices, ledger);
-    });
-    afterEach(async () => { jest.restoreAllMocks(); if (db?.isInitialized) await db.destroy(); await cleanup?.(); });
+    }, 30_000);
+    afterEach(async () => { jest.restoreAllMocks(); if (db?.isInitialized) await db.destroy(); await cleanup?.(); }, 30_000);
     const begin = (id = "asr-request") => service.begin(id, asrKey, "node", realtimeModel, 60000);
     const asrHold = async () => (await db.query("SELECT * FROM pricing_reservations") as Array<{ id: string; target_json: string; holds_json: string; reserved_tokens: string }>).find(row => JSON.parse(row.target_json).model === asrModel)!;
 
@@ -64,7 +67,7 @@ function contract(label: string, connect: () => Promise<{ db: DataSource; cleanu
         expect(holds.every(row => row.state === 'committed')).toBe(!calendar);
         if (calendar) expect(holds.some(row => row.state === 'reserved')).toBe(true);
       } finally { await connection.destroy(); }
-    });
+    }, 30_000);
 
     it.each([false, true])('retains the old FX when current FX is removed, but refuses a new strict session (duration=%s)', async duration => {
       const result = await runRealtimePriceLifecycle(lifecycleAdmin(), service, ledger, asrKey, 'node', duration, true, true);
@@ -72,7 +75,7 @@ function contract(label: string, connect: () => Promise<{ db: DataSource; cleanu
       expect(await db.query("SELECT * FROM pricing_reservations WHERE request_id = 'lifecycle-new'")).toHaveLength(0);
       expect(await db.query("SELECT * FROM pricing_attempts WHERE request_id = 'lifecycle-new'")).toHaveLength(0);
       expect(await ledger.summary('lifecycle-old', workspace)).toEqual(result.first);
-    });
+    }, 30_000);
 
     it.each([false, true].flatMap(duration => ["receipt-retained", "closure-retained", "closed", "missing"].map(mode => ({ duration, mode }))))("replays only durable ASR authority after actual child exit at $mode (duration=$duration)", async ({ duration, mode }) => {
       await configureAsrFixture(prices, duration);
@@ -119,7 +122,7 @@ function contract(label: string, connect: () => Promise<{ db: DataSource; cleanu
         const before = await connection.query("SELECT * FROM budget_rules ORDER BY id");
         await restored.replayRuntimeOutcomes(new Date(Date.now() + 240000)); expect(await connection.query("SELECT * FROM budget_rules ORDER BY id")).toEqual(before);
       } finally { await connection.destroy(); }
-    });
+    }, 30_000);
 
     it("keeps token ASR scoped to its own token allowance beside an explicitly token-exempt Realtime tariff", async () => {
       await configureAsrFixture(prices, false, true); const handle = (await begin())!;
@@ -130,7 +133,7 @@ function contract(label: string, connect: () => Promise<{ db: DataSource; cleanu
       expect(result.budget_committed_usd).toBe("0.031000000000000000");
       expect(result.reservations.find(row => row.id === hold.id)!.committed_tokens).toBe("22");
       expect(result.reservations.find(row => row.id !== hold.id)!.committed_tokens).toBe("0");
-    });
+    }, 30_000);
 
     it("corrects confirmed ASR expense under its original tariff and budget epoch with atomic audit and idempotent replay", async () => {
       const version = await configureAsrFixture(prices); const handle = (await begin())!; await observeAsrFixture(handle, false); await handle.close(false);
@@ -154,7 +157,7 @@ function contract(label: string, connect: () => Promise<{ db: DataSource; cleanu
       expect((await makeLedger().summary("asr-request", workspace))!.budget_committed_usd).toBe("0.024000000000000000");
       expect(await db.query("SELECT * FROM budget_rules ORDER BY id")).toEqual(active);
       expect(await db.query("SELECT * FROM pricing_attempts ORDER BY id")).toEqual(originalAttempts);
-    });
+    }, 30_000);
   });
 }
 

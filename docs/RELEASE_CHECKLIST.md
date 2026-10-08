@@ -66,6 +66,12 @@ Every pull request should get non-Docker CI signal from `.github/workflows/ci.ym
 - frontend checks and build
 - TypeScript SDK build, tests, typecheck, and Python SDK tests
 
+Customer tooling tests include offline Git fixtures for remote annotated-tag
+validation, including checkout's commit-to-local-tag refspec. The publisher must
+verify the remote tag object, not assume the runner's local tag remains annotated.
+When a pushed tag contains a workflow defect, preserve it and release a verified
+successor; rerunning the old tag does not pick up a workflow fix made on main.
+
 Docker smoke remains a separate workflow because it depends on a working Docker
 daemon and is useful as a container-path complement, not the only quality gate.
 

@@ -39,13 +39,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
           node scripts/check-public-release.js
           node scripts/check-docs.js
           node scripts/check-release-version.js
           if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/tags/* ]]; then
             test "${GITHUB_REF_NAME}" = "v$(node -p "require('./package.json').version")"
-            test "$(git cat-file -t "$GITHUB_REF_NAME")" = tag
+            python3 scripts/check-customer-release-tag.py \
+              --tag "$GITHUB_REF_NAME" --commit "$SOURCE_SHA"
             git merge-base --is-ancestor HEAD origin/main
             # Customer smoke complements, but never substitutes for, the full main CI.
             gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \

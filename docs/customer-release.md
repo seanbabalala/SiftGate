@@ -15,11 +15,14 @@ the exported release variables in that session.
 
 ## 0. State gate: a branch runbook is not a ready main branch
 
-**Audit snapshot, October 2, 2026:** remote `main` was `b3764a2`, without the
-customer workflows, `deploy/customer/` or these runbooks. Corrections are on
-`codex/v2.11.6-customer-install`; root version remains `2.11.5`. The `v2.11.6`
-example is not a selected or published release. This dated observation is not
-permanent status: fetch and inspect actual commits before each operation.
+**Publication checkpoint, October 8, 2026:** PR #132 merged the customer system
+to `main` (`cff3cc9`); its full main CI and both native rehearsals passed.
+The `v2.11.6` tag workflow then failed before builds because checkout flattened
+the runner's local annotated-tag ref to a commit. The remote tag is preserved;
+no v2.11.6 image or GitHub Release was published. Successor v2.11.7 validates the
+remote tag object and adds offline regressions. It still requires its own full
+gates: the predecessor's green runs are not successor release evidence. Fetch
+and inspect actual commits before each operation.
 
 | State | Required evidence | Permitted actions |
 | --- | --- | --- |
@@ -37,8 +40,8 @@ S2 → publication + public downloads + clean-host acceptance → S3 customer-in
 Merge the customer workflows, deployment kit, scripts/tests, Node constraints,
 `docs/customer-*` and **the `docs/RELEASE_CHECKLIST.md` update together**. Do not
 merge only the new manual while leaving main's old manual-Release instructions.
-A fix on this feature branch is not a fix already on remote main; this work does
-not merge it automatically. These read-only checks must succeed in an isolated checkout:
+Subsequent fixes also require normal review and merge; a feature-branch fix is
+not already on main. These read-only checks must succeed in an isolated checkout:
 
 ```bash
 git fetch origin main
@@ -114,6 +117,21 @@ For `ghcr.io/seanbabalala/ai-gateway`, check the package's **Package settings**:
 Do not remove the anonymous-access gate to disguise private distribution as OSS
 public installation. Deliberately private distribution needs a separate reviewed
 credential and delivery policy.
+
+### Remote annotated-tag validation
+
+On tag events, checkout can replace the runner's local `refs/tags/<version>`
+with the event commit. That does not mean the remote tag moved. The publisher's
+`scripts/check-customer-release-tag.py` fetches the remote object into a fresh
+non-tag ref, checks its annotation, name/version and direct source-commit target,
+then deletes only that temporary ref. It never rewrites version tags or
+`FETCH_HEAD`; unavailable, lightweight, missing or mismatched remote tags fail
+closed. Main ancestry and exact main-push CI checks remain mandatory afterwards.
+
+If a pushed tag contains a workflow defect, fixing main and rerunning the old run
+does not replace that tag's workflow. Preserve the tag and validate a successor
+version. Do not move the old tag, upload manually around the gates or enable
+manual publication as a workaround.
 
 ## 3. Prepare and review the version
 

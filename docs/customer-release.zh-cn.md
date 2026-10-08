@@ -14,10 +14,12 @@
 
 ## 0. 先确认状态：分支手册不等于 main 已具备发布系统
 
-**审阅快照（2026 年 10 月 2 日）**：远端 `main` 为 `b3764a2`，尚未包含客户发布工作流、
-`deploy/customer/` 和这组手册；本轮修正位于 `codex/v2.11.6-customer-install`。
-根 `package.json` 仍为 `2.11.5`，`v2.11.6` 只是示例，不能据此直接发版。
-这是有日期的审阅记录，不是永久状态；每次操作都必须重新 fetch 并核对实际提交。
+**发布检查点（2026 年 10 月 8 日）**：客户安装/发布系统已通过 PR #132 合入
+`main`（`cff3cc9`），完整主分支 CI 与双原生架构演练通过。但 `v2.11.6` 的正式 tag
+流水线在构建前失败：checkout 将 runner 本地的 annotated tag 引用改成了 commit，
+旧校验因此误判。远端 `v2.11.6` tag 保持原样，未发布该版本镜像或 GitHub Release。
+后继 `v2.11.7` 修正为读取远端 tag 对象，并补上离线回归；仍需自己的完整门禁通过，
+不能把上一个版本的绿灯当成本次发布完成。每次操作都重新 fetch 并核对实际提交。
 
 | 状态 | 必须满足 | 此时允许做什么 |
 | --- | --- | --- |
@@ -35,7 +37,7 @@ S2 → 正式发布 + 公共下载 + 客户安装验收 → S3 客户可装
 合入必须包含 `.github/workflows/customer-*.yml`、`deploy/customer/`、相应 scripts/tests、
 Node 版本约束、`docs/customer-*` 和 **`docs/RELEASE_CHECKLIST.md` 的更新**。
 不能只合入新文档，继续让 main 旧 checklist 指示“打 tag 后手工创建公开 Release”。
-本分支改好了不代表远端 main 已经改好；本次没有执行合并。
+后续修正也必须正常审查合入；不能把工作分支上的修正误当作 main 已具备的能力。
 
 在隔离 checkout 内做以下只读核验；缺少文件就是 S0，不要越过：
 
@@ -59,27 +61,27 @@ git show origin/main:docs/RELEASE_CHECKLIST.md
 
 | 对象 | 要求 |
 | --- | --- |
-| 源码 | 审核后的 `main` 提交及其 annotated Git tag，例如 `v2.11.6` |
+| 源码 | 审核后的 `main` 提交及其 annotated Git tag，例如 `v2.11.7` |
 | 完整 CI | 这个**确切提交**在 `main` 上的 push CI 成功，不是另一个提交的绿灯 |
 | 架构镜像 | 原生 Linux AMD64、ARM64 分别构建并通过安装验收 |
 | 镜像索引 | GHCR 多架构 index 指向这次验收的两个不可变 digest |
-| 标签 | `v2.11.6` 与 `2.11.6` 两个镜像标签解析到同一 index digest |
-| 安装包 | `siftgate-v2.11.6-install.tar.gz` 和相应 `.sha256` 附件 |
+| 标签 | `v2.11.7` 与 `2.11.7` 两个镜像标签解析到同一 index digest |
+| 安装包 | `siftgate-v2.11.7-install.tar.gz` 和相应 `.sha256` 附件 |
 | 身份 | 安装包内 `release.json` 的 commit、version、image digest 与发布记录一致 |
 | 可下载性 | 不登录 GitHub/Docker 也能读取公共镜像 manifest；在干净机器实际拉取并安装 |
 | 发布说明 | 变更、迁移、测试证据、已知限制、回滚边界明确 |
 
-表中的 `2.11.6` 只是示例，**不表示该版本已经发布**。版本必须由维护者审核确定。
+表中的 `2.11.7` 只是示例，**不表示该版本已经发布**。版本必须由维护者审核确定。
 不能仅凭“代码推送成功”“本机有镜像”“GitHub Actions 某个测试成功”宣布正式发布。
 
 ### 命名规则
 
 ```text
-Git tag:          v2.11.6
+Git tag:          v2.11.7
 Registry:         ghcr.io
 Image repository: ghcr.io/seanbabalala/ai-gateway
-Version aliases:  ghcr.io/seanbabalala/ai-gateway:v2.11.6
-                  ghcr.io/seanbabalala/ai-gateway:2.11.6
+Version aliases:  ghcr.io/seanbabalala/ai-gateway:v2.11.7
+                  ghcr.io/seanbabalala/ai-gateway:2.11.7
 Production pin:   ghcr.io/seanbabalala/ai-gateway@sha256:<index digest>
 Build staging:    build-<workflow run id>-<attempt>-<architecture>
 Platforms:       linux/amd64, linux/arm64
@@ -147,6 +149,18 @@ OCI `org.opencontainers.image.source` 标签把镜像关联到源码仓库。
 流水线会用临时空 Docker 认证目录检查匿名 manifest 访问。如果首次发布在这里失败，
 先修正包可见性，再**只重跑失败 job**；不要重建已经验收的两个架构来碰运气。
 私人镜像分发需要另外设计客户凭证和发布策略，不能直接删除匿名检查来冒充公共发行。
+
+### 2.5 校验远端 annotated tag，而不是 checkout 的本地引用
+
+tag 事件中的 checkout 可能把 `refs/tags/<版本>` 在 runner 本地改为事件的 commit。
+这不表示远端 tag 被移动，不能只用本地 `git cat-file -t` 判定发布是否合法。
+流水线的 `scripts/check-customer-release-tag.py` 将远端对象 fetch 到一次性非 tag 引用，
+核验它确实是 annotated tag、名称/版本正确、直接指向本次源码 commit，再清理自己的
+临时引用。它不修改版本 tag 或 `FETCH_HEAD`，网络错误、轻量 tag、缺失或错位对象都拒绝。
+之后仍须通过 main 祖先关系与确切 main push CI 检查，不能用此修正绕过其他门禁。
+
+已推 tag 若固化了有缺陷的工作流，仅修改 main 再重跑旧 run 不会替换旧工作流。
+保留旧 tag，修复并选择新版本重新验收；不得移动旧 tag、手工上传绕过门禁或改成手动发布。
 
 ## 3. 准备一个正式版本
 
@@ -431,7 +445,7 @@ python3 "$HOME/siftgate-release-acceptance/kit/siftgate.py" \
 | 手动跑 tag 但 publish skipped | 正常；手动运行只测试，正式发布由维护者推送 tag 触发 |
 | tag 推送没有触发 | 核对事件来源、Actions 策略和工作流是否在该 tag；不要移动 tag |
 | version mismatch | 修复版本同步，重新审查新提交；不能让旧 tag 偷偷改指向 |
-| annotated tag 检查失败 | lightweight tag 不满足发布规则；已推送 tag 不强行重写，使用新版本 |
+| annotated tag 检查失败 | 先核对远端对象，不信任可能被 checkout 展平的本地引用；旧工作流缺陷用新版本修正，lightweight/mismatch 仍拒绝 |
 | main CI gate 失败 | 等待确切提交的 main push CI 成功；不能拿 PR merge-ref 或旧提交绿灯代替 |
 | AMD64/ARM64 runner 排队/不可用 | 检查账户额度、组织 runner 策略；不删除一个架构检查来伪装通过 |
 | 编译、原生模块或烟测失败 | 查看失败架构日志，在新代码提交修复；不把不同架构层手工拼在一起 |
