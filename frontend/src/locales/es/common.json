@@ -253,5 +253,7 @@
   "setupGuide.copy": "Copiar YAML",
   "setupGuide.copied": "Copiado",
   "nav.alertConnectors": "Conectores de alertas",
-  "nav.pricing": "Precios"
+  "nav.pricing": "Precios",
+  "nav.launchpad": "Primeros pasos",
+  "nav.controlRoom": "Operaciones del host"
 }

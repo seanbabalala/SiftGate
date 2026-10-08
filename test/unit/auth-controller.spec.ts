@@ -187,6 +187,7 @@ describe('AuthController', () => {
       const controller = new AuthController(authService, config);
 
       expect(controller.getStatus()).toEqual({
+        identity: { mode: 'legacy', setupRequired: false, activationExpired: false },
         authRequired: true,
         authenticated: false,
         localLoginEnabled: true,
@@ -208,6 +209,7 @@ describe('AuthController', () => {
       const controller = new AuthController(authService, config);
 
       expect(controller.getStatus()).toEqual({
+        identity: { mode: 'legacy', setupRequired: false, activationExpired: false },
         authRequired: false,
         authenticated: false,
         localLoginEnabled: false,
@@ -232,6 +234,7 @@ describe('AuthController', () => {
           cookies: { [DASHBOARD_SESSION_COOKIE]: 'jwt-token-123' },
         }),
       ).toEqual({
+        identity: { mode: 'legacy', setupRequired: false, activationExpired: false },
         authRequired: true,
         authenticated: true,
         localLoginEnabled: true,
@@ -257,6 +260,7 @@ describe('AuthController', () => {
           cookies: { [DASHBOARD_SESSION_COOKIE]: 'expired-token' },
         }),
       ).toEqual(expect.objectContaining({
+        identity: { mode: 'legacy', setupRequired: false, activationExpired: false },
         authRequired: true,
         authenticated: false,
       }));

@@ -132,9 +132,9 @@ auth:
 #       namespace_id: team-a
 
 # Dashboard authentication (secure by default)
-# If password/OIDC is omitted, SiftGate generates an initial Dashboard password
-# at first startup, logs it once, hashes it with bcrypt, and writes the hash
-# back to this file.
+# Configure password/OIDC before starting. Missing credentials fail closed.
+# The matching customer kit instead initializes a private managed identity
+# for single-use activation; do not add identity_file to an existing install.
 # Set dashboard.auth_required=false only for trusted local/dev environments.
 # In NODE_ENV=production, SiftGate ignores auth_required=false unless
 # SIFTGATE_ALLOW_UNAUTHENTICATED_DASHBOARD=true is explicitly set.

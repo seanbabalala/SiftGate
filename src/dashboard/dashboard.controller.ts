@@ -6583,6 +6583,7 @@ export class DashboardController implements BeforeApplicationShutdown {
 
       return {
         id: node.id,
+        enabled: node.disabled !== true,
         name: node.name,
         protocol: node.protocol,
         base_url: node.base_url,
@@ -7090,6 +7091,7 @@ export class DashboardController implements BeforeApplicationShutdown {
           this.config.addNode({
             id: dto.id,
             name: dto.name,
+            disabled: dto.disabled,
             protocol: dto.protocol,
             base_url: dto.base_url,
             endpoint: dto.endpoint,

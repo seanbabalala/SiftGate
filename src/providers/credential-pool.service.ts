@@ -79,6 +79,7 @@ export class CredentialPoolService {
   ) {}
 
   async select(node: NodeConfig, context: SelectionContext = {}): Promise<CredentialSelection> {
+    if (node.disabled === true) throw new Error(`Node "${node.id}" is disabled`);
     const credentials = this.listCredentials(node);
     if (credentials.length === 0) {
       throw new Error(`Node "${node.id}" must define api_key or credentials`);

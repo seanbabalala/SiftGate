@@ -10,6 +10,9 @@ import {
   HttpStatus,
   Optional,
   Query,
+  ForbiddenException,
+  UseGuards,
+  Header,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -31,8 +34,12 @@ import {
   ErrorEnvelopeDto,
   LoginRequestDto,
   LoginResponseDto,
+  IdentityCodeRequestDto,
+  IdentityPasswordRequestDto,
 } from '../openapi/openapi.dto';
 import { StateBackendService } from '../state/state-backend.service';
+import { IdentityError } from './dashboard-identity-store';
+import { DashboardGuard } from './dashboard.guard';
 import { DEFAULT_WORKSPACE_ID } from '../workspaces/workspace.constants';
 import {
   clearDashboardSessionCookie,
@@ -61,6 +68,7 @@ export class AuthController {
    * Verify password and return a JWT token.
    */
   @Post('login')
+  @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: 'Login to the local Dashboard' })
   @ApiBody({ type: LoginRequestDto })
   @ApiOkResponse({ type: LoginResponseDto })
@@ -73,6 +81,21 @@ export class AuthController {
   ) {
     const ip: string = req.ip || req.connection?.remoteAddress || 'unknown';
     await this.checkLoginRate(ip);
+
+    if (this.authService.isManagedIdentity) {
+      this.requireSameOrigin(req);
+      // The first managed version is a single local instance administrator;
+      // legacy/OIDC invitation mapping remains on the existing auth path.
+      if (body?.invite) throw new HttpException({ error: { code: 'managed_invite_unsupported' } }, HttpStatus.BAD_REQUEST);
+      try {
+        const token = await this.authService.loginManaged(body?.password);
+        setDashboardSessionCookie(res, token); return { token };
+      } catch (error) {
+        if (error instanceof IdentityError && error.code === 'invalid_credentials')
+          throw new UnauthorizedException({ error: { code: 'invalid_credentials' } });
+        throw new HttpException({ error: { code: 'identity_unavailable' } }, HttpStatus.SERVICE_UNAVAILABLE);
+      }
+    }
 
     if (!this.authService.isLocalPasswordAuthEnabled) {
       if (this.authService.isAuthRequired) {
@@ -124,12 +147,67 @@ export class AuthController {
     return { ok: true };
   }
 
+  private requireSameOrigin(req: any) {
+    const site = req.headers?.['sec-fetch-site'];
+    if (site && site !== 'same-origin' && site !== 'none') throw new ForbiddenException();
+    const origin = req.headers?.origin;
+    if (origin) {
+      try {
+        const parsed = new URL(origin);
+        // TLS proxies must preserve Host. Never trust a user-supplied Forwarded header.
+        if (!['http:', 'https:'].includes(parsed.protocol) || parsed.host !== req.headers?.host) throw new Error();
+      } catch { throw new ForbiddenException(); }
+    }
+  }
+
+  private async identityOperation(req: any, action: () => Promise<unknown>) {
+    if (!this.authService.isManagedIdentity) throw new HttpException({ error: { code: 'identity_not_managed' } }, HttpStatus.NOT_FOUND);
+    this.requireSameOrigin(req);
+    await this.checkLoginRate(req.ip || 'unknown');
+    try { await action(); return { ok: true, signInRequired: true }; }
+    catch (error) {
+      if (!(error instanceof IdentityError)) throw new HttpException({ error: { code: 'identity_unavailable' } }, HttpStatus.SERVICE_UNAVAILABLE);
+      const status = error.code === 'password_policy' ? 400 : error.code === 'identity_conflict' ? 409
+        : error.code === 'identity_busy' || error.code === 'identity_unavailable' ? 503 : 401;
+      throw new HttpException({ error: { code: error.code } }, status);
+    }
+  }
+
+  @Post('identity/activate')
+  @Header('Cache-Control', 'no-store')
+  @ApiBody({ type: IdentityCodeRequestDto })
+  @ApiOperation({ summary: 'Consume a host-issued activation code; sign in separately afterwards' })
+  activate(@Req() req: any, @Body() body: { code?: unknown; password?: unknown }) {
+    return this.identityOperation(req, () => this.authService.identity.complete('activate', body?.code, body?.password));
+  }
+
+  @Post('identity/recover')
+  @Header('Cache-Control', 'no-store')
+  @ApiBody({ type: IdentityCodeRequestDto })
+  @ApiOperation({ summary: 'Reset managed administrator access with a host-issued recovery code' })
+  async recover(@Req() req: any, @Body() body: { code?: unknown; password?: unknown }, @Res({ passthrough: true }) res?: Response) {
+    const result = await this.identityOperation(req, () => this.authService.identity.complete('recover', body?.code, body?.password));
+    clearDashboardSessionCookie(res); return result;
+  }
+
+  @Post('identity/password')
+  @Header('Cache-Control', 'no-store')
+  @ApiBody({ type: IdentityPasswordRequestDto })
+  @UseGuards(DashboardGuard)
+  @ApiOperation({ summary: 'Change managed password after reauthentication; revoke all Dashboard sessions' })
+  async changeIdentityPassword(@Req() req: any, @Body() body: { current_password?: unknown; password?: unknown }, @Res({ passthrough: true }) res?: Response) {
+    if (req.dashboardUser?.sub !== 'dashboard') throw new ForbiddenException();
+    const result = await this.identityOperation(req, () => this.authService.identity.changePassword(body?.current_password, body?.password));
+    clearDashboardSessionCookie(res); return result;
+  }
+
   /**
    * GET /api/auth/status
    * Public endpoint — returns whether auth is required.
    * No guard needed — this must be accessible without a token.
    */
   @Get('status')
+  @Header('Cache-Control', 'no-store')
   @ApiOperation({ summary: 'Check whether Dashboard authentication is enabled' })
   @ApiOkResponse({ type: AuthStatusResponseDto })
   getStatus(@Req() req?: any) {
@@ -145,12 +223,14 @@ export class AuthController {
         localLoginEnabled: this.authService.isLocalPasswordAuthEnabled,
         authenticated: this.hasAuthenticatedSession(req),
         oidc,
+        identity: this.authService.getIdentityStatus?.() ?? { mode: 'legacy', setupRequired: false, activationExpired: false },
       };
     } catch (err) {
       this.telemetry?.recordDashboardAuthEvent({
         event: 'status_failure',
         mode: 'unknown',
       });
+      if (err instanceof IdentityError) throw new HttpException({ error: { code: 'identity_unavailable' } }, HttpStatus.SERVICE_UNAVAILABLE);
       throw err;
     }
   }
@@ -274,7 +354,9 @@ export class AuthController {
   }
 
   private hasAuthenticatedSession(req: any): boolean {
-    const token = getDashboardSessionCookie(req);
+    const authorization = req?.headers?.authorization;
+    const bearer = this.authService.allowsLegacyDashboardTokenAuth && typeof authorization === 'string' && authorization.startsWith('Bearer ') ? authorization.slice(7) : null;
+    const token = getDashboardSessionCookie(req) || bearer;
     if (!token) return false;
     try {
       return !!this.authService.verifyToken(token);

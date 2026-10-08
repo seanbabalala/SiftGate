@@ -147,6 +147,11 @@ export class CredentialPoolDto {
 }
 
 export class CreateNodeDto {
+  @ApiPropertyOptional({ default: false, description: 'Explicitly prevent new provider dispatch.' })
+  @IsOptional()
+  @IsBoolean()
+  disabled?: boolean;
+
   @ApiProperty({ example: 'openai', description: 'Stable upstream provider, account, deployment, or proxy route id.' })
   @IsString()
   @IsNotEmpty()
@@ -570,6 +575,11 @@ export class TestNodeDto {
 }
 
 export class UpdateNodeDto {
+  @ApiPropertyOptional({ default: false, description: 'Explicitly prevent new provider dispatch.' })
+  @IsOptional()
+  @IsBoolean()
+  disabled?: boolean;
+
   @ApiPropertyOptional({ example: 'OpenAI Main Account' })
   @IsOptional()
   @IsString()

@@ -35,11 +35,15 @@ intentionally want a fallback value.
 
 ```bash
 npm run build
+# Configure dashboard.password (or OIDC) in the private YAML before this step.
 npm start
 ```
 
-On first startup, SiftGate generates an initial Dashboard password, logs it
-once, and stores only its bcrypt hash in `gateway.config.yaml`.
+Before starting a source installation, explicitly configure `dashboard.password`
+(or OIDC) in your private configuration. A plaintext configured password is hashed
+on startup; missing credentials now fail closed, with no generated password in logs.
+The customer kit in this development branch instead offers one-time activation;
+use the documentation shipped with your released kit/image, not a mismatched branch.
 
 Open:
 

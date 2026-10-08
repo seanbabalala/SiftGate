@@ -287,7 +287,7 @@ For official GHCR images and customer installer assets, follow the executable
 [formal image release runbook](customer-release.md)
 ([中文完整版](customer-release.zh-cn.md)). It includes initial package permissions,
 exact-commit main CI, dual-architecture acceptance, immutable version aliases,
-draft-to-public asset publication and failure recovery.
+draft-to-public signed quartet publication, both-architecture cold anonymous installs, and failure recovery.
 
 Publishing source is separate from deploying it. Follow the
 [runtime alignment procedure](BASELINE.md#runtime-alignment-without-an-early-restart)
@@ -324,14 +324,14 @@ git push origin vX.Y.Z
 With the customer release workflow installed on `main`, the approved annotated
 tag push publishes the tested images and installer. Do not create a competing
 empty public Release while it runs: the workflow stages a Draft and verifies
-assets before publishing. Manual workflow dispatch is test-only, including a
+local/authenticated asset bytes and publisher proof before public visibility, then anonymous signatures/layer pulls and cold installs afterward. Manual workflow dispatch is test-only, including a
 dispatch that selects a tag. Keep the following content in the release notes:
 
 - concise highlights
 - upgrade notes
 - test evidence
 - known limitations
-- prerelease flag for alpha, beta, and rc tags
+- stable-only signed lifecycle contract (prerelease support requires separate acceptance)
 
 Never force-push or rewrite a published tag. If a release regression blocks
 existing v1.9 behavior, ship a forward hotfix before continuing the roadmap.

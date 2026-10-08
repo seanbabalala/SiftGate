@@ -522,6 +522,13 @@ export async function createE2EHarness(configPath = FIXTURE_PATH, options: { fro
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: true, limit: '1mb' }));
 
+  if (options.frontendRoot) {
+    // Mirror the production SPA history fallback only for isolated UI fixtures.
+    app.use((req: any, res: any, next: () => void) => {
+      if (req.method !== 'GET' || /^\/(api|v1|mcp|live|health|ready|cluster)(\/|$)/.test(req.path) || /\.\w+$/.test(req.path)) return next();
+      res.sendFile('index.html', { root: options.frontendRoot! });
+    });
+  }
   await app.init();
 
   const apiKeyRepo = app.get(getRepositoryToken(GatewayApiKey));

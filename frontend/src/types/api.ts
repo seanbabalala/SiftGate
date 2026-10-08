@@ -1464,6 +1464,8 @@ export interface ProviderCompatibilityMatrixItem {
 }
 
 export interface NodeInfo {
+  enabled?: boolean;
+  disabled?: boolean;
   id: string;
   name: string;
   protocol: "chat_completions" | "responses" | "messages" | "gemini";
@@ -1966,6 +1968,7 @@ export interface ConfigResponse {
     managed_in_dashboard?: boolean;
   };
   nodes: {
+    disabled?: boolean;
     id: string;
     name: string;
     protocol: string;

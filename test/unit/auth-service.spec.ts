@@ -147,14 +147,14 @@ describe('AuthService', () => {
   // ── ensurePasswordHashed ─────────────────────────────────
 
   describe('ensurePasswordHashed', () => {
-    it('should generate and persist an initial password when no auth is configured', async () => {
+    it('should fail closed without generating or logging a password when no auth is configured', async () => {
       const config = mockConfigService({ dashboardPasswordHash: undefined });
       const svc = new AuthService(config);
 
-      await svc.ensurePasswordHashed();
-      expect(config.setDashboardPasswordHash).toHaveBeenCalledTimes(1);
-      const savedHash = config.setDashboardPasswordHash.mock.calls[0][0];
-      expect(savedHash).toMatch(/^\$2[ab]\$/);
+      const warning = jest.spyOn((svc as any).logger, 'warn');
+      await expect(svc.ensurePasswordHashed()).rejects.toThrow('No credentials were generated or logged');
+      expect(config.setDashboardPasswordHash).not.toHaveBeenCalled();
+      expect(warning.mock.calls.flat().join(' ')).not.toContain('Generated initial');
     });
 
     it('should do nothing when dashboard auth is explicitly disabled', async () => {
@@ -173,7 +173,7 @@ describe('AuthService', () => {
       });
     });
 
-    it('should generate a password when production config disables auth without override', async () => {
+    it('should fail closed when production config disables auth without override', async () => {
       process.env.NODE_ENV = 'production';
       delete process.env.SIFTGATE_ALLOW_UNAUTHENTICATED_DASHBOARD;
       const config = mockConfigService({
@@ -183,10 +183,10 @@ describe('AuthService', () => {
       const telemetry = { recordDashboardAuthEvent: jest.fn() };
       const svc = new AuthService(config, telemetry as any);
 
-      await svc.ensurePasswordHashed();
-      expect(config.setDashboardPasswordHash).toHaveBeenCalledTimes(1);
-      const savedHash = config.setDashboardPasswordHash.mock.calls[0][0];
-      expect(savedHash).toMatch(/^\$2[ab]\$/);
+      const warning = jest.spyOn((svc as any).logger, 'warn');
+      await expect(svc.ensurePasswordHashed()).rejects.toThrow('No credentials were generated or logged');
+      expect(config.setDashboardPasswordHash).not.toHaveBeenCalled();
+      expect(warning.mock.calls.flat().join(' ')).not.toContain('Generated initial');
       expect(telemetry.recordDashboardAuthEvent).toHaveBeenCalledWith({
         event: 'disabled_auth',
         mode: 'production_ignored',

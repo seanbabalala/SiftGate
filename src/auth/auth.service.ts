@@ -4,6 +4,7 @@ import * as jwt from 'jsonwebtoken';
 import * as crypto from 'crypto';
 import { ConfigService } from '../config/config.service';
 import { TelemetryService } from '../telemetry/telemetry.service';
+import { DashboardIdentityStore } from './dashboard-identity-store';
 
 const ALLOW_UNAUTHENTICATED_DASHBOARD_ENV =
   'SIFTGATE_ALLOW_UNAUTHENTICATED_DASHBOARD';
@@ -23,12 +24,30 @@ export class AuthService implements OnModuleInit {
 
   /** Whether dashboard auth is required. Secure by default unless explicitly disabled. */
   get isAuthRequired(): boolean {
+    if (this.isManagedIdentity) return true;
     if (this.config.dashboard?.auth_required !== false) return true;
     return !this.isUnauthenticatedDashboardAllowed();
   }
 
   get isLocalPasswordAuthEnabled(): boolean {
+    if (this.isManagedIdentity) return !this.identity.status().setupRequired;
     return !!this.config.dashboardPasswordHash;
+  }
+
+  get isManagedIdentity(): boolean { return !!this.config.dashboard?.identity_file; }
+
+  get identity(): DashboardIdentityStore {
+    return new DashboardIdentityStore(this.config.dashboard?.identity_file || '');
+  }
+
+  getIdentityStatus() {
+    return this.isManagedIdentity ? this.identity.status()
+      : { mode: 'legacy' as const, setupRequired: false, activationExpired: false };
+  }
+
+  async loginManaged(password: unknown): Promise<string> {
+    const secret = await this.identity.authenticate(password);
+    return jwt.sign({ sub: 'dashboard', auth_provider: 'local' }, secret, { expiresIn: '24h', algorithm: 'HS256' });
   }
 
   get isOidcEnabled(): boolean {
@@ -72,11 +91,12 @@ export class AuthService implements OnModuleInit {
   }
 
   /**
-   * Derive the JWT secret from the password hash.
-   * SHA-256("gw-jwt:" + passwordHash)
-   * Changing the password automatically invalidates all existing tokens.
+   * Managed identity explicitly rotates its signing secret on credential changes.
+   * Legacy installs use a configured secret, or fall back to a hash-derived one.
+   * A legacy password change alone does NOT rotate an independently configured secret.
    */
   private getJwtSecret(): string {
+    if (this.isManagedIdentity) return this.identity.sessionSecret();
     const configuredSecret = this.config.dashboard?.session_secret;
     if (configuredSecret && configuredSecret.trim()) {
       return configuredSecret.trim();
@@ -101,6 +121,12 @@ export class AuthService implements OnModuleInit {
    * hash it and write the hash back to the YAML config.
    */
   async ensurePasswordHashed(): Promise<void> {
+    if (this.isManagedIdentity) {
+      if (this.config.dashboard?.password || this.config.dashboard?.session_secret || this.isOidcEnabled ||
+        this.config.dashboard?.auth_required === false) throw new Error('Managed Dashboard identity cannot be combined with legacy authentication settings.');
+      this.identity.status(); // Missing/malformed private state fails closed; never auto-initialize.
+      return;
+    }
     const password = this.config.dashboardPasswordHash;
     if (
       this.config.dashboard?.auth_required === false &&
@@ -130,23 +156,7 @@ export class AuthService implements OnModuleInit {
         return;
       }
 
-      const generatedPassword = this.generateInitialPassword();
-      const hash = await this.hashPassword(generatedPassword);
-      try {
-        this.config.setDashboardPasswordHash(hash);
-      } catch (err) {
-        throw new Error(
-          `Dashboard authentication is required by default, but no dashboard.password is configured and SiftGate could not persist a generated password: ${(err as Error).message}. ` +
-            'Set dashboard.password, enable OIDC, or explicitly set dashboard.auth_required=false for trusted local development.',
-        );
-      }
-      this.logger.warn(
-        `Generated initial Dashboard password: ${generatedPassword}`,
-      );
-      this.logger.warn(
-        'Store this password now; only its bcrypt hash was written back to gateway.config.yaml.',
-      );
-      return;
+      throw new Error('Dashboard authentication is required. Configure a password or OIDC, or use the customer installer for first activation. No credentials were generated or logged.');
     }
 
     // bcrypt hashes start with $2a$ or $2b$
@@ -160,10 +170,6 @@ export class AuthService implements OnModuleInit {
     const hash = await this.hashPassword(password);
     this.config.setDashboardPasswordHash(hash);
     this.logger.log('Dashboard password hashed and saved to config');
-  }
-
-  private generateInitialPassword(): string {
-    return crypto.randomBytes(24).toString('base64url');
   }
 
   private isUnauthenticatedDashboardAllowed(): boolean {

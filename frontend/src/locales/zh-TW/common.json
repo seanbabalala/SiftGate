@@ -253,5 +253,7 @@
   "setupGuide.copy": "複製 YAML",
   "setupGuide.copied": "已複製",
   "nav.alertConnectors": "告警連接器",
-  "nav.pricing": "計價管理"
+  "nav.pricing": "計價管理",
+  "nav.launchpad": "首次上手",
+  "nav.controlRoom": "主機維運"
 }

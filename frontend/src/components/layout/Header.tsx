@@ -23,7 +23,8 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
   const { t } = useTranslation('common')
   const { data: health } = useHealth()
   const { data: workspaceState, switchWorkspace } = useWorkspaces()
-  const { authRequired, logout } = useAuth()
+  const { authRequired, logout, identity } = useAuth()
+  const { t: loginText } = useTranslation('login')
   const navigate = useNavigate()
   const [searchValue, setSearchValue] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
@@ -93,6 +94,7 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
         </form>
       </div>
 
+      {identity.mode === 'managed' && <button type="button" onClick={() => navigate('/security')} className="sm:hidden p-2" aria-label={loginText('identity.changePassword')}><ShieldCheck className="h-5 w-5" aria-hidden="true" /></button>}
       {/* Right section */}
       <div className="hidden shrink-0 items-center gap-2 sm:flex xl:gap-3">
         <ThemeToggle />
@@ -162,6 +164,7 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
         </div>
 
         {/* Logout / User avatar */}
+        {identity.mode === 'managed' && <button type="button" onClick={() => navigate('/security')} className={cn(headerControlClass, 'gap-2 px-3 text-xs')} aria-label={loginText('identity.changePassword')} title={loginText('identity.changePassword')}><ShieldCheck className="h-4 w-4" aria-hidden="true" /></button>}
         {authRequired ? (
           <button
             onClick={logout}

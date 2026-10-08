@@ -9,6 +9,8 @@
 和升级生产实例都是有外部影响的动作，需要维护者明确决定。阅读、修改或推送本文不会
 触发发布；镜像发布也不会自动升级正在使用的 2099。
 
+**2.12.0开发候选补充：** 签名生命周期流水线尚须合入并完成实际发行。v2.11.7是旧安装基线，不包含新的签名清单。下文S0/S1/S2/S3仍适用；不能把分支代码当成公开发行。验证器需要独立可信的GitHub CLI2.86+。
+
 本文命令按 **Bash** 编写。Mac 默认使用 zsh 的维护者先运行 `bash`，并在同一发布终端
 保留后续导出的版本、提交和镜像变量；不要在变量未设置时直接跳到中间步骤执行。
 
@@ -61,27 +63,27 @@ git show origin/main:docs/RELEASE_CHECKLIST.md
 
 | 对象 | 要求 |
 | --- | --- |
-| 源码 | 审核后的 `main` 提交及其 annotated Git tag，例如 `v2.11.7` |
+| 源码 | 审核后的 `main` 提交及其 annotated Git tag，例如 `v2.12.0` |
 | 完整 CI | 这个**确切提交**在 `main` 上的 push CI 成功，不是另一个提交的绿灯 |
 | 架构镜像 | 原生 Linux AMD64、ARM64 分别构建并通过安装验收 |
 | 镜像索引 | GHCR 多架构 index 指向这次验收的两个不可变 digest |
-| 标签 | `v2.11.7` 与 `2.11.7` 两个镜像标签解析到同一 index digest |
-| 安装包 | `siftgate-v2.11.7-install.tar.gz` 和相应 `.sha256` 附件 |
+| 标签 | `v2.12.0` 与 `2.12.0` 两个镜像标签解析到同一 index digest |
+| 安装包及证明 | 安装包、`.sha256`、`siftgate-v2.12.0-release.json`、`siftgate-v2.12.0-release.sigstore.jsonl`四件套 |
 | 身份 | 安装包内 `release.json` 的 commit、version、image digest 与发布记录一致 |
 | 可下载性 | 不登录 GitHub/Docker 也能读取公共镜像 manifest；在干净机器实际拉取并安装 |
 | 发布说明 | 变更、迁移、测试证据、已知限制、回滚边界明确 |
 
-表中的 `2.11.7` 只是示例，**不表示该版本已经发布**。版本必须由维护者审核确定。
+表中的 `2.12.0` 只是示例，**不表示该版本已经发布**。版本必须由维护者审核确定。
 不能仅凭“代码推送成功”“本机有镜像”“GitHub Actions 某个测试成功”宣布正式发布。
 
 ### 命名规则
 
 ```text
-Git tag:          v2.11.7
+Git tag:          v2.12.0
 Registry:         ghcr.io
 Image repository: ghcr.io/seanbabalala/ai-gateway
-Version aliases:  ghcr.io/seanbabalala/ai-gateway:v2.11.7
-                  ghcr.io/seanbabalala/ai-gateway:2.11.7
+Version aliases:  ghcr.io/seanbabalala/ai-gateway:v2.12.0
+                  ghcr.io/seanbabalala/ai-gateway:2.12.0
 Production pin:   ghcr.io/seanbabalala/ai-gateway@sha256:<index digest>
 Build staging:    build-<workflow run id>-<attempt>-<architecture>
 Platforms:       linux/amd64, linux/arm64
@@ -98,7 +100,7 @@ Platforms:       linux/amd64, linux/arm64
 以下命令在独立发布 checkout 执行，不在正在运行服务的目录里构建或安装依赖：
 
 ```bash
-export REPO=seanbabalala/ai-gateway
+export REPO=seanbabalala/SiftGate
 export IMAGE_REPO=ghcr.io/seanbabalala/ai-gateway
 gh auth status
 gh api "repos/$REPO" --jq '{default_branch,visibility,archived}'
@@ -115,10 +117,10 @@ GitHub CLI 登录使用自己的授权流程，禁止把 token 写在文档、�
 
 - Actions 已启用，组织策略允许使用本仓库工作流引用的官方 actions。
 - 有可用的 `ubuntu-24.04` 和 `ubuntu-24.04-arm` 原生 runner，以及足够运行额度。
-- 工作流声明的 `contents`、`packages`、`actions` 权限未被上级策略禁止。
+- 工作流声明的 `contents`、`packages`、`actions`、`id-token`、`attestations` 权限未被上级策略禁止；后两项只给正式publish job。
 - 不需要为方便而把所有工作流全局改成高权限；发布工作流按 job 声明所需权限。
 - `verify` 需要读取代码、读取 CI 状态，以及在版本 tag 发布时写 GHCR；`publish`
-  需要写 GHCR 和 GitHub Release。只允许可信代码进入正式发布分支。
+  需要写GHCR/Release，并通过GitHub OIDC签发清单证明。只允许可信代码进入正式发布分支。
 
 建议保护 `main` 和 `v*` tag：先审查 PR、要求 CI，通过明确的维护者操作创建版本 tag。
 不要为了让发布成功绕过保护规则或使用 `--admin` 强行合并。
@@ -335,17 +337,19 @@ annotated tag 类型，不自动验证 GPG 签名策略。
 
 1. 确认 tag 与根版本一致，是 annotated tag，提交属于 `main`，该提交主分支 CI 成功。
 2. 两台原生 runner 分别构建，写入源码仓库、commit、版本和许可证 OCI 标签。
-3. 每个架构运行真实客户安装验收；失败就不进入公共版本组合。
+3. 每个架构运行首次安装、跨版本、隔离恢复、独立执行、离线和真实SSH批次验收；失败不组合公共版本。
 4. 成功架构上传到本次 run/attempt 专属构建标签，并把 digest、architecture、commit
-   保存成 `customer-image-amd64` / `customer-image-arm64` Actions artifacts。
+   连同实际配置摘要、源版本摘要和验收结果保存成 `customer-image-amd64` / `customer-image-arm64` Actions artifacts。
 5. `publish` 只读取**本次 run 的固定 digest**，不重新读取一个可能移动的旧构建标签。
 6. 创建 `vVERSION`、`VERSION` 两个别名；已有版本只能接受相同子镜像 digest，不能覆盖。
 7. 检查两个别名 index digest 一致、公共 manifest 可以匿名读取。
 8. 从确切 Git commit 的文件白名单生成安装包和 SHA-256 文件。
-9. 新 GitHub Release 先建 Draft；核对已有附件、补传缺失附件、下载复核字节，再公开。
-10. Job summary 输出源码 commit、index/架构 digest、别名和压缩包 SHA-256，作为发布记录。
+9. 从两份原生回执生成清单，固定版本的官方actions/attest签发OIDC/SLSA证明；若Draft已有相同证明，只验证复用，绝不覆写。
+10. 新Release先保持Draft。核验本地签名、四件套和已上传字节，补传缺失附件并鉴权下载复核，才公开。
+11. Draft不能匿名下载：公开后立即校验四个匿名下载URL的字节及签名，再由两台新的原生runner匿名拉完整layer并用真实公开安装包初始化。全部通过后才可宣称S3。
+12. Job summary记录源码、镜像、签名清单和冷安装证据。
 
-alpha/beta/rc 按 `vX.Y.Z-rc.N` 等形式发布，会标记为 prerelease，不冒充稳定发行。
+新的签名生命周期契约只接受稳定版。alpha/beta/rc尚无这套正式验收承诺，不要将旧prerelease分支逻辑当成受支持的签名发行。
 不要在 tag 流水线完成前手工创建一个空的公开 Release 然后宣布可安装。
 
 ## 6. 发布后独立验收
@@ -359,7 +363,7 @@ gh run watch "$RELEASE_RUN_ID" --repo "$REPO" --exit-status
 gh release view "$TAG" --repo "$REPO" --json tagName,isDraft,isPrerelease,publishedAt,assets
 ```
 
-必须确认两个 `verify` 和 `publish` 全部 success，Release 不是 Draft，附件成对存在。
+必须确认两个verify、publish及两个customer-installable冷安装job全部成功，Release不是Draft，四件套完整且签名有效。
 必要时下载 digest artifacts，与 job summary 一起归档：
 
 ```bash
@@ -391,8 +395,16 @@ manifest 应包含 `linux/amd64` 与 `linux/arm64`。上述临时目录是空 Do
 mkdir -p "$HOME/siftgate-release-evidence/$TAG/download"
 cd "$HOME/siftgate-release-evidence/$TAG/download"
 gh release download "$TAG" --repo "$REPO" \
-  --pattern "siftgate-$TAG-install.tar.gz" --pattern "siftgate-$TAG-install.tar.gz.sha256"
+  --pattern "siftgate-$TAG-install.tar.gz" --pattern "siftgate-$TAG-install.tar.gz.sha256" \
+  --pattern "siftgate-$TAG-release.json" --pattern "siftgate-$TAG-release.sigstore.jsonl"
 sha256sum -c "siftgate-$TAG-install.tar.gz.sha256"
+gh attestation verify "siftgate-$TAG-release.json" --hostname github.com --repo "$REPO" \
+  --signer-workflow github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml \
+  --cert-identity "https://github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml@refs/tags/$TAG" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners \
+  --predicate-type https://slsa.dev/provenance/v1 --bundle "siftgate-$TAG-release.sigstore.jsonl"
+python3 -c 'import hashlib,json,os; from pathlib import Path; t=os.environ["TAG"];m=json.load(open("siftgate-"+t+"-release.json"));p=Path("siftgate-"+t+"-install.tar.gz");assert m["tag"]==t and m["installer"]["name"]==p.name and m["installer"]["bytes"]==p.stat().st_size and m["installer"]["sha256"]==hashlib.sha256(p.read_bytes()).hexdigest()'
 tar -xzf "siftgate-$TAG-install.tar.gz"
 cd "siftgate-$TAG"
 sha256sum -c SHA256SUMS
@@ -408,7 +420,7 @@ PY
 
 Mac 将两处 `sha256sum -c` 换成 `shasum -a 256 -c`。客户可从公共 Release 页面直接
 下载，不需要 `gh` 登录；维护者使用 `gh` 是为了方便保存审计证据。
-校验和检测损坏/不一致，不等价于代码签名、软件供应链 attestation 或安全审计。
+校验和只检测一致性；上面的独立验证器验证签名及发行身份，再由签名清单绑定安装包。签名不等于完整安全审计。
 
 ### 6.4 用实际公开包在干净机器安装
 
@@ -487,29 +499,13 @@ gh run watch "$RELEASE_RUN_ID" --repo "$REPO" --exit-status
 
 ## 9. 离线交付、保留和供应链边界
 
-无 GHCR 网络的客户需要对应架构的离线镜像及已验证安装包。以下仅在隔离交付机执行，
-`ARCH` 选择客户实际架构；不要把生产容器 `docker commit` 成客户镜像：
-
-```bash
-read -r -p 'Target architecture (amd64 or arm64): ' ARCH
-case "$ARCH" in amd64|arm64) ;; *) exit 1 ;; esac
-docker pull --platform "linux/$ARCH" "$IMAGE"
-docker tag "$IMAGE" "siftgate-offline:$VERSION-$ARCH"
-docker save -o "siftgate-$VERSION-$ARCH-image.tar" "siftgate-offline:$VERSION-$ARCH"
-sha256sum "siftgate-$VERSION-$ARCH-image.tar" > "siftgate-$VERSION-$ARCH-image.tar.sha256"
-```
-
-客户先校验、`docker load`，再使用安装器的 `--image siftgate-offline:版本-架构
---local-image`。离线镜像是平台专属的，不能把 ARM64 包交给 AMD64 并声称已验证。
-保留离线交付的版本、平台、镜像 ID、commit 和校验和；与安装包一起通过可信渠道交付。
+受管离线交付使用[Control Room离线流程](customer-control.zh-cn.md)：分别固定验证器与可信根，通过`fetch-release`和`export-offline`生成对应原生架构的五文件离线目录。接收端先固定独立信任，再`stage-offline`、验证导入、独立审批。导入不部署，也不附带能自我授信的根证书。普通docker save/checksum不是受管发行证明；不要docker commit生产容器给客户。
 
 保留公共 index **以及它引用的两个架构 digest**。不要因为架构镜像显示为构建暂存标签
 就把它删除；删除被 index 引用的子镜像会破坏已发布版本。客户也需保留恢复窗口内的
 旧镜像和数据库备份。镜像保留策略、数据库备份策略和日志轮转是三件不同的事。
 
-当前流水线有版本/digest 固定、双架构烟测、来源 OCI 标签、文件白名单和校验和。
-它没有宣称已实现 Cosign 签名、SBOM、SLSA 证明、镜像漏洞阻断或集中式自动升级；如果
-企业要求这些能力，应另行建设并验收，不能把普通 SHA-256 文件称为供应链签名。
+新流水线签署发行清单的OIDC/SLSA证明，清单绑定安装包与两个原生镜像配置摘要；并提供独立审批的Fleet执行。它不宣称独立OCI镜像签名、SBOM/漏洞强制阻断或无审批自动升级。测试阶段的本地fixture不是发行者签名，最终必须通过真实公开证明与双架构冷安装。
 
 ## 10. 发布记录模板与最终勾选
 

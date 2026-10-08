@@ -5,6 +5,8 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import { ProtectedRoute } from '@/components/shared/ProtectedRoute'
 import { Skeleton, SkeletonCard, SkeletonTable } from '@/components/ui/skeleton'
 
+const ControlRoomPage = lazy(() => import('@/pages/ControlRoomPage').then(module => ({default:module.ControlRoomPage})))
+const LaunchpadPage = lazy(() => import('@/pages/LaunchpadPage').then(module => ({default:module.LaunchpadPage})))
 const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })))
 const AlertConnectorsPage = lazy(() => import('@/pages/AlertConnectorsPage').then((m) => ({ default: m.AlertConnectorsPage })))
 const LogsPage = lazy(() => import('@/pages/LogsPage').then((m) => ({ default: m.LogsPage })))
@@ -165,6 +167,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/login" element={page(<LoginPage />, <LoginRouteFallback />)} />
+      <Route path="/security" element={<ProtectedRoute>{page(<LoginPage security />, <LoginRouteFallback />)}</ProtectedRoute>} />
       <Route
         element={
           <ProtectedRoute>
@@ -173,6 +176,8 @@ export function App() {
         }
       >
         <Route path="/" element={page(<DashboardPage />)} />
+        <Route path="/launchpad" element={page(<LaunchpadPage />)} />
+        <Route path="/control-room" element={page(<ControlRoomPage />)} />
         <Route path="/dashboard" element={page(<DashboardPage />)} />
         <Route path="/alerts" element={page(<AlertConnectorsPage />)} />
         <Route path="/logs" element={page(<LogsPage />)} />

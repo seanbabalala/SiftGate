@@ -1,11 +1,20 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-10-08
-Release: **v2.11.7**
+Release: **v2.12.0** (development candidate; not published)
 
-## Release Identity And Scope
+## Candidate Lifecycle Scope
 
-This release promotes the reviewed pricing application (`591ebb99`) and the
+This worktree adds managed first activation, independent maintenance identities,
+publisher-bound release planning, two-phase maintenance approvals, durable host
+execution, isolated recovery verification and explicit Fleet enrollment. No new
+public release is established by this version bump. SSH multi-host acceptance,
+actual candidate upgrades, full CI and the signed dual-architecture publication
+chain are still required. See `customer-lifecycle-release-goal.zh-cn.md`.
+
+## Previous Published Baseline: v2.11.7
+
+The v2.11.7 release promoted the reviewed pricing application (`591ebb99`) and the
 customer installation/publication system. The annotated `v2.11.7` tag, exact
 main CI run and image index/child digests identify the final release. A package
 version by itself does not identify a deployed instance.

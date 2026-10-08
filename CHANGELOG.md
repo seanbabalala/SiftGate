@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+## 2.12.0 - 2026-10-08
+
+**Development candidate, not yet published.** Publication requires the complete
+lifecycle, native-platform, CI and publisher-attestation gates. This section is
+not authorization to deploy or restart an existing gateway.
+
+### Added
+
+- Managed first activation and administrator recovery with one-time codes;
+  separate management sessions and business API Keys; real Launchpad onboarding.
+- Independent host Control Room with dedicated identities, roles, double-person
+  approval, durable jobs and actual progress. Gateway credentials grant no host
+  control, and the gateway never receives a Docker socket.
+- Release planning tied to publisher proof, exact source configuration digests,
+  native target images and versioned host tools. Host review is persisted while
+  fresh; maintenance-window and individual-wave dispatch remain separate.
+- Recovery Vault with isolated, no-network/no-public-port restore drills, actual
+  readiness, database/configuration evidence and verified cleanup. New backups
+  bind image configuration identity and retain matching recovery tools.
+- Legacy recovery rotates only the management signing secret, preserving the
+  password, enterprise-login settings and business keys. Old unproven backups
+  remain restricted to their original engine, architecture and runtime image.
+- Explicit Fleet registration, canaries, manually promoted sequential waves,
+  safe pause/cancel and failure thresholds, verified offline image transport,
+  and evidence-based reconciliation that never blindly replays an upgrade.
+- Independent control UI in seven languages, preserving the official logo.
+
+### Safety And Compatibility
+
+- Authenticated source installs without configured credentials now fail closed.
+  New customer installs use one-time activation; configured legacy identities
+  remain unchanged until an explicitly approved recovery operation.
+- No unattended fleet enrollment, automatic overwrite, automatic rollback or
+  implicit production deployment. Publishing an image does not upgrade2099.
+- SQLite backup/restore is supported by the customer kit. PostgreSQL requires
+  native database procedures; it is not silently treated as a SQLite snapshot.
+
 ## 2.11.7 - 2026-10-08
 
 ### Fixed

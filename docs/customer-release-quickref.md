@@ -9,7 +9,7 @@ Each block is a separate gate: **do not paste all blocks as one unattended scrip
 
 ```bash
 set -euo pipefail
-export REPO=seanbabalala/ai-gateway
+export REPO=seanbabalala/SiftGate
 export IMAGE_REPO=ghcr.io/seanbabalala/ai-gateway
 git fetch origin main --tags
 test "$(git branch --show-current)" = main
@@ -75,10 +75,18 @@ DOCKER_CONFIG="$(mktemp -d)" docker manifest inspect "$IMAGE"
 gh release view "$TAG" --repo "$REPO" --json isDraft,isPrerelease,assets
 ACCEPTANCE_DIR="$(mktemp -d "$HOME/siftgate-release-check.XXXXXX")"
 gh release download "$TAG" --repo "$REPO" --dir "$ACCEPTANCE_DIR" \
-  --pattern "siftgate-$TAG-install.tar.gz" --pattern "siftgate-$TAG-install.tar.gz.sha256"
+  --pattern "siftgate-$TAG-install.tar.gz" --pattern "siftgate-$TAG-install.tar.gz.sha256" \
+  --pattern "siftgate-$TAG-release.json" --pattern "siftgate-$TAG-release.sigstore.jsonl"
 cd "$ACCEPTANCE_DIR"
 if command -v sha256sum >/dev/null; then CHECKSUM=sha256sum; else CHECKSUM='shasum -a 256'; fi
 $CHECKSUM -c "siftgate-$TAG-install.tar.gz.sha256"
+gh attestation verify "siftgate-$TAG-release.json" --hostname github.com --repo "$REPO" \
+  --signer-workflow github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml \
+  --cert-identity "https://github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml@refs/tags/$TAG" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners \
+  --predicate-type https://slsa.dev/provenance/v1 --bundle "siftgate-$TAG-release.sigstore.jsonl"
+python3 -c 'import hashlib,json,os; from pathlib import Path; t=os.environ["TAG"];m=json.load(open("siftgate-"+t+"-release.json"));p=Path("siftgate-"+t+"-install.tar.gz");assert m["tag"]==t and m["installer"]["name"]==p.name and m["installer"]["bytes"]==p.stat().st_size and m["installer"]["sha256"]==hashlib.sha256(p.read_bytes()).hexdigest()'
 tar -xzf "siftgate-$TAG-install.tar.gz"
 cd "siftgate-$TAG"
 $CHECKSUM -c SHA256SUMS

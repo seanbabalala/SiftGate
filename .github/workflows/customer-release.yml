@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  # Repository renames must not move the established customer image namespace.
+  SIFTGATE_IMAGE_REPOSITORY: ghcr.io/seanbabalala/ai-gateway
+  SIFTGATE_NODE_IMAGE: node@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
 concurrency:
   group: customer-release-${{ github.ref }}
   cancel-in-progress: false
@@ -55,11 +59,18 @@ jobs:
             python3 -c 'import json,sys; runs=json.load(open(sys.argv[1]))["workflow_runs"]; assert any(r["head_sha"] == sys.argv[2] and r["event"] == "push" and r["head_branch"] == "main" and r["conclusion"] == "success" for r in runs), "Wait for successful main push CI on this exact commit before publishing"' /tmp/siftgate-main-ci.json "$(git rev-parse HEAD)"
           fi
       - run: python3 -m unittest discover -s test/customer -v
+      - run: npm run test:control-ui
+      - name: Prepare isolated SSH acceptance runtime
+        run: |
+          command -v /usr/sbin/sshd || { sudo apt-get update && sudo apt-get install -y openssh-server; }
+          sudo install -d -m 0755 /run/sshd
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
           context: .
           load: true
+          provenance: false
+          build-args: NODE_IMAGE=${{ env.SIFTGATE_NODE_IMAGE }}
           tags: siftgate-customer:smoke
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
@@ -68,8 +79,8 @@ jobs:
             org.opencontainers.image.licenses=MIT
           cache-from: type=gha,scope=customer-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=customer-${{ matrix.arch }}
-      - name: Real fresh-install, backup and restore acceptance
-        run: python3 scripts/smoke-customer-install.py --image siftgate-customer:smoke
+      - name: Complete native lifecycle acceptance (synthetic installs only)
+        run: python3 scripts/run-customer-acceptance.py --image siftgate-customer:smoke --output output/customer-native
       - uses: docker/login-action@v3
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         with:
@@ -81,12 +92,12 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          image="ghcr.io/${GITHUB_REPOSITORY,,}:build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${ARCH}"
+          image="${SIFTGATE_IMAGE_REPOSITORY}:build-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${ARCH}"
           docker tag siftgate-customer:smoke "$image"
           docker push "$image"
           digest="$(docker buildx imagetools inspect "$image" --format '{{json .Manifest.Digest}}' | tr -d '"')"
           mkdir -p output/customer-image
-          python3 -c 'import json,re,sys; arch,commit,digest=sys.argv[1:]; assert arch in ("amd64","arm64") and re.fullmatch("sha256:[a-f0-9]{64}",digest); json.dump({"architecture":arch,"commit":commit,"digest":digest},open("output/customer-image/"+arch+".json","w"))' "$ARCH" "$SOURCE_SHA" "$digest"
+          python3 -c 'import json,re,sys; arch,commit,digest=sys.argv[1:]; m=json.load(open("output/customer-native/"+arch+".json")); assert m["architecture"]==arch and m["commit"]==commit and m["native_runner"] is True and re.fullmatch("sha256:[a-f0-9]{64}",digest); m["digest"]=digest; json.dump(m,open("output/customer-image/"+arch+".json","w"))' "$ARCH" "$SOURCE_SHA" "$digest"
       - uses: actions/upload-artifact@v4
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         with:
@@ -103,6 +114,8 @@ jobs:
       contents: write
       packages: write
       actions: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -116,11 +129,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish immutable version and installer (never latest)
+      - name: Prepare immutable version, manifest and draft (never latest)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          repository="${SIFTGATE_IMAGE_REPOSITORY}"
           image="${repository}:${GITHUB_REF_NAME}"
           # Read immutable digests produced by THIS run, never a mutable staging tag.
           candidate_digest() {
@@ -155,20 +168,69 @@ jobs:
           python3 -c 'import json,sys; m=json.load(open(sys.argv[1]))["manifests"]; actual={(x["platform"]["os"],x["platform"]["architecture"]):x["digest"] for x in m}; assert len(m)==2 and actual=={("linux","amd64"):sys.argv[2],("linux","arm64"):sys.argv[3]}, "Index platform/digest mapping differs from tested images"' /tmp/siftgate-release-index.json "$amd" "$arm"
           python3 scripts/package-customer-release.py --version "$GITHUB_REF_NAME" \
             --image "${repository}@${digest}" --output output/customer-release
+          python3 scripts/build-customer-release-manifest.py --version "$GITHUB_REF_NAME" \
+            --image "${repository}@${digest}" --archive "output/customer-release/siftgate-${GITHUB_REF_NAME}-install.tar.gz" \
+            --candidates output/customer-image --output output/customer-release
+          echo "RELEASE_IMAGE=${repository}@${digest}" >> "$GITHUB_ENV"
           if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             flags=()
             if [[ "$GITHUB_REF_NAME" == *-* ]]; then flags+=(--prerelease); fi
             gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --draft "${flags[@]}"
           fi
-          python3 scripts/upload-customer-assets.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --directory output/customer-release
-          python3 scripts/upload-customer-assets.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --directory output/customer-release --verify-only
+      - name: Reuse only matching, verified existing release proof
+        id: proof
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/prepare-customer-attestation.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --directory output/customer-release
+      - name: Attest the immutable release manifest
+        id: attest
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && steps.proof.outputs.reuse_bundle != 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: output/customer-release/siftgate-${{ github.ref_name }}-release.json
+      - name: Verify and upload exact signed artifacts, then publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          prefix="output/customer-release/siftgate-${GITHUB_REF_NAME}"
+          if [[ -n "$ATTESTATION_BUNDLE" ]]; then
+            python3 -c 'import os,sys; from pathlib import Path; data=Path(os.environ["ATTESTATION_BUNDLE"]).read_bytes(); assert 0<len(data)<=4*1024*1024; Path(sys.argv[1]).open("xb").write(data)' "${prefix}-release.sigstore.jsonl"
+          fi
+          python3 scripts/verify-customer-release.py --manifest "${prefix}-release.json" --bundle "${prefix}-release.sigstore.jsonl"
+          python3 scripts/upload-customer-assets.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --directory output/customer-release --require-attestation
+          python3 scripts/upload-customer-assets.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --directory output/customer-release --verify-only --require-attestation
+          # Draft assets can only be downloaded with authentication. Their bytes
+          # and signature are verified above; true anonymous URLs become usable
+          # only AFTER public visibility, and must pass before release success.
           gh release edit "$GITHUB_REF_NAME" --draft=false
+          python3 scripts/verify-public-customer-release.py --tag "$GITHUB_REF_NAME" --directory output/customer-release
           {
             echo '## Customer release'
             echo "Source commit: $(git rev-parse HEAD)"
-            echo "Image: ${repository}@${digest}"
+            echo "Image: ${RELEASE_IMAGE}"
             echo "Aliases: ${GITHUB_REF_NAME}, ${GITHUB_REF_NAME#v}"
-            echo "Platforms: linux/amd64 (${amd}), linux/arm64 (${arm})"
-            echo 'Anonymous manifest access and downloaded release asset bytes verified.'
+            echo 'Platforms: linux/amd64, linux/arm64; exact native acceptance receipts bound into the signed manifest.'
+            echo 'Anonymous image access, all four public asset bytes, and publisher signatures verified.'
             cat output/customer-release/*.sha256
           } >> "$GITHUB_STEP_SUMMARY"
+  customer-installable:
+    name: Cold signed customer install (${{ matrix.arch }})
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: publish
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify public proof, pull layers anonymously and install on a new port
+        run: python3 scripts/verify-published-customer-install.py --version "${GITHUB_REF_NAME#v}" --expected-commit "$(git rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"

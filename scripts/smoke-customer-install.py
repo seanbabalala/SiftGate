@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import urllib.error
 
 ROOT = Path(__file__).resolve().parent.parent
 SPEC = importlib.util.spec_from_file_location("kit", ROOT / "deploy/customer/siftgate.py")
@@ -32,6 +33,15 @@ def request(install, path, data=None, token=None, method=None):
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(req, timeout=30) as response:
         return json.load(response)
+
+
+def assert_rejected(install, path, token):
+    try:
+        request(install, path, token=token)
+    except urllib.error.HTTPError as error:
+        assert error.code == 401
+    else:
+        raise AssertionError("A revoked management token was accepted")
 
 
 def main():
@@ -58,8 +68,26 @@ def main():
         install = KIT.Install.load(directory)
         installations.append(install)
         cli(directory, "up")
-        password = (directory / "config/initial-admin-password.txt").read_text().strip()
+        password = "synthetic customer smoke passphrase"
+        access = (directory / "config/activate-code.txt").read_text().strip()
+        assert request(install, "/api/auth/status")["identity"]["setupRequired"] is True
+        request(install, "/api/auth/identity/activate", {"code": access, "password": password})
+        assert not (directory / "config/activate-code.txt").exists()
         token = request(install, "/api/auth/login", {"password": password})["token"]
+        # Recovery is host-authorized and must not restart this gateway.
+        before = install.container()
+        issued = cli(directory, "access-code", "--purpose", "recover", "--confirm")
+        recovery = (directory / "config/recover-code.txt").read_text().strip()
+        assert "sg_recover_" not in json.dumps(issued)
+        assert issued["restarted"] is False
+        request(install, "/api/auth/identity/recover", {"code": recovery, "password": password})
+        after = install.container()
+        assert before["Id"] == after["Id"] and before["State"]["StartedAt"] == after["State"]["StartedAt"]
+        assert_rejected(install, "/api/dashboard/api-keys", token)
+        token = request(install, "/api/auth/login", {"password": password})["token"]
+        # The new explicit switch is enforced; old ignored enabled:false is not reinterpreted on upgrades.
+        setup = request(install, "/api/dashboard/launchpad", token=token)
+        assert setup["nodes"] and all(not node["enabled"] for node in setup["nodes"])
         mock_name = install.meta["project"] + "-mock"
         handler = """
           require('http').createServer((req,res)=>{
@@ -74,7 +102,7 @@ def main():
         # A real Dashboard config write proves directory-mounted atomic replacement works.
         request(install, "/api/dashboard/nodes/openai", {
             "name": "Customer kit synthetic node", "base_url": f"http://{mock_name}:3099",
-            "api_key": "synthetic-provider-fixture", "enabled": True,
+            "api_key": "synthetic-provider-fixture", "disabled": False,
         }, token, "PUT")
         key = request(install, "/api/dashboard/api-keys", {
             "name": "customer-kit-synthetic", "allow_auto": True, "allow_direct": True,
@@ -102,6 +130,9 @@ def main():
         assert (directory / "config/gateway.config.yaml").read_bytes() == original_config
         backup = cli(directory, "backup", "--accept-downtime", "--keep", "2")
         assert (directory / "config/gateway.config.yaml").read_bytes() == original_config
+        saved = Path(backup["backup"]) / "config"
+        assert not (saved / "activate-code.txt").exists() and not (saved / "recover-code.txt").exists()
+        assert json.loads((saved / "dashboard-identity.json").read_text())["access"] is None
         # Existing session/key still authenticate after the backup's graceful restart.
         listed = request(install, "/api/dashboard/api-keys", token=token)
         assert key["item"]["id"] in json.dumps(listed)
@@ -116,16 +147,18 @@ def main():
         assert (restored_dir / "config/gateway.config.yaml").read_bytes() == original_config
         # The backup is an independent DB/config copy, not the original writable mount.
         cli(restored_dir, "up")
-        restored_keys = request(restored, "/api/dashboard/api-keys", token=token)
+        assert_rejected(restored, "/api/dashboard/api-keys", token)
+        restored_token = request(restored, "/api/auth/login", {"password": password})["token"]
+        restored_keys = request(restored, "/api/dashboard/api-keys", token=restored_token)
         assert key["item"]["id"] in json.dumps(restored_keys)
-        logs = request(restored, "/api/dashboard/logs?limit=20", token=token)
+        logs = request(restored, "/api/dashboard/logs?limit=20", token=restored_token)
         assert "gpt-4o-mini" in json.dumps(logs)
         cli(restored_dir, "stop")
         assert cli(restored_dir, "watchdog", "--recover")["status"] == "not-running"
-        print(json.dumps({"passed": ["fresh-init", "http-readiness", "password-auth", "atomic-dashboard-config",
+        print(json.dumps({"passed": ["fresh-init", "http-readiness", "one-time-activation", "explicit-disabled-samples", "password-auth", "host-recovery-no-restart", "atomic-dashboard-config",
                                     "gateway-key", "mock-model-request", "wal-aware-backup", "restart-persistence",
                                     "same-code-image-upgrade",
-                                    "independent-restore", "timezone-preserved", "session-key-log-preservation",
+                                    "independent-restore", "timezone-preserved", "restored-session-revocation", "key-log-preservation",
                                     "watchdog-no-revive"], "image": install.meta["image"]}, indent=2))
     finally:
         if mock_name and installations:

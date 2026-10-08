@@ -30,7 +30,7 @@ jobs:
         run: npm run runtime:check
 
       - name: Check runtime and customer release tooling
-        run: npm run test:runtime && npm run test:customer
+        run: npm run test:runtime && npm run test:customer && npm run test:control-ui
 
       - name: Install dependencies
         run: npm ci

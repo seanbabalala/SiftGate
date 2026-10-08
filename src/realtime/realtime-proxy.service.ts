@@ -966,6 +966,7 @@ export class RealtimeProxyService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async buildUpstreamHeaders(node: NodeConfig): Promise<Record<string, string>> {
+    if (node.disabled === true) throw new Error(`Node "${node.id}" is disabled`);
     const nodeHeaders = await this.secretResolver.resolveRecord(node.headers, {
       optional: true,
       location: `nodes.${node.id}.headers`,

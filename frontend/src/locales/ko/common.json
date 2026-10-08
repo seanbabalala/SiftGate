@@ -253,5 +253,7 @@
   "setupGuide.copy": "YAML 복사",
   "setupGuide.copied": "복사됨",
   "nav.alertConnectors": "알림 커넥터",
-  "nav.pricing": "요금 관리"
+  "nav.pricing": "요금 관리",
+  "nav.launchpad": "시작하기",
+  "nav.controlRoom": "호스트 운영"
 }

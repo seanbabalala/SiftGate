@@ -957,3 +957,20 @@ The OpenAPI schema is intentionally secret-safe:
 - Dashboard password input is marked `writeOnly`.
 - Dashboard password hashes and raw provider keys are not part of documented response DTOs.
 - Connected-gateway configuration remains optional and must not require private Cloud packages.
+
+
+## Customer lifecycle endpoints (unreleased development branch)
+
+Use the API documentation shipped with the selected release. These endpoints do not authorize an upgrade.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/api/auth/identity/activate` | Consume a host-issued one-time code and set the managed administrator password |
+| POST | `/api/auth/identity/recover` | Consume a host-issued recovery code; invalidate prior managed sessions |
+| POST | `/api/auth/identity/password` | Reauthenticate and change the managed password; gateway keys remain unchanged |
+| GET | `/api/dashboard/launchpad` | Read workspace-scoped setup observations and configuration fingerprints |
+| POST | `/api/dashboard/launchpad/keys` | Administrator-only bounded single-node/model text key creation |
+| POST | `/api/dashboard/launchpad/prepare-test` | Record explicit cost consent and verify the selected key; no provider dispatch |
+| GET | `/api/dashboard/launchpad/attempts/:id` | Reconstruct scoped evidence from persisted call metadata; no request retry |
+
+Managed identity is explicitly enabled by the matching installer and is not automatically applied to existing password/OIDC deployments. Codes and passwords are write-only. Launchpad preparation requires the current configuration digest, timezone acknowledgement, pricing review, explicit cost consent, selected key ID and that key's actual secret; the secret is compared but never persisted in the receipt. The real test uses `/v1/chat/completions`, not privileged Dashboard proxy access. See the customer identity and Launchpad guides for limits and failure states.

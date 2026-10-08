@@ -892,6 +892,7 @@ export class ProviderClientService {
     wireModel?: string,
     dispatchBudget = { remaining: credentialAttemptLimit ?? Infinity, sequence: 0 },
   ): Promise<Response> {
+    if (node.disabled === true) throw new ProviderError(`Node ${node.id} is disabled`, 503, node.id, "http_error");
     const url = `${node.base_url}${endpointOverride || node.endpoint}`;
     const nodeHeaders = await this.resolveNodeHeaders(node);
     const effectiveTimeoutMs = timeoutMs ?? node.timeout_ms ?? 60000;
@@ -1150,6 +1151,7 @@ export class ProviderClientService {
     wireModel?: string,
     operation = "media",
   ): Promise<Response> {
+    if (node.disabled === true) throw new ProviderError(`Node ${node.id} is disabled`, 503, node.id, "http_error");
     const url = `${node.base_url}${endpoint}`;
     const nodeHeaders = await this.resolveNodeHeaders(node);
     const effectiveTimeoutMs = timeoutMs ?? node.timeout_ms ?? 60000;

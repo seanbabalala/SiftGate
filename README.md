@@ -10,16 +10,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/seanbabalala/ai-gateway/releases/tag/v2.11.7"><img alt="Release" src="https://img.shields.io/badge/release-v2.11.7-22d7a8"></a>
+  <a href="https://github.com/seanbabalala/ai-gateway/releases/tag/v2.12.0"><img alt="Release" src="https://img.shields.io/badge/release-v2.12.0-22d7a8"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-062f25"></a>
   <a href="docs/SECURITY.md"><img alt="Privacy default" src="https://img.shields.io/badge/privacy-metadata--only%20by%20default-22d7a8"></a>
   <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-7%20languages-062f25"></a>
 </p>
 
 <p align="center">
-  Current release: <strong>v2.11.7</strong>
+  Current release: <strong>v2.12.0</strong> (development candidate; not yet published)
 </p>
-<!-- Current release: **v2.11.7** -->
+<!-- Current release: **v2.12.0** — development candidate, not yet published -->
 
 <table>
   <tr>
@@ -593,6 +593,7 @@ cd frontend && npm install && cd ..
 cp gateway.config.example.yaml gateway.config.yaml
 cp .env.example .env
 npm run build
+# Configure dashboard.password (or OIDC) in the private YAML before this step.
 npm start
 ```
 
@@ -600,8 +601,11 @@ SiftGate loads `.env` automatically for local startup. The example provider
 nodes use runtime secret references such as `${env:OPENAI_API_KEY}`, so the
 Dashboard can start before provider keys are filled in.
 
-On first startup, SiftGate generates an initial Dashboard password, logs it
-once, and stores only its bcrypt hash in `gateway.config.yaml`.
+Before starting a source installation, explicitly configure `dashboard.password`
+(or OIDC) in your private configuration. A plaintext configured password is hashed
+on startup; missing credentials now fail closed, with no generated password in logs.
+The customer kit in this development branch instead offers one-time activation;
+use the documentation shipped with your released kit/image, not a mismatched branch.
 
 Open:
 

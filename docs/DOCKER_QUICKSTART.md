@@ -41,13 +41,15 @@ Open the Dashboard:
 http://localhost:2099
 ```
 
-The Compose file publishes SiftGate on host localhost only. On first startup,
-SiftGate generates an initial Dashboard password, logs it once, hashes it, and
-writes the hash back to `config/gateway.config.yaml`. The directory overlay is required for atomic Dashboard saves; the root single-file mount is not the active editable configuration. Read it with:
+The Compose file publishes SiftGate on host localhost only. **Before starting**,
+configure `dashboard.password` or OIDC in the private YAML. A configured plaintext
+password is hashed on startup; a missing password/OIDC now fails closed instead of
+printing a generated credential in logs. The directory overlay permits atomic saves;
+the root single-file mount is not the active editable configuration.
 
-```bash
-docker compose logs siftgate | grep 'Generated initial Dashboard password'
-```
+For first-activation UX, use the matching customer installation kit and image. This
+branch's new kit is not compatible with v2.11.7 for fresh initialization; a published
+version's bundled instructions remain authoritative.
 
 ## 3. Verify Health
 
@@ -173,7 +175,7 @@ The compose file mounts:
 - `./data` to `/app/data`
 
 The config file is mounted writable so Dashboard edits and first-start dashboard
-password generation/hashing can persist. If you prefer read-only config in
+configured-password hashing can persist. If you prefer read-only config in
 production, pre-hash the dashboard password and manage config changes outside
 the Dashboard.
 

@@ -8,6 +8,10 @@ import {
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { i18n } from '@/i18n'
+import { authenticationError } from '@/lib/identity-api'
+
+interface IdentityStatus { mode: 'legacy' | 'managed'; setupRequired: boolean; activationExpired: boolean }
+const legacyIdentity: IdentityStatus = { mode: 'legacy', setupRequired: false, activationExpired: false }
 
 interface AuthContextValue {
   token: string | null
@@ -21,9 +25,12 @@ interface AuthContextValue {
     scopes: string[]
   }
   loading: boolean
+  identity: IdentityStatus
+  statusError: boolean
+  refreshStatus: () => Promise<void>
   login: (password: string, invite?: string | null) => Promise<void>
   completeLogin: (token: string) => void
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -55,6 +62,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     scopes: [],
   })
   const [loading, setLoading] = useState(true)
+  const [identity, setIdentity] = useState<IdentityStatus>(legacyIdentity)
+  const [statusError, setStatusError] = useState(false)
+
+  const refreshStatus = useCallback(async () => {
+    try {
+    const res = await fetch('/api/auth/status', { credentials: 'same-origin', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
+    if (!res.ok) { setStatusError(true); throw new Error(i18n.t('login:login.authStatusError')) }
+    const data = await res.json()
+    setIdentity(data.identity ?? legacyIdentity)
+    setLocalLoginEnabled(data.localLoginEnabled ?? data.authRequired)
+    setAuthRequired(data.authRequired !== false)
+    setSessionAuthenticated(Boolean(data.authenticated))
+    setOidc(data.oidc ?? { enabled: false, issuer: null, client_id: null, scopes: [] })
+    setStatusError(false)
+    } catch {
+      setStatusError(true); setAuthRequired(true); setSessionAuthenticated(false)
+      throw new Error(i18n.t('login:login.authStatusError'))
+    }
+  }, [])
 
   // Check auth status on mount
   useEffect(() => {
@@ -62,16 +88,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function checkStatus() {
       try {
-        const res = await fetch('/api/auth/status', { credentials: 'same-origin' })
+        const res = await fetch('/api/auth/status', { credentials: 'same-origin', headers: getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {} })
         if (!res.ok) throw new Error(i18n.t('login:login.authStatusError'))
         const data = (await res.json()) as {
           authRequired: boolean
           authenticated?: boolean
           localLoginEnabled?: boolean
+          identity?: IdentityStatus
           oidc?: AuthContextValue['oidc']
         }
         if (!cancelled) {
-          setAuthRequired(data.authRequired)
+          setAuthRequired(data.authRequired !== false)
+          setIdentity(data.identity ?? legacyIdentity)
+          setStatusError(false)
           setSessionAuthenticated(Boolean(data.authenticated))
           setLocalLoginEnabled(data.localLoginEnabled ?? data.authRequired)
           setOidc(data.oidc ?? {
@@ -85,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // If auth status is unavailable, keep protected routes closed.
         if (!cancelled) {
           setAuthRequired(true)
+          setStatusError(true)
           setSessionAuthenticated(false)
           setLocalLoginEnabled(true)
           setOidc({ enabled: false, issuer: null, client_id: null, scopes: [] })
@@ -109,8 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({ message: i18n.t('login:login.errorFallback') }))
-      throw new Error(data.message || i18n.t('login:login.invalidPassword'))
+      throw new Error(await authenticationError(res))
     }
 
     const data = (await res.json()) as { token: string }
@@ -127,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionAuthenticated(true)
   }, [queryClient])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     queryClient.clear()
     clearAuthToken()
     try {
@@ -137,16 +166,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setToken(null)
     setSessionAuthenticated(false)
-    void fetch('/api/auth/logout', {
+    await fetch('/api/auth/logout', {
       method: 'POST',
       credentials: 'same-origin',
     }).catch(() => undefined)
   }, [queryClient])
 
-  const authenticated = !authRequired || sessionAuthenticated || Boolean(token)
+  const authenticated = !statusError && (!authRequired || sessionAuthenticated)
 
   return (
-    <AuthContext.Provider value={{ token, authRequired, authenticated, localLoginEnabled, oidc, loading, login, completeLogin, logout }}>
+    <AuthContext.Provider value={{ token, authRequired, authenticated, localLoginEnabled, oidc, loading, identity, statusError, refreshStatus, login, completeLogin, logout }}>
       {children}
     </AuthContext.Provider>
   )

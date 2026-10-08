@@ -108,6 +108,7 @@ export class CircuitBreakerService implements OnModuleInit, OnModuleDestroy {
    * Returns true if requests should be forwarded.
    */
   isAvailable(nodeId: string, model?: string): boolean {
+    if (this.configService?.getNode?.(nodeId)?.disabled === true) return false;
     if (!this.config.enabled) {
       return true;
     }

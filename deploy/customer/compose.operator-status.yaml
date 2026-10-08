@@ -1,0 +1,9 @@
+# Optional, read-only status bridge. Enroll/start the host operator separately.
+# This overlay does not grant command execution or expose the Docker socket.
+services:
+  siftgate:
+    environment:
+      SIFTGATE_OPERATOR_STATUS_PATH: /operator-status/status.json
+      SIFTGATE_OPERATOR_INSTALLATION_ID: ${SIFTGATE_INSTALLATION_ID:?Missing installation identity}
+    volumes:
+      - ${SIFTGATE_HOME}/operator/public:/operator-status:ro

@@ -7,6 +7,7 @@ on:
       - scripts/check-node-runtime.js
       - scripts/check-ci-test-results.js
       - test/customer/**
+      - test/customer-ui/**
       - test/runtime/**
       - docs/customer-*
       - .github/workflows/*.yml
@@ -26,6 +27,7 @@ on:
       - scripts/check-node-runtime.js
       - scripts/check-ci-test-results.js
       - test/customer/**
+      - test/customer-ui/**
       - test/runtime/**
       - docs/customer-*
       - .github/workflows/*.yml
@@ -49,6 +51,7 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: npm run runtime:check && npm run test:runtime
+      - run: npm run test:control-ui
       - run: python3 -m unittest discover -s test/customer -v
       - run: python3 -m py_compile deploy/customer/siftgate.py scripts/package-customer-release.py scripts/smoke-customer-install.py scripts/upload-customer-assets.py scripts/check-customer-release-tag.py
       - run: node --check deploy/customer/container-ops.cjs

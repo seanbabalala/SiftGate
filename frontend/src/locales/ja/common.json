@@ -253,5 +253,7 @@
   "setupGuide.copy": "YAML をコピー",
   "setupGuide.copied": "コピー済み",
   "nav.alertConnectors": "アラート連携",
-  "nav.pricing": "料金管理"
+  "nav.pricing": "料金管理",
+  "nav.launchpad": "はじめに",
+  "nav.controlRoom": "ホスト運用"
 }
