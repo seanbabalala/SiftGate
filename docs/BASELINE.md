@@ -28,12 +28,13 @@ bodies are byte-identical. These multi-step database/recovery tests are not API
 latency gates. No assertion, global Jest default or business performance target
 was changed, and failed runs remain recorded rather than counted as passes.
 
-A later HTTP run exposed a batch-test fixture that always returned three rows
-even when the configured window legitimately split a physical request. The mock
-now sizes its response from the actual submitted input. Two deterministic split
-cases reproduced HTTP 502 with the old mock and pass with the corrected mock;
-the complete 46-case batch suite passes locally. Successful responses, unknown
-costs and retained actual-budget holds remain required; no gateway code changed.
+Later HTTP runs exposed batch fixtures that assumed every request would arrive
+within the 60ms window. Missing-usage mocks now use actual physical input sizes;
+fixtures requiring one physical batch reuse a bounded admission barrier before
+the real enqueue, including shared-client cancellation cases. The production
+60ms window, 2-second deadline, grouping and monetary assertions are unchanged.
+Two forced-split cases and a 120ms delayed-admission case cover both behaviors;
+the complete 47-case batch suite passes locally. No gateway code changed.
 
 - Pricing includes versioned rules, long-context/cache and time-window pricing,
   media quantities, frozen FX, exact settlement, durable recovery and cost evidence.
@@ -63,9 +64,9 @@ test bodies; data assertions and application latency/throughput targets are
 unchanged.
 Its report carries the exact commit and full discovered suite list. A final
 coverage gate requires all eight reports, exactly-once suite coverage, no skipped
-or failed tests, and at least 4,472 unit / 817 HTTP tests (including three new
-proxy-trust security regressions beyond the accepted 4,469-unit baseline and two
-split-batch HTTP cases beyond the predecessor's 815-test HTTP baseline).
+or failed tests, and at least 4,472 unit / 818 HTTP tests (including three new
+proxy-trust security regressions beyond the accepted 4,469-unit baseline and three
+batch-timing HTTP cases beyond the predecessor's 815-test HTTP baseline).
 The pricing and shared-budget PostgreSQL suites use an isolated per-job database
 with normal durability, never a production URL.
 

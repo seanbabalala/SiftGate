@@ -182,11 +182,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       const body = JSON.parse(init.body as string);
       return response(body.input.length, 12, 200, actual);
     });
-    const results = await Promise.all([
-      call("aaaa"),
-      call("bbbb"),
-      call("cccc"),
-    ]);
+    const results = await alignedBatchCalls(["aaaa", "bbbb", "cccc"], false);
     expect(results.map((result) => result.status)).toEqual([200, 200, 200]);
     expect(harness.fetchMock.calls).toHaveLength(1);
     expect(dispatchRows).toBe(3);
@@ -238,7 +234,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       ),
     );
     expect(
-      (await Promise.all([call(), call(), call()])).every(
+      (await alignedBatchCalls(["abcd", "abcd", "abcd"], false)).every(
         (result) => result.status === 200,
       ),
     ).toBe(true);
@@ -330,7 +326,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       await gate;
       return response(3, 3);
     });
-    const requests = Promise.all([call(), call(), call()]);
+    const requests = alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     const run = requests.then((value) => value);
     await enteredGate;
     await publish(book([rate("new", "uncached_input_tokens", "99", "1")]));
@@ -368,7 +364,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     // missing-usage contract must not depend on the runner's batching timing.
     const results = split
       ? [await call(), ...await Promise.all([call(), call()])]
-      : await Promise.all([call(), call(), call()]);
+      : await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     expect(results.map(result => result.status)).toEqual([200, 200, 200]);
     if (split) expect(harness.fetchMock.calls.length).toBeGreaterThanOrEqual(2);
     const costs = await summaries();
@@ -398,7 +394,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
         }
         return original(...args);
       });
-    const results = await Promise.all([call(), call(), call()]);
+    const results = await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     expect(results.every((result) => result.status === 200)).toBe(true);
     expect(harness.fetchMock.calls).toHaveLength(1);
     expect(results.map((result) => result.body.usage.prompt_tokens)).toEqual([
@@ -485,7 +481,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       .mockRejectedValue(new Error("synthetic storage outage"));
     harness.fetchMock.setHandler(async () => response(3, 3));
     expect(
-      (await Promise.all([call(), call(), call()])).every(
+      (await alignedBatchCalls(["abcd", "abcd", "abcd"], false)).every(
         (result) => result.status === 200,
       ),
     ).toBe(true);
@@ -522,7 +518,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       .mockRejectedValue(new Error("synthetic delivery outage"));
     harness.fetchMock.setHandler(async () => response(3, 3));
     expect(
-      (await Promise.all([call(), call(), call()])).every(
+      (await alignedBatchCalls(["abcd", "abcd", "abcd"], false)).every(
         (result) => result.status === 200,
       ),
     ).toBe(true);
@@ -575,7 +571,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       );
     harness.fetchMock.setHandler(async () => response(3, 3));
     expect(
-      (await Promise.all([call(), call(), call()])).every(
+      (await alignedBatchCalls(["abcd", "abcd", "abcd"], false)).every(
         (result) => result.status === 200,
       ),
     ).toBe(true);
@@ -632,7 +628,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       .mockRejectedValue(new Error("synthetic complete storage failure"));
     harness.fetchMock.setHandler(async () => response(3, 3));
     expect(
-      (await Promise.all([call(), call(), call()])).every(
+      (await alignedBatchCalls(["abcd", "abcd", "abcd"], false)).every(
         (result) => result.status === 200,
       ),
     ).toBe(true);
@@ -673,6 +669,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     const address = harness.app.getHttpServer().address();
     if (!address || typeof address === "string" || address.port === 2099)
       throw new Error("Invalid isolated listener");
+    const admissionGate = alignNextBatchEnqueues(2);
     const cancelled = httpRequest({
       host: "127.0.0.1",
       port: address.port,
@@ -688,6 +685,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     const other = call("bbbb").then((value) => value);
     try {
       await start;
+      admissionGate.assertComplete();
       cancelled.destroy();
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(providerSignal?.aborted).toBe(false);
@@ -710,6 +708,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
         actual ? "0.100000000000000000" : "0.050000000000000000",
       );
     } finally {
+      admissionGate.close();
       cancelled.destroy();
       release();
       await other;
@@ -746,11 +745,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       const input = JSON.parse(init.body as string).input;
       return response(input.length, 12);
     });
-    const results = await Promise.all([
-      call([1, 2]),
-      call([3, 4]),
-      call([5, 6]),
-    ]);
+    const results = await alignedBatchCalls([[1, 2], [3, 4], [5, 6]], false);
     expect(results.every((result) => result.status === 200)).toBe(true);
     expect(harness.fetchMock.calls).toHaveLength(1);
     const costs = await summaries();
@@ -772,11 +767,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       const input = JSON.parse(init.body as string).input;
       return response(typeof input[0] === "number" ? 1 : input.length, 2);
     });
-    const results = await Promise.all([
-      call([1, 2]),
-      call([3, 4]),
-      call([5, 6]),
-    ]);
+    const results = await alignedBatchCalls([[1, 2], [3, 4], [5, 6]], false);
     expect(results.every((result) => result.status === 200)).toBe(true);
     expect(harness.fetchMock.calls).toHaveLength(3);
     expect(
@@ -800,17 +791,17 @@ describe("priced embedding batch runtime on isolated requests", () => {
     expect(harness.fetchMock.calls).toHaveLength(2);
   });
 
-  it("preserves a missing member result’s allocated supplier fee without charging its logical budget", async () => {
+  it.each([0, 120])("preserves a missing member result’s allocated supplier fee without charging its logical budget (last admission delayed %sms)", async delay => {
     await publish();
     harness.app.get(ConfigService).getNode("mock-openai")!.embedding_models = [
       model,
     ];
-    harness.fetchMock.setHandler(async () => response(2, 12));
-    const results = await Promise.all([
-      call("aaaa"),
-      call("bbbb"),
-      call("cccc"),
-    ]);
+    harness.fetchMock.setHandler(async (_url, init) => {
+      expect(JSON.parse(String(init.body)).input).toHaveLength(3);
+      return response(2, 12);
+    });
+    const results = await alignedBatchCalls(["aaaa", "bbbb", "cccc"], false, delay);
+    expect(harness.fetchMock.calls).toHaveLength(1);
     expect(results.filter((result) => result.status === 200)).toHaveLength(2);
     const costs = await summaries();
     expect(sum(costs.map((cost) => cost!.amount!))).toBe(
@@ -832,7 +823,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       ++count === 1 ? response(3, null, 503) : response(3, 12, 200, actual),
     );
     expect(
-      (await Promise.all([call(), call(), call()])).every(
+      (await alignedBatchCalls(["abcd", "abcd", "abcd"], false)).every(
         (result) => result.status === 200,
       ),
     ).toBe(true);
@@ -858,7 +849,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     jest
       .spyOn(harness.app.get(CostLedgerService), "beginAttemptGroup")
       .mockRejectedValue(new Error("synthetic preparation failure"));
-    const results = await Promise.all([call(), call(), call()]);
+    const results = await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     expect(results.every((result) => result.status !== 200)).toBe(true);
     expect(harness.fetchMock.calls).toHaveLength(0);
     expect(await source.query("SELECT * FROM pricing_attempts")).toHaveLength(
@@ -874,7 +865,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
   it("rejects isolated member corrections that would break batch conservation", async () => {
     await publish();
     harness.fetchMock.setHandler(async () => response(3, 12));
-    await Promise.all([call(), call(), call()]);
+    await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     const original = (await summaries())[0]!;
     const attempt = original.attempts[0];
     const { randomUUID } = await import("node:crypto");
@@ -916,6 +907,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     const address = harness.app.getHttpServer().address();
     if (!address || typeof address === "string" || address.port === 2099)
       throw new Error("Invalid test port");
+    const admissionGate = alignNextBatchEnqueues(2);
     const clients = [0, 1].map(() => {
       const req = httpRequest({
         host: "127.0.0.1",
@@ -933,6 +925,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     });
     try {
       await start;
+      admissionGate.assertComplete();
       clients.forEach((req) => req.destroy());
       let costs = await summaries();
       for (
@@ -958,6 +951,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
         await harness.app.get(PricingRuntimeService).renewActiveLeases(),
       ).toBe(0);
     } finally {
+      admissionGate.close();
       clients.forEach((req) => req.destroy());
     }
   });
@@ -974,27 +968,40 @@ describe("priced embedding batch runtime on isolated requests", () => {
     expect((await summaries())[0]!.amount).toBe("0.070000000000000000");
   });
 
-  /** A correction fixture needs one physical batch, not a timing bet on HTTP admission within60ms. */
-  async function alignedBatchCalls(inputs: string[]) {
+  /** Align only the planned cohort before the real window starts; do not change runtime timers or grouping. */
+  function alignNextBatchEnqueues(count: number, lastArrivalDelayMs = 0) {
     const batching = harness.app.get(PricedEmbeddingBatchingService);
     const enqueue = batching.enqueue.bind(batching);
-    let arrived = 0, release!: () => void, reject!: (error: Error) => void;
+    let arrived = 0, observed = 0, release!: () => void, reject!: (error: Error) => void;
     const ready = new Promise<void>((resolve, fail) => { release = resolve; reject = fail; });
     const timeout = setTimeout(() => reject(new Error("Synthetic batch members did not reach enqueue")), 2000);
-    const gate = jest.spyOn(batching, "enqueue").mockImplementation(async (...args) => {
-      arrived++;
-      if (arrived === inputs.length) { clearTimeout(timeout); release(); }
-      await ready;
-      // The original method still captures each caller's async pricing context,
-      // starts the real window timer, chooses groups and performs all persistence.
-      return enqueue(...args);
-    });
+    const gate = jest.spyOn(batching, "enqueue");
+    for (let index = 0; index < count; index++) {
+      gate.mockImplementationOnce(async (...args) => {
+        if (++observed === count && lastArrivalDelayMs)
+          await new Promise(resolve => setTimeout(resolve, lastArrivalDelayMs));
+        arrived++;
+        if (arrived === count) { clearTimeout(timeout); release(); }
+        await ready;
+        // Each original async pricing context, real window, grouping decision
+        // and persistence path still runs. Later retries use the normal method.
+        return enqueue(...args);
+      });
+    }
+    return {
+      assertComplete: () => expect(arrived).toBe(count),
+      close: () => { clearTimeout(timeout); gate.mockRestore(); },
+    };
+  }
+
+  async function alignedBatchCalls(inputs: Array<string | number[]>, expectSuccess = true, lastArrivalDelayMs = 0) {
+    const gate = alignNextBatchEnqueues(inputs.length, lastArrivalDelayMs);
     try {
       const results = await Promise.all(inputs.map(input => call(input)));
-      expect(arrived).toBe(inputs.length);
-      expect(results.every(result => result.status === 200)).toBe(true);
+      gate.assertComplete();
+      if (expectSuccess) expect(results.every(result => result.status === 200)).toBe(true);
       return results;
-    } finally { clearTimeout(timeout); gate.mockRestore(); }
+    } finally { gate.close(); }
   }
 
   async function correctionFixture(completeEvidence = false) {
@@ -1070,7 +1077,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     await publish(); await actualPolicy();
     harness.app.get(ConfigService).getNode("mock-openai")!.embedding_models = [model];
     harness.fetchMock.setHandler(async () => response(2, 12, 200, true));
-    const results = await Promise.all([call("aaaa"), call("bbbb"), call("cccc")]);
+    const results = await alignedBatchCalls(["aaaa", "bbbb", "cccc"], false);
     expect(results.filter(result => result.status === 200)).toHaveLength(2);
     const costs = await summaries();
     expect(sum(costs.map(cost => cost!.known_subtotal!))).toBe("0.120000000000000000");
@@ -1123,7 +1130,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     await publish(); await actualPolicy();
     harness.app.get(ConfigService).getNode("mock-openai")!.embedding_models = [model];
     harness.fetchMock.setHandler(async () => response(3, 12, 503, true));
-    const replies = await Promise.all([call("aaaa"), call("bbbb"), call("cccc")]);
+    const replies = await alignedBatchCalls(["aaaa", "bbbb", "cccc"], false);
     expect(replies.every(reply => reply.status >= 500)).toBe(true);
     const costs = await summaries();
     expect(harness.fetchMock.calls).toHaveLength(2);
@@ -1386,7 +1393,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
     harness.fetchMock.setHandler(async () =>
       response(3, 12, ++count === 1 ? 429 : 200),
     );
-    await Promise.all([call(), call(), call()]);
+    await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     const costs = await summaries();
     const attempt = costs[0]!.attempts.find(
       (entry) => entry.error_code === "rate_limited",
@@ -1420,7 +1427,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       .spyOn(ledger, "applySettlement")
       .mockRejectedValue(new Error("original budget effect unavailable"));
     harness.fetchMock.setHandler(async () => response(3, 12));
-    await Promise.all([call(), call(), call()]);
+    await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     const attempt = (await summaries())[0]!.attempts[0];
     const body = {
       id: "before-settlement",
@@ -1467,7 +1474,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
       ],
     });
     harness.fetchMock.setHandler(async () => response(3, 3));
-    await Promise.all([call(), call(), call()]);
+    await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     const attempt = (await summaries())[0]!.attempts[0];
     head = (await harness.agent.get(`${base}/bindings`)).body.head;
     await harness.agent.put(`${base}/fx`).send({
@@ -1508,7 +1515,7 @@ describe("priced embedding batch runtime on isolated requests", () => {
   it("uses physical usage for read-only replay rather than repricing smaller shares", async () => {
     await publish();
     harness.fetchMock.setHandler(async () => response(3, 12));
-    await Promise.all([call(), call(), call()]);
+    await alignedBatchCalls(["abcd", "abcd", "abcd"], false);
     const costs = await summaries();
     const content = book([rate("input", "uncached_input_tokens", "0.01", "1")]);
     content.groups.push({
