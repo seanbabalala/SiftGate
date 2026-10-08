@@ -90,8 +90,12 @@ class InstallerTests(unittest.TestCase):
 
     def test_bounded_command_output_and_deadline(self):
         self.assertEqual(KIT.run([sys.executable, "-c", "print('ok')"], output_limit=100, timeout=3), "ok")
+        self.assertEqual(KIT.run([sys.executable, "-c", "import sys; print('progress',file=sys.stderr); print('{}')"],
+                                 output_limit=100, timeout=3), "{}")
         with self.assertRaises(KIT.OperatorError):
             KIT.run([sys.executable, "-c", "print('x'*1000000)"], output_limit=100, timeout=3)
+        with self.assertRaises(KIT.OperatorError):
+            KIT.run([sys.executable, "-c", "import sys; print('x'*1000000,file=sys.stderr)"], output_limit=100, timeout=3)
         with self.assertRaises(KIT.OperatorError):
             KIT.run([sys.executable, "-c", "import time;time.sleep(3)"], output_limit=100, timeout=.1)
 

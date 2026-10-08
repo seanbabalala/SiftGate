@@ -54,9 +54,10 @@ def write_json(path, value):
 
 
 def bounded_run(args, env, timeout, output_limit):
-    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, start_new_session=True)
+    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, start_new_session=True)
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
+    selector.register(process.stderr, selectors.EVENT_READ)
     parts, size, deadline = [], 0, time.monotonic() + timeout
     try:
         while selector.get_map():
@@ -67,7 +68,11 @@ def bounded_run(args, env, timeout, output_limit):
                     selector.unregister(key.fileobj); continue
                 size += len(chunk)
                 require(size <= output_limit, "Operation exceeded its output limit; no raw command output printed")
-                parts.append(chunk)
+                # Match run()'s stdout-only return contract. Docker/gh/SSH may
+                # log progress to stderr even when stdout is machine-readable
+                # JSON. Both streams count against the same bounded budget.
+                if key.fileobj is process.stdout:
+                    parts.append(chunk)
         require(process.wait(timeout=max(0.1, deadline - time.monotonic())) == 0, "Operation failed; no raw command output printed")
         return b"".join(parts).decode("utf-8", "replace").strip()
     finally:
@@ -76,6 +81,7 @@ def bounded_run(args, env, timeout, output_limit):
             os.killpg(process.pid, signal.SIGKILL)  # Only this newly-created CLI process group.
             process.wait(timeout=5)
         process.stdout.close()
+        process.stderr.close()
 
 
 def run(args, env=None, timeout=180, output_limit=None):
