@@ -15,6 +15,10 @@
   anonymous download and Draft-to-public installer gates; manual runs stay test-only.
 - Add 12 offline Git regression cases, including the exact failing checkout
   refspec; the customer tooling suite now has 37 cases.
+- Apply bounded 30-second case/fixture budgets consistently to the real media
+  budget and Realtime ASR database lifecycle contracts after hosted CI exposed a
+  remaining implicit-default timeout. All test bodies, data assertions and
+  business performance thresholds are unchanged; the global Jest default stays.
 
 ### Publication And Upgrade Boundary
 

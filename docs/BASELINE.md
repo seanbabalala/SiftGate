@@ -20,6 +20,14 @@ tags and the exact-commit main CI gate. Twelve offline Git regressions cover thi
 path; the customer test suite now contains 37 cases. New run results, not the
 v2.11.6 evidence alone, are required for this successor's publication.
 
+The successor's first PR CI also exposed a remaining implicit 5-second timeout
+in the actual-media sibling conflict-review contract. Media-budget and Realtime
+ASR lifecycle contracts now consistently receive bounded 30-second case/fixture
+budgets, including parameterized cases; all 36 case declarations and fixture
+bodies are byte-identical. These multi-step database/recovery tests are not API
+latency gates. No assertion, global Jest default or business performance target
+was changed, and failed runs remain recorded rather than counted as passes.
+
 - Pricing includes versioned rules, long-context/cache and time-window pricing,
   media quantities, frozen FX, exact settlement, durable recovery and cost evidence.
 - Customer installations use an independently initialized database/configuration,
