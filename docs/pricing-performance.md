@@ -1,5 +1,10 @@
 # Pricing performance verification
 
+> Historical development measurements follow. The fixed-candidate acceptance,
+> including the explicit PostgreSQL performance exception, is recorded in
+> [the v2.11.6 engineering baseline](BASELINE.md#explicit-performance-exception).
+> Earlier statements that acceptance was pending describe their own checkpoint.
+
 Latest conclusion: **overall HTTP performance acceptance remains unmet**. The
 inbox-persistence candidate passes three PostgreSQL scenarios and all four SQLite
 scenarios. PostgreSQL delayed JSON still fails the unchanged thresholds. See

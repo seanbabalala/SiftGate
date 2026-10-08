@@ -5,6 +5,7 @@ on:
       - deploy/customer/**
       - scripts/*customer*
       - scripts/check-node-runtime.js
+      - scripts/check-ci-test-results.js
       - test/customer/**
       - test/runtime/**
       - docs/customer-*
@@ -23,6 +24,7 @@ on:
       - deploy/customer/**
       - scripts/*customer*
       - scripts/check-node-runtime.js
+      - scripts/check-ci-test-results.js
       - test/customer/**
       - test/runtime/**
       - docs/customer-*
