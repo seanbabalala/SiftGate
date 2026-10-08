@@ -19,6 +19,10 @@
   budget and Realtime ASR database lifecycle contracts after hosted CI exposed a
   remaining implicit-default timeout. All test bodies, data assertions and
   business performance thresholds are unchanged; the global Jest default stays.
+- Correct the missing-usage embedding mock to return the actual physical batch
+  size rather than always three rows. Two deterministic split-batch regressions
+  preserve HTTP success, unknown costs and retained holds; the full HTTP
+  accounting floor increases from 815 to 817 tests. No gateway code changed.
 
 ### Publication And Upgrade Boundary
 

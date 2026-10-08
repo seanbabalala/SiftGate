@@ -357,16 +357,22 @@ describe("priced embedding batch runtime on isolated requests", () => {
     ).toBe(true);
   });
 
-  it.each([false, true])("keeps missing aggregate usage unknown rather than distributing a fabricated zero (actual=%s)", async actual => {
+  it.each([false, true].flatMap(actual => [false, true].map(split => ({ actual, split }))))("keeps missing aggregate usage unknown rather than distributing a fabricated zero (actual=$actual,split=$split)", async ({ actual, split }) => {
     await publish();
     if (actual) await actualPolicy();
-    harness.fetchMock.setHandler(async () => response(3, null));
-    expect(
-      (await Promise.all([call(), call(), call()])).every(
-        (result) => result.status === 200,
-      ),
-    ).toBe(true);
+    harness.fetchMock.setHandler(async (_url, init) => {
+      const input = JSON.parse(init.body as string).input as string | string[];
+      return response(typeof input === "string" ? 1 : input.length, null);
+    });
+    // Force separate physical dispatches as well as concurrent admission; the
+    // missing-usage contract must not depend on the runner's batching timing.
+    const results = split
+      ? [await call(), ...await Promise.all([call(), call()])]
+      : await Promise.all([call(), call(), call()]);
+    expect(results.map(result => result.status)).toEqual([200, 200, 200]);
+    if (split) expect(harness.fetchMock.calls.length).toBeGreaterThanOrEqual(2);
     const costs = await summaries();
+    expect(costs).toHaveLength(3);
     if (actual) {
       expect(costs.every(cost => cost!.reservations[0].state === "reserved")).toBe(true);
       expect(await harness.app.get(CostLedgerService).reconcileActualBudgets()).toEqual({ applied: 0, pending: 3, review_required: 0 });
