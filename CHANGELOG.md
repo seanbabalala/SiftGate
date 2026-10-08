@@ -30,8 +30,8 @@
 - Full CI test discovery is retained while unit and HTTP tests run in four shards
   each. Isolated PostgreSQL coverage is enabled, and a final accounting job
   rejects missing/duplicate suites, failures or skipped tests. The 30-minute job
-  limit and all data assertions remain intact. Three PostgreSQL migration
-  contracts receive explicit 30-second integration-test budgets instead of the
+  limit and all data assertions remain intact. Real schema/subprocess
+  integration contracts receive explicit 30-second test execution budgets instead of the
   implicit 5-second Jest default; they perform repeated DDL/rollback operations
   and are not request-latency or throughput gates. Business performance targets
   are unchanged.

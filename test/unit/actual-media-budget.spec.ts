@@ -1,3 +1,5 @@
+// Real schema/subprocess contracts below retain all data assertions; explicit
+// 30s execution budgets account for hosted-runner DDL/child startup, not API SLOs.
 import { DataSource } from "typeorm";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -112,7 +114,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       expect(await source.query("SELECT * FROM pricing_attempts WHERE id = 'attempt'")).toEqual(original);
       expect(await source.query("SELECT * FROM pricing_budget_effects WHERE kind = 'commit'")).toHaveLength(1);
       expect((await source.query("SELECT state FROM pricing_media_tasks ORDER BY id")).map((row: { state: string }) => row.state)).toEqual(["settled", "settled"]);
-    });
+    }, 30_000);
 
     async function publishCny(seconds: string, base: string, denominator: string) {
       const content = { ...book([rate("duration", "video_seconds", seconds, "1"), rate("base", "video_generation_count", base, "1")]), currency: "CNY", allow_combined_media: true };

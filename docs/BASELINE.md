@@ -29,10 +29,10 @@ SQLite/PostgreSQL test shards (four unit, four E2E). The previous combined job
 passed unit tests and continued passing HTTP suites until its 30-minute job
 limit; cancellation was not a complete validation result.
 
-Every shard retains normal Jest discovery and all original assertions. Three
-PostgreSQL migration contracts use an explicit 30-second fixture execution
-budget after their repeated DDL/rollback sequences hit the implicit 5-second
-default on the hosted runner; application latency/throughput targets are unchanged.
+Every shard retains normal Jest discovery and all original assertions. Schema/subprocess integration contracts use explicit 30-second execution
+budgets after six PostgreSQL cases hit the implicit 5-second default on the
+hosted runner; all data assertions and application latency/throughput targets
+are unchanged.
 Its report carries the exact commit and full discovered suite list. A final
 coverage gate requires all eight reports, exactly-once suite coverage, no skipped
 or failed tests, and at least 4,472 unit / 815 HTTP tests (including three new

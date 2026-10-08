@@ -1,3 +1,5 @@
+// Real schema/subprocess contracts below retain all data assertions; explicit
+// 30s execution budgets account for hosted-runner DDL/child startup, not API SLOs.
 import { DataSource, Table, TableIndex } from "typeorm";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,7 +57,7 @@ function schemaContract(
       }
       expect(await dataSource.query("SELECT * FROM pricing_book_management")).toEqual([]);
       expect((await applyPricingSchema(dataSource)).create_tables).toEqual([]);
-    });
+    }, 30_000);
 
     it("adds016 closed actual-budget cohorts without changing fifteen prior migration records", async () => {
       expect(PRICING_MIGRATIONS[14]).toMatchObject({ version: "pricing-engine-015", checksum: "2d37ff30e6446adeba3e9aae5835886c9fcacb3b2354005f751e8ba92a193c74" });
@@ -74,7 +76,7 @@ function schemaContract(
       expect((await planPricingSchema(dataSource)).state).toBe("applied");
       expect((await applyPricingSchema(dataSource)).state).toBe("applied");
       expect(await dataSource.query("SELECT * FROM pricing_actual_budget_cohorts")).toEqual([]);
-    });
+    }, 30_000);
 
     it("adds015 event disposition without changing fourteen frozen migrations", async () => {
       expect(PRICING_MIGRATIONS[13]).toMatchObject({
