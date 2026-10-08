@@ -1,5 +1,14 @@
 # 客户安装与运维
 
+从v2.12.0开始，除安装包/校验和，还应下载发行清单及Sigstore证明。**执行下载的kit代码前，先按[发行校验](customer-artifact-verification.md)核验发行者与安装包字节**；受管生命周期功能需要独立可信的GitHub CLI2.86+。自行构建的未纳管安装属于安装账户自己承担的信任路径，不等于发行者验证。
+
+独立升级、恢复演练、角色审批与离线/Fleet流程见[Control Room](customer-control.zh-cn.md)。这些功能明确启用，不会自动纳管或升级已有2099。
+
+> **版本边界**：首次激活和本机恢复属于2.12.0起的客户工具。
+> v2.11.7 安装包仍使用其版本内的随机初始密码流程。请使用与镜像配套的 Release
+> 安装包及文档，不要拿新版 `init` 工具搭配 v2.11.7 镜像。升级现有旧身份实例
+> 不会自动迁移身份，也不会重置原密码或开启认领。
+
 这是**全新独立安装**工具，不是维护者本机迁移包。安装包不包含任何真实供应商
 密钥、客户 API Key、历史数据库或机器专属配置。现有实例不得用 `init` 覆盖。
 
@@ -33,20 +42,48 @@ Rancher Desktop 如需显式选择 Moby，在 `init` 增加
 默认端口仍为 **2099**，仅绑定本机 `127.0.0.1`。端口已占用会拒绝，不会杀掉原服务。
 第二套实例可指定 `--port 21099`。`init` 只初始化，`up` 才正式启动。
 
-打开 `http://localhost:2099/dashboard`，在本机读取随机密码：
+打开 `http://localhost:2099/dashboard`，在安装服务器的私有终端读取**单次激活码**：
 
 ```bash
-cat "$HOME/siftgate/config/initial-admin-password.txt"
+cat "$HOME/siftgate/config/activate-code.txt"
 ```
 
-妥善保存密码后删除此一次性提示文件；备份不会收录该文件。配置中保存密码哈希，
-配置、环境变量和备份仍须保密。所有示例节点初始禁用：在后台配置供应商及其密钥，
+激活码 15 分钟有效，仅可使用一次；在页面设置自己的管理员密码，然后重新登录。
+没有通用默认密码。激活码消费后删除，备份不收录明文码；身份文件仅保存哈希和会话
+签名密钥。配置、环境变量、身份文件和备份仍须保密。所有新安装示例节点以 `disabled: true` 显式禁用：在后台配置供应商及其密钥，
 核对模型计价、路由和预算，再启用节点、创建自己的 Gateway API Key、发送测试请求。
 示例价格不保证是供应商现行价格。告警接收地址由客户自行配置。
 
 服务器部署使用 `init --mode https`，自行配置域名、HTTPS 反向代理和防火墙。
 这个选项会启用 Secure 会话 Cookie，**并不自动申请证书或把 2099 变成 HTTPS**。
 `--bind 0.0.0.0` 仅在 HTTPS 模式允许，仍需可信入口保护；不要裸露管理后台。
+
+激活并登录后进入 **首次上手（Launchpad）**，按“环境 → 模型 → 受限 Key → 真实调用回执”完成接入。
+真实测试必须主动确认可能产生的费用；准备和检查回执不调用模型。见 [上手说明](customer-launchpad.zh-cn.md)。
+旧安装包的 `enabled:false` 曾被忽略；本版不重新解释该历史字段，以免升级后停服。
+
+## 激活过期 / 忘记管理员密码
+
+安装账户在服务器执行以下命令签发新码；只返回私有文件路径，不直接打印码值，
+**不会重启网关**。`activate` 仅用于未激活实例；已激活实例使用 `recover`。
+
+```bash
+python3 "$HOME/siftgate/kit/siftgate.py" --directory "$HOME/siftgate" access-code --purpose activate --confirm
+cat "$HOME/siftgate/config/activate-code.txt"
+# 忘记密码时，改为：
+python3 "$HOME/siftgate/kit/siftgate.py" --directory "$HOME/siftgate" access-code --purpose recover --confirm
+cat "$HOME/siftgate/config/recover-code.txt"
+```
+
+每次重签都会使旧码失效；不要把码放进 URL、工单、邮件或聊天。恢复码通过登录页
+“忘记密码？”填写。已登录时通过页头盾牌进入安全设置，验证旧密码后修改。
+改密或恢复后所有旧控制台会话失效，供应商凭据、Gateway API Key 与业务数据不变。
+密码为 15 个以上字符、至多 72 个 UTF-8 字节；长口令和密码管理器均可用。
+
+本阶段是**本地单实例管理员**，不等于已实现独立多用户。显式配置
+`dashboard.identity_file`，不能与旧 `password`、`session_secret`、免认证或已启用
+OIDC 混用；不接受工作空间邀请。旧密码/OIDC 模式继续原流程，尚无自动身份迁移。
+身份文件缺失/损坏时拒绝访问，不自动重新认领。详见 [P0 身份边界](customer-identity.zh-cn.md)。
 
 ## 日常操作
 
@@ -86,6 +123,8 @@ python3 "$HOME/siftgate-recovery/kit/siftgate.py" --directory "$HOME/siftgate-re
 ```
 
 原镜像还在本机可增加 `--local-image`；否则仓库必须仍可拉到相同镜像。
+受管身份恢复会清除待用访问码并重新签发会话密钥，必须用备份时的密码重新登录；
+旧密码/OIDC 模式保持原会话策略。Gateway API Key 不被轮换。
 恢复保留原时区，验证文件摘要和镜像身份，不启动源实例也不覆盖源目录。
 先检查密码、Key、预算、日志、价格和上游连通性，再决定是否切流。
 升级失败后**不会自动用旧数据库覆盖新数据**：候选可能已接到新请求，必须保留并对账。
@@ -124,3 +163,8 @@ python3 "$HOME/siftgate/kit/siftgate.py" --directory "$HOME/siftgate" watchdog -
 成功；带 v/不带 v 标签须对应同一 digest，附件完成校验后才公开 Release。
 
 更完整的权限、备份、升级失败处理与发布检查见随包附带的英文说明。
+
+
+## 可选：独立主机执行器
+
+本分支新增持久任务账本与只读Control Room，必须由安装账户明确启用，不自动接管既有实例，也不改系统自启动。只读挂载要到下一次单独批准的容器重建才生效。当前不验证发行签名或任意跨版本兼容性，启用前阅读配套的 [Operator手册](customer-operator.zh-cn.md)。

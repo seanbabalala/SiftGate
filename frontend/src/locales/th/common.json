@@ -253,5 +253,7 @@
   "setupGuide.copy": "คัดลอก YAML",
   "setupGuide.copied": "คัดลอกแล้ว",
   "nav.alertConnectors": "ตัวเชื่อมต่อแจ้งเตือน",
-  "nav.pricing": "จัดการราคา"
+  "nav.pricing": "จัดการราคา",
+  "nav.launchpad": "เริ่มต้นใช้งาน",
+  "nav.controlRoom": "การดูแลโฮสต์"
 }

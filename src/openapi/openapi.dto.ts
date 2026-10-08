@@ -48,13 +48,32 @@ export class LoginResponseDto {
   token!: string;
 }
 
+export class IdentityCodeRequestDto {
+  @ApiProperty({ writeOnly: true, description: 'Host-issued single-use code, valid for 15 minutes. Never put it in a URL.' })
+  code!: string;
+
+  @ApiProperty({ format: 'password', writeOnly: true, description: 'At least 15 Unicode characters; at most 72 UTF-8 bytes; no NUL.' })
+  password!: string;
+}
+
+export class IdentityPasswordRequestDto {
+  @ApiProperty({ format: 'password', writeOnly: true })
+  current_password!: string;
+
+  @ApiProperty({ format: 'password', writeOnly: true, description: 'At least 15 Unicode characters; at most 72 UTF-8 bytes; no NUL.' })
+  password!: string;
+}
+
 export class AuthStatusResponseDto {
+  @ApiProperty({ example: { mode: 'managed', setupRequired: true, activationExpired: false },
+    description: 'Public identity state only; never contains code values, hashes, paths or session secrets.' })
+  identity!: { mode: 'managed' | 'legacy'; setupRequired: boolean; activationExpired: boolean };
   @ApiProperty({ example: true })
   authRequired!: boolean;
 
   @ApiProperty({
     example: false,
-    description: 'Whether the current request has a valid Dashboard session cookie.',
+    description: 'Whether the request has a valid Dashboard session cookie or permitted legacy bearer token.',
   })
   authenticated!: boolean;
 }

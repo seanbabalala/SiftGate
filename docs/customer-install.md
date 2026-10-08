@@ -1,5 +1,11 @@
 # Customer installation and release kit
 
+For v2.12.0+, download the signed manifest and Sigstore bundle as well as the archive/checksum. **Verify publisher identity and bound archive bytes before extracting or executing the kit**, following [artifact verification](customer-artifact-verification.md). Managed lifecycle features require independently trusted GitHub CLI2.86+. Basic self-built, un-enrolled installs remain an explicitly owner-trusted path, not a publisher-verification result.
+
+Independent upgrades, recovery drills, roles, approvals and offline/Fleet operations are described in [Control Room](customer-control.md). They are opt-in and never enroll or upgrade an existing2099 automatically.
+
+> Development-branch lifecycle changes are not released yet. v2.11.7 used its bundled random-password instructions; this branch uses first activation and an opt-in operator. Do not mix the new source kit with an older image.
+
 This kit installs a **new, independent** SiftGate instance. It never imports the
 maintainer's configuration, keys, call history, or machine-specific deployment
 bundle. It is not a migration script for an existing native service. Do not use
@@ -64,25 +70,17 @@ If initialization fails, keep the partial directory for diagnosis; a repeated
 
 ## First login and configuration
 
-Open `http://localhost:2099/dashboard`. Read the random initial password locally:
+Open `http://localhost:2099/dashboard`. Read this installation's **single-use, 15-minute activation code** locally:
 
 ```bash
-cat "$HOME/siftgate/config/initial-admin-password.txt"
+cat "$HOME/siftgate/config/activate-code.txt"
 ```
 
-The password is not printed to deployment logs. Only its bcrypt hash and a
-random session secret are placed in the private writable YAML. Store the password
-in your password manager and remove the initial-password file afterwards; it is
-excluded from backups. Configuration and backups remain sensitive regardless.
+Choose your administrator password in the activation page, then sign in. There is no shared default password. The private identity file stores a password hash and a rotating session signer, not the plaintext password. Spent codes are invalidated and removed; code files are excluded from backups.
 
-All example provider nodes are **disabled** initially. In the Dashboard:
+If activation expires, the installation owner can run `access-code --purpose activate --confirm` with the installed `siftgate.py`. Forgotten managed passwords use `access-code --purpose recover --confirm` and the login page's recovery flow. Credential recovery does not restart the gateway or rotate application API keys. Existing legacy password/OIDC installs are not automatically migrated.
 
-1. Configure a provider, its own upstream credentials, and the desired models.
-2. Verify prices, units, tiers/time windows, routing and budgets; example prices
-   are not a promise of current provider prices. Enable only verified nodes.
-3. Create a **Gateway API key** for applications, distinct from provider keys.
-4. Send a request and review its logs/cost evidence.
-5. Configure alert connectors if required; no real recipient is bundled.
+Launchpad guides environment review → provider setup → bounded single-node/model text API key → explicitly approved real request → recorded evidence. New sample nodes use `disabled: true`. The formerly ignored `enabled:false` field is not reinterpreted on old installations, preventing an upgrade from unexpectedly disabling established traffic. Review prices, limits and any configured health probes before enabling a node. Tests can incur provider charges and are never sent automatically by Launchpad.
 
 Secrets can be entered through the existing Dashboard or supplied in
 `provider.env` as raw `KEY=value` lines and referenced using `${env:KEY}` in YAML.
@@ -187,6 +185,8 @@ image identity must equal the backup's identity. Preserve the old image/offline
 archive for the entire recovery window. A mismatch fails without starting the
 restored gateway. Hash mismatches, extra files and symbolic links are rejected.
 
+Managed-identity restores revoke prior Dashboard sessions and pending recovery codes; sign in again with the password from the snapshot. Application API keys are preserved.
+
 Verify authentication, keys, budgets, logs, pricing and provider connectivity in
 the restored instance. It is intentionally **not** automatically made production.
 Pause writers and reconcile data since the snapshot before any real traffic
@@ -273,3 +273,8 @@ specific supported platform/runtime versions.
 - https://docs.docker.com/engine/containers/start-containers-automatically/
 - https://www.sqlite.org/backup.html
 - https://docs.rancherdesktop.io/ui/preferences/container-engine/general/
+
+
+## Optional independent host operator
+
+The new operator provides persistent host-approved backup/upgrade jobs and an instance-bound, read-only Control Room. Enrollment does not start services; bridge changes take effect only at a separately approved recreation. It is not a publisher-signature verifier or an automatic cross-version upgrade system. Read the matching [operator guide](customer-operator.md) before enabling it. Existing running instances are not enrolled automatically.

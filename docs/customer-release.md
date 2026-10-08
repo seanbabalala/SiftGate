@@ -15,14 +15,14 @@ the exported release variables in that session.
 
 ## 0. State gate: a branch runbook is not a ready main branch
 
-**Publication checkpoint, October 8, 2026:** PR #132 merged the customer system
-to `main` (`cff3cc9`); its full main CI and both native rehearsals passed.
-The `v2.11.6` tag workflow then failed before builds because checkout flattened
-the runner's local annotated-tag ref to a commit. The remote tag is preserved;
-no v2.11.6 image or GitHub Release was published. Successor v2.11.7 validates the
-remote tag object and adds offline regressions. It still requires its own full
-gates: the predecessor's green runs are not successor release evidence. Fetch
-and inspect actual commits before each operation.
+**Historical baseline and current authority:** PR #132 merged the customer
+installation system into `main`. The v2.11.6 workflow failed before builds on
+local annotated-tag validation; its remote tag was not moved. The corrected
+v2.11.7 became the public installation baseline. Starting with v2.12.0,
+publication additionally binds lifecycle acceptance and customer artifacts to a
+publisher-attested manifest. Fetch and inspect current main, exact CI, the tag
+workflow, the signed quartet and cold-install results on every release; neither
+this version number nor a historical checkpoint establishes publication.
 
 | State | Required evidence | Permitted actions |
 | --- | --- | --- |
@@ -58,6 +58,8 @@ Do not rebuild successful architectures or bypass the gate (sections 2 and 7).
 Use the [separate-gate command card](customer-release-quickref.md) under pressure;
 it is not one unattended paste-and-publish script.
 
+**v2.12.0 development candidate:** the signed lifecycle workflow still needs merge and real publication. v2.11.7 is a legacy installation baseline, not a signed lifecycle release. Keep the S0–S3 gates. An independently trusted GitHub CLI2.86+ is required for publisher verification.
+
 ## 1. Deliverables and identity
 
 A completed release has all of the following:
@@ -68,7 +70,7 @@ A completed release has all of the following:
 - A multi-platform index referencing those exact tested child digests.
 - Equal index digests for `ghcr.io/seanbabalala/ai-gateway:vX.Y.Z` and `:X.Y.Z`.
   The bare version is required by the existing Helm/Kustomize image defaults.
-- `siftgate-vX.Y.Z-install.tar.gz` and `.tar.gz.sha256` GitHub Release assets.
+- Four exact assets: installer, its checksum, `siftgate-vX.Y.Z-release.json`, and `siftgate-vX.Y.Z-release.sigstore.jsonl`.
 - A matching commit/version/immutable registry digest in the archive's `release.json`.
 - Anonymous registry access, clean-machine layer pulls/installations and migration evidence.
 - Release notes stating upgrade, backup, downtime, recovery and known limitations.
@@ -81,7 +83,7 @@ Customer installations pin the combined index digest, not a moving tag.
 ## 2. One-time repository and GHCR setup
 
 ```bash
-export REPO=seanbabalala/ai-gateway
+export REPO=seanbabalala/SiftGate
 export IMAGE_REPO=ghcr.io/seanbabalala/ai-gateway
 gh auth status
 gh api "repos/$REPO" --jq '{default_branch,visibility,archived}'
@@ -287,18 +289,19 @@ maintainer Git flow, not an unreviewed automatic tag workaround.
 The pipeline then:
 
 1. Validates version/tag/main ancestry and successful exact-commit main CI.
-2. Builds/tests native AMD64 and ARM64 with OCI source/revision/version/license labels.
+2. Builds native AMD64/ARM64 with a pinned Node base, then tests install, real upgrades, recovery, independent execution, offline transport and SSH Fleet.
 3. Pushes run/attempt-specific architecture candidates only after their smoke tests pass.
 4. Stores commit/architecture/digest in `customer-image-amd64` and `customer-image-arm64`
    Actions artifacts. These immutable receipts, not staging tags, drive combination.
 5. Publishes both version aliases without overwriting a different existing release.
 6. Checks equal index digests and anonymous manifest access.
 7. Packages only allowlisted files from the exact Git commit, including checksums.
-8. Creates a Draft GitHub Release, verifies existing asset bytes, uploads missing
-   assets, downloads/verifies the result, and only then makes the release public.
-9. Writes commit, aliases, index/child digests and installer checksum to the job summary.
+8. Builds the strict release manifest from both native receipts, reuses an already saved matching proof or signs with the pinned official actions/attest action (OIDC/SLSA).
+9. Keeps the Release in Draft while verifying signature and authenticated downloaded quartet bytes; no overwrite.
+10. Makes it public, verifies all four anonymous URLs and signatures, then performs cold anonymous signed installs on both native architectures before workflow success. Draft downloads cannot truthfully be called anonymous.
+11. Records the source, image, proof and cold-install evidence.
 
-Hyphenated alpha/beta/rc versions are marked prerelease. Do not manually announce
+The new signed lifecycle contract accepts stable versions only; old prerelease branching is not a supported signed-release path. Do not manually announce
 an empty public Release while the pipeline is still uploading assets.
 
 ## 6. Independent post-publication verification
@@ -313,8 +316,7 @@ gh run download "$RELEASE_RUN_ID" --repo "$REPO" --pattern 'customer-image-*' \
   --dir "$HOME/siftgate-release-evidence/$TAG/architectures"
 ```
 
-Both verify jobs and publish must succeed. Check the release is not Draft and
-contains both assets. Inspect both architecture entries and aliases:
+Both verify jobs, publish and both cold customer-installable jobs must succeed. Check the release is not Draft and contains all four signed artifacts. Inspect both architecture entries and aliases:
 
 ```bash
 docker buildx imagetools inspect "$IMAGE_REPO:$TAG"
@@ -337,8 +339,15 @@ Download, verify and inspect the real customer archive:
 mkdir -p "$HOME/siftgate-release-evidence/$TAG/download"
 cd "$HOME/siftgate-release-evidence/$TAG/download"
 gh release download "$TAG" --repo "$REPO" \
-  --pattern "siftgate-$TAG-install.tar.gz" --pattern "siftgate-$TAG-install.tar.gz.sha256"
+  --pattern "siftgate-$TAG-install.tar.gz" --pattern "siftgate-$TAG-install.tar.gz.sha256" \
+  --pattern "siftgate-$TAG-release.json" --pattern "siftgate-$TAG-release.sigstore.jsonl"
 sha256sum -c "siftgate-$TAG-install.tar.gz.sha256"
+gh attestation verify "siftgate-$TAG-release.json" --hostname github.com --repo "$REPO" \
+  --cert-identity "https://github.com/seanbabalala/SiftGate/.github/workflows/customer-release.yml@refs/tags/$TAG" \
+  --cert-oidc-issuer https://token.actions.githubusercontent.com \
+  --source-ref "refs/tags/$TAG" --source-digest "$SOURCE_SHA" --deny-self-hosted-runners \
+  --predicate-type https://slsa.dev/provenance/v1 --bundle "siftgate-$TAG-release.sigstore.jsonl"
+python3 -c 'import hashlib,json,os; from pathlib import Path; t=os.environ["TAG"];m=json.load(open("siftgate-"+t+"-release.json"));p=Path("siftgate-"+t+"-install.tar.gz");assert m["tag"]==t and m["installer"]["name"]==p.name and m["installer"]["bytes"]==p.stat().st_size and m["installer"]["sha256"]==hashlib.sha256(p.read_bytes()).hexdigest()'
 tar -xzf "siftgate-$TAG-install.tar.gz"
 cd "siftgate-$TAG"
 sha256sum -c SHA256SUMS
@@ -354,7 +363,7 @@ PY
 
 Use `shasum -a 256 -c` instead of `sha256sum -c` on macOS. Public customers can
 download from the Release page without a `gh` account; the CLI is an operator
-convenience. Checksums detect mismatch/corruption, not authenticity by signature.
+convenience. The independent verifier proves publisher identity; the signed manifest binds installer bytes. A checksum alone is not that proof.
 
 **Continue from the extracted `siftgate-$TAG/` Release archive in the preceding
 step**, with its verified `release.json`. Do not run this image-less command from
@@ -429,31 +438,14 @@ still needs its own approval and maintenance window. Non-kit installations must
 use their own deployment/migration procedure; do not point this kit at an arbitrary
 existing runtime directory. Single-instance upgrades restart the application.
 
-For offline customers, export each target architecture on an isolated delivery host:
-
-```bash
-read -r -p 'Target architecture (amd64 or arm64): ' ARCH
-case "$ARCH" in amd64|arm64) ;; *) exit 1 ;; esac
-docker pull --platform "linux/$ARCH" "$IMAGE"
-docker tag "$IMAGE" "siftgate-offline:$VERSION-$ARCH"
-docker save -o "siftgate-$VERSION-$ARCH-image.tar" "siftgate-offline:$VERSION-$ARCH"
-sha256sum "siftgate-$VERSION-$ARCH-image.tar" > "siftgate-$VERSION-$ARCH-image.tar.sha256"
-```
-
-Deliver the verified installer and matching platform image through a trusted
-channel. The customer verifies, `docker load`s, then uses `init --image` with that
-offline tag and `--local-image`. Record platform, commit, image ID and checksums.
-Never `docker commit` a production container into a customer image.
+Managed offline delivery uses the [Control offline workflow](customer-control.md): obtain verifier/roots independently, fetch a verified release, export the native five-file package, stage and verify-import it on the receiver, then approve deployment separately. A plain docker-save checksum is not managed publisher proof. Never export a production container or package customer configuration as a release.
 
 Retain the published index **and every architecture digest it references**.
 Deleting a child image because it only shows a build tag can break an existing
 version. Keep old images/offline copies for the full recovery window. Image,
 database backup and request-log retention are independent policies.
 
-The current workflow provides digest pinning, native tests, OCI source labels,
-an export allowlist and checksums. It does not claim Cosign signing, SBOMs, SLSA
-attestations, container vulnerability blocking or automatic fleet upgrades.
-Those require separate implementation/acceptance if enterprise policy demands them.
+The signed release manifest binds the installer and both native image configurations through GitHub OIDC/SLSA proof. Fleet remains explicitly approved. This does not claim separate OCI signatures, mandatory SBOM/vulnerability blocking or approval-free updates. Local acceptance fixtures are not publisher signatures; actual public proofs and cold native installs are mandatory.
 
 ## 9. Release record and completion checklist
 

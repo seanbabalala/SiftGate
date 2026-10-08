@@ -1,0 +1,19 @@
+[Unit]
+Description=SiftGate independent maintenance control plane
+After=docker.service network-online.target
+
+[Service]
+Type=simple
+# Explicitly review account, paths and TLS proxy origin before installing.
+# This service is NOT the gateway and must never listen on its port 2099.
+User=siftgate
+Group=siftgate
+ExecStart=/usr/bin/python3 -B /opt/siftgate-control/kit/siftgate_control.py --home /var/lib/siftgate-control serve --port 2100 --origin https://ops.example.com
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=2500
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

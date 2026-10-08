@@ -1,3 +1,7 @@
+import { OperatorStatusController } from '../operator/operator-status.controller';
+import { OperatorStatusService } from '../operator/operator-status.service';
+import { LaunchpadController } from '../launchpad/launchpad.controller';
+import { LaunchpadService } from '../launchpad/launchpad.service';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HealthController } from './health.controller';
@@ -60,9 +64,11 @@ import { ProvidersModule } from '../providers/providers.module';
       WorkspaceInvitation,
     ]),
   ],
-  controllers: [HealthController, DashboardController],
+  controllers: [HealthController, DashboardController, LaunchpadController, OperatorStatusController],
   providers: [
     LogEventBus,
+    LaunchpadService,
+    OperatorStatusService,
     ProviderCompatibilityService,
     ConfigAuditService,
     BenchmarkReportService,

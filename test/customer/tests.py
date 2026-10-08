@@ -1,5 +1,7 @@
 """Standard-library regression tests; never contact Docker or a live gateway."""
 import importlib.util
+import contextlib
+import io
 import argparse
 import json
 from pathlib import Path
@@ -25,6 +27,33 @@ class InstallerTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_host_access_code_requires_confirmation_and_does_not_restart(self):
+        with patch.object(KIT.Install, "load", return_value=self.install), \
+                patch.object(self.install, "check_engine"), patch.object(self.install, "helper") as helper, \
+                patch.object(self.install, "compose") as compose, patch.object(self.install, "stop") as stop:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                KIT.main(["--directory", str(self.root), "access-code", "--purpose", "recover", "--confirm"])
+            helper.assert_called_once_with("recover-code")
+            compose.assert_not_called()
+            stop.assert_not_called()
+            result = json.loads(output.getvalue())
+            self.assertFalse(result["restarted"])
+            self.assertEqual(result["expires_in_minutes"], 15)
+            self.assertNotIn("sg_recover_", output.getvalue())
+            helper.reset_mock()
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                KIT.main(["--directory", str(self.root), "access-code", "--purpose", "recover"])
+            helper.assert_not_called()
+
+    def test_host_access_code_refuses_maintenance(self):
+        (self.root / "maintenance").touch()
+        with patch.object(KIT.Install, "load", return_value=self.install), \
+                patch.object(self.install, "check_engine"), patch.object(self.install, "helper") as helper, \
+                self.assertRaises(KIT.OperatorError):
+            KIT.main(["--directory", str(self.root), "access-code", "--purpose", "activate", "--confirm"])
+        helper.assert_not_called()
+
     def snapshot(self, name, purpose="routine", installation="a" * 32, date="2026-01-01"):
         path = self.root / name
         for folder in ("config", "data", "state"):
@@ -37,6 +66,38 @@ class InstallerTests(unittest.TestCase):
             "created_at": date, "files": KIT.inventory(path),
         })
         return path
+
+    def test_snapshot_refuses_container_created_link_before_host_copy(self):
+        (self.root / "provider.env").write_text("DO_NOT_OVERWRITE")
+        (self.root / "backups").mkdir()
+        outside = self.root / "outside.txt"
+        outside.write_text("unchanged")
+        def malicious_snapshot(action, name):
+            target = self.root / "backups" / name
+            target.mkdir()
+            (target / "provider.env").symlink_to(outside)
+        with patch.object(self.install, "check_disk"), patch.object(self.install, "helper", side_effect=malicious_snapshot), self.assertRaises(KIT.OperatorError):
+            self.install.snapshot("routine")
+        self.assertEqual(outside.read_text(), "unchanged")
+
+    def test_snapshot_inventory_refuses_hard_links(self):
+        import os
+        source = self.root / "source"
+        source.write_text("fixture")
+        linked = self.root / "linked"
+        os.link(source, linked)
+        with self.assertRaises(KIT.OperatorError): KIT.inventory(self.root)
+
+    def test_bounded_command_output_and_deadline(self):
+        self.assertEqual(KIT.run([sys.executable, "-c", "print('ok')"], output_limit=100, timeout=3), "ok")
+        self.assertEqual(KIT.run([sys.executable, "-c", "import sys; print('progress',file=sys.stderr); print('{}')"],
+                                 output_limit=100, timeout=3), "{}")
+        with self.assertRaises(KIT.OperatorError):
+            KIT.run([sys.executable, "-c", "print('x'*1000000)"], output_limit=100, timeout=3)
+        with self.assertRaises(KIT.OperatorError):
+            KIT.run([sys.executable, "-c", "import sys; print('x'*1000000,file=sys.stderr)"], output_limit=100, timeout=3)
+        with self.assertRaises(KIT.OperatorError):
+            KIT.run([sys.executable, "-c", "import time;time.sleep(3)"], output_limit=100, timeout=.1)
 
     def test_image_references_fail_closed(self):
         for value in ("image", "image:latest", "--privileged", "image:tag;bad", "image:tag\n"):
@@ -158,6 +219,23 @@ class InstallerTests(unittest.TestCase):
         with patch.object(KIT, "run") as run, self.assertRaises(KIT.OperatorError):
             KIT.prepare(args, "image:v1")
         run.assert_not_called()
+
+    def test_enrolled_installation_cannot_use_legacy_manual_upgrade(self):
+        (self.root/"operator").mkdir(); (self.root/"operator/policy.json").write_text("{}")
+        with patch.object(self.install,"docker") as docker,patch.object(self.install,"container") as container:
+            with self.assertRaisesRegex(KIT.OperatorError,"verified Operator/Control plan"):
+                self.install.upgrade("sha256:"+"f"*64,True)
+        docker.assert_not_called(); container.assert_not_called()
+
+    def test_backup_reserves_image_identity_export_before_stopping_gateway(self):
+        from types import SimpleNamespace
+        self.install.meta["image"] = "sha256:" + "a" * 64
+        with patch.object(self.install,"container",return_value={"State":{"Running":True}}), \
+                patch.object(self.install,"docker",return_value=json.dumps([{"Size":800*1024**2}])), \
+                patch.object(KIT.shutil,"disk_usage",return_value=SimpleNamespace(free=600*1024**2)), \
+                patch.object(self.install,"stop") as stop,self.assertRaisesRegex(KIT.OperatorError,"Insufficient disk space"):
+            self.install.backup(None)
+        stop.assert_not_called(); self.assertFalse((self.root/"maintenance").exists())
 
     def test_restore_checks_image_before_mounting_customer_files(self):
         target = self.root / "new"
@@ -284,13 +362,23 @@ class ReleaseTests(unittest.TestCase):
         guards = [line.strip() for line in workflow.splitlines() if line.strip().startswith("if:")]
         self.assertGreaterEqual(len(guards), 4)
         for guard in guards:
-            self.assertEqual(guard, "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')")
+            self.assertIn(guard, {"if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')",
+                "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && steps.proof.outputs.reuse_bundle != 'true'", "if: always()"})
         self.assertIn('"$GITHUB_EVENT_NAME" == push', workflow)
         self.assertIn('customer-image-${{ matrix.arch }}', workflow)
         self.assertIn('actions/workflows/ci.yml/runs', workflow)
         self.assertIn('"$GITHUB_REF_NAME" "${GITHUB_REF_NAME#v}"', workflow)
         self.assertIn('--draft "${flags[@]}"', workflow)
         self.assertIn('--verify-only', workflow)
+        self.assertIn('--require-attestation',workflow)
+        self.assertIn('actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6',workflow)
+        self.assertIn('attestations: write',workflow)
+        self.assertIn('id-token: write',workflow)
+        self.assertLess(workflow.index('run-customer-acceptance.py'),workflow.index('Publish tested architecture candidate'))
+        self.assertLess(workflow.index('gh release edit "$GITHUB_REF_NAME" --draft=false'),workflow.index('scripts/verify-public-customer-release.py'))
+        self.assertEqual(workflow.count("if: always()"),1)
+        self.assertIn('name: Retain bounded native receipts and logs (never fixture secrets)\n        if: always()\n        uses: actions/upload-artifact@v4',workflow)
+        self.assertIn('path: output/customer-native',workflow)
 
     def test_customer_checks_survive_merge_and_runtime_changes(self):
         workflow = (SOURCE.parents[2] / ".github/workflows/customer-install.yml").read_text()
@@ -300,6 +388,11 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(workflow.count("      - " + dependency + "\n"), 2)
         core_ci = (SOURCE.parents[2] / ".github/workflows/ci.yml").read_text()
         self.assertIn("npm run test:runtime && npm run test:customer", core_ci)
+
+    def test_repository_rename_cannot_silently_move_image_namespace(self):
+        workflow = (SOURCE.parents[2] / ".github/workflows/customer-release.yml").read_text()
+        self.assertIn("SIFTGATE_IMAGE_REPOSITORY: ghcr.io/seanbabalala/ai-gateway", workflow)
+        self.assertNotIn("ghcr.io/${GITHUB_REPOSITORY,,}", workflow)
 
 
 if __name__ == "__main__":

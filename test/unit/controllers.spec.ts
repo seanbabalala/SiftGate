@@ -98,6 +98,7 @@ describe('AuthController', () => {
     const config = mockConfigService();
     const controller = new AuthController(authService, config);
     expect(controller.getStatus()).toEqual({
+      identity: { mode: 'legacy', setupRequired: false, activationExpired: false },
       authRequired: true,
       authenticated: false,
       localLoginEnabled: true,
@@ -118,6 +119,7 @@ describe('AuthController', () => {
     const config = mockConfigService();
     const controller = new AuthController(authService, config);
     expect(controller.getStatus()).toEqual({
+      identity: { mode: 'legacy', setupRequired: false, activationExpired: false },
       authRequired: false,
       authenticated: false,
       localLoginEnabled: false,

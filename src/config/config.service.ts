@@ -288,6 +288,7 @@ export class ConfigService implements OnModuleInit, OnModuleDestroy {
       throw new Error('Invalid configuration: nodes must be a non-empty array');
     }
     for (const [idx, node] of config.nodes.entries()) {
+      if (node.disabled !== undefined && typeof node.disabled !== 'boolean') throw new Error(`Invalid configuration: nodes[${idx}].disabled must be boolean`);
       if (!node?.id || !node.name || !node.protocol || !node.base_url || !node.endpoint) {
         throw new Error(`Invalid configuration: nodes[${idx}] is missing required fields`);
       }

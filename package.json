@@ -1,6 +1,6 @@
 {
   "name": "siftgate",
-  "version": "2.11.7",
+  "version": "2.12.0",
   "description": "SiftGate self-hosted AI traffic gateway with smart routing",
   "license": "MIT",
   "engines": {
@@ -50,8 +50,10 @@
     "benchmark:platform": "node scripts/benchmark-platform.js",
     "smoke:docker": "bash scripts/docker-smoke.sh",
     "test:customer": "python3 -m unittest discover -s test/customer -v",
+    "test:control-ui": "node --test test/customer-ui/*.test.cjs",
     "smoke:customer": "python3 scripts/smoke-customer-install.py",
-    "benchmark:pricing": "ts-node scripts/benchmark-pricing.ts"
+    "benchmark:pricing": "ts-node scripts/benchmark-pricing.ts",
+    "smoke:operator": "python3 scripts/smoke-customer-operator.py"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.6",

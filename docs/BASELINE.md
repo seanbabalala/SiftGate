@@ -1,11 +1,24 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-10-08
-Release: **v2.11.7**
+Release: **v2.12.0** (availability requires the matching successful release workflow)
 
-## Release Identity And Scope
+## Lifecycle Scope And Evidence
 
-This release promotes the reviewed pricing application (`591ebb99`) and the
+This release line adds managed first activation, independent maintenance identities,
+publisher-bound release planning, two-phase maintenance approvals, durable host
+execution, isolated recovery verification and explicit Fleet enrollment.
+Native Linux AMD64 and ARM64 rehearsals passed installation, actual v2.11.7 upgrade,
+recovery, independent execution, real pinned-SSH Fleet and offline workflows.
+The SSH endpoints share each runner's physical host/engine; this is not evidence
+of hardware failover. Prepublication fixtures are not publisher-signature proof.
+Exact final-source CI and the signed tag-publication/cold-install workflow remain
+the authoritative release gates. A version bump alone never establishes publication.
+See `customer-lifecycle-release-goal.zh-cn.md`. Publishing never deploys2099.
+
+## Previous Published Baseline: v2.11.7
+
+The v2.11.7 release promoted the reviewed pricing application (`591ebb99`) and the
 customer installation/publication system. The annotated `v2.11.7` tag, exact
 main CI run and image index/child digests identify the final release. A package
 version by itself does not identify a deployed instance.

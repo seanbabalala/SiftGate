@@ -475,7 +475,7 @@ export class ActiveHealthProbeService implements OnModuleInit, OnModuleDestroy {
           : 'HEAD';
 
     return {
-      enabled: raw.enabled ?? false,
+      enabled: node.disabled !== true && (raw.enabled ?? false),
       intervalMs: Math.max(1, raw.interval_seconds ?? 30) * 1000,
       timeoutMs: Math.max(1, raw.timeout_ms ?? Math.min(node.timeout_ms || 5000, 5000)),
       method,

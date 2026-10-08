@@ -1,0 +1,18 @@
+[Unit]
+Description=SiftGate independently approved host operations
+After=docker.service network-online.target
+
+[Service]
+Type=simple
+# Review these paths and owner. Docker access is host-equivalent privilege.
+User=siftgate
+Group=siftgate
+ExecStart=/usr/bin/python3 /opt/siftgate/kit/siftgate_operator.py --directory /opt/siftgate serve
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=1200
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

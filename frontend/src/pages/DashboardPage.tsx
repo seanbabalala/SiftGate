@@ -257,8 +257,8 @@ export function DashboardPage() {
     ? Object.values(clusterStatus.state.categories)
     : []
   const sharedCategoryCount = stateCategories.filter((category) => category.shared).length
-  const configuredNodeCount = configData?.nodes.length ?? 0
-  const apiKeyCount = apiKeysData?.items.length ?? 0
+  const configuredNodeCount = configData?.nodes.filter(node => node.disabled !== true).length ?? 0
+  const apiKeyCount = apiKeysData?.items.filter(key => key.status === 'active').length ?? 0
   const policyNamespaceCount = namespacesData?.namespaces.length ?? 0
   const budgetRuleCount = budgetData?.rules.filter((rule) => !rule.inherited && !rule.unset).length ?? 0
   const hasBudgetConfig = Boolean(
@@ -266,7 +266,7 @@ export function DashboardPage() {
     (configData?.budget?.daily_cost_limit ?? 0) > 0 ||
     budgetRuleCount > 0,
   )
-  const hasRequests = total.calls > 0 || recentLogs.length > 0
+  const hasRequests = total.success > 0 || recentLogs.some(log => log.status_code >= 200 && log.status_code < 300)
   const hasEvidence = hasRequests && (tierDistribution.length > 0 || nodeDistribution.length > 0 || recentLogs.length > 0)
   const workspaceName = workspaceState?.active_workspace?.name || t('onboarding.values.pending')
   const advancedFeatureCount = [
@@ -421,6 +421,7 @@ export function DashboardPage() {
               </div>
               <div className="min-w-0">
                 <CardTitle>{t('onboarding.title')}</CardTitle>
+                <Link to="/launchpad" className="text-xs underline text-[var(--accent)]">{t('launchpad.eyebrow')}</Link>
                 <p className="mt-1 max-w-3xl text-[12px] font-medium leading-5 text-[var(--foreground-dim)]">
                   {onboardingCollapsed && isFirstRunComplete
                     ? t('onboarding.summary.complete')

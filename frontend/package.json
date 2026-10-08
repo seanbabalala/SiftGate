@@ -1,7 +1,7 @@
 {
   "name": "siftgate-dashboard",
   "private": true,
-  "version": "2.11.7",
+  "version": "2.12.0",
   "license": "MIT",
   "engines": {
     "node": ">=22.13.0 <23"
@@ -37,10 +37,13 @@
     "budget-scopes:check": "node scripts/check-budget-scopes.mjs",
     "onboarding:check": "node scripts/check-onboarding.mjs",
     "sidebar:check": "node scripts/check-sidebar-scroll.mjs",
-    "test": "npm run i18n:check && npm run routing:check && npm run auth:check && npm run sse:check && npm run fcp:check && npm run a11y:check && npm run route-explanation:check && npm run traffic-experiments:check && npm run shadow-report:check && npm run benchmark:check && npm run guardrails:check && npm run provider-catalog:check && npm run provider-logos:check && npm run api-keys:check && npm run playground:check && npm run sessions:check && npm run mcp:check && npm run agent-profiles:check && npm run agent-platform:check && npm run cost-platform:check && npm run semantic-platform:check && npm run batches:check && npm run evals:check && npm run namespaces:check && npm run budget-scopes:check && npm run onboarding:check && npm run sidebar:check && npm run pricing:check",
+    "test": "npm run i18n:check && npm run routing:check && npm run auth:check && npm run identity:check && npm run launchpad:check && npm run control-room:check && npm run sse:check && npm run fcp:check && npm run a11y:check && npm run route-explanation:check && npm run traffic-experiments:check && npm run shadow-report:check && npm run benchmark:check && npm run guardrails:check && npm run provider-catalog:check && npm run provider-logos:check && npm run api-keys:check && npm run playground:check && npm run sessions:check && npm run mcp:check && npm run agent-profiles:check && npm run agent-platform:check && npm run cost-platform:check && npm run semantic-platform:check && npm run batches:check && npm run evals:check && npm run namespaces:check && npm run budget-scopes:check && npm run onboarding:check && npm run sidebar:check && npm run pricing:check",
     "preview": "vite preview",
     "batches:check": "node scripts/check-batches.mjs",
-    "pricing:check": "node scripts/check-pricing.mjs"
+    "pricing:check": "node scripts/check-pricing.mjs",
+    "identity:check": "node scripts/check-identity.mjs",
+    "launchpad:check": "node scripts/check-launchpad.mjs",
+    "control-room:check": "node scripts/check-control-room.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.80.7",

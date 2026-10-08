@@ -24,7 +24,7 @@ services:
       - ${SIFTGATE_HOME}/config:/config
       - ${SIFTGATE_HOME}/data:/app/data
       - ${SIFTGATE_HOME}/state:/app/.siftgate
-      - ${SIFTGATE_HOME}/kit:/opt/siftgate-kit:ro
+      - ${SIFTGATE_KIT_HOME:?Missing verified host tools}:/opt/siftgate-kit:ro
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]

@@ -437,6 +437,8 @@ export type LogSinkConfig =
 
 // ===== Dashboard =====
 export interface DashboardConfig {
+  /** Explicit customer-kit identity file. Never inferred; incompatible with legacy password/OIDC. */
+  identity_file?: string;
   /** Set false only for trusted local/dev networks. Default: true. */
   auth_required?: boolean;
   /** Accept legacy Dashboard JWTs from Authorization Bearer and ?token=. Default: true during migration. */
@@ -792,6 +794,8 @@ export interface NodeRequestCompatibilityConfig {
 }
 
 export interface NodeConfig {
+  /** Explicit operator switch. Distinct from the ignored pre-Launchpad enabled field. */
+  disabled?: boolean;
   id: string;
   name: string;
   protocol: NodeProtocol;

@@ -374,6 +374,16 @@ function validateDashboard(
     );
     return;
   }
+  if (dashboard.identity_file !== undefined && (
+    typeof dashboard.identity_file !== 'string' || !dashboard.identity_file.startsWith('/') ||
+    dashboard.password || dashboard.session_secret || (isRecord(dashboard.oidc) && dashboard.oidc.enabled) ||
+    dashboard.auth_required === false
+  )) {
+    issues.push(issue('error', 'invalid_dashboard_identity',
+      'dashboard.identity_file requires an absolute private file path, required auth, and no legacy password/session_secret or enabled OIDC.',
+      'dashboard.identity_file'));
+  }
+
   if (
     dashboard.auth_required !== undefined &&
     typeof dashboard.auth_required !== 'boolean'
@@ -1260,6 +1270,8 @@ function validateNodes(
       );
       return;
     }
+
+    if (node.disabled !== undefined && typeof node.disabled !== 'boolean') issues.push(issue('error', 'invalid_node_disabled', 'nodes[].disabled must be boolean.', `${basePath}.disabled`));
 
     if (!isNonEmptyString(node.id)) {
       issues.push(

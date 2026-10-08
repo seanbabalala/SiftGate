@@ -31,8 +31,8 @@ describe('historical receipt FX HTTP', () => {
     const content = tokenBook(); content.currency = 'CNY';
     const created = await prices.createBook(actor, { name: 'Synthetic CNY', scope: 'workspace', content });
     await prices.publishDraft(actor, created.draft.id, { draft_revision: 1, catalog_revision: 0, reason: 'Synthetic', confirm: true, targets: [{ level: 'model', model: 'm' }] });
-  });
-  afterEach(async () => { await h?.close(); if (directory) rmSync(directory, { recursive: true, force: true }); });
+  }, 30_000); // Full application + schema fixture, not a request/performance budget.
+  afterEach(async () => { await h?.close(); if (directory) rmSync(directory, { recursive: true, force: true }); }, 30_000);
   async function fx(denominator: string) {
     const head = (await prices.listBooks(actor)).head;
     await prices.updateFx(actor, { catalog_revision: head.revision, confirm: true, scope: 'workspace', reason: 'Synthetic', versions: [{ fx: { version_id: 'synthetic-input', from_currency: 'CNY', to_currency: 'USD', numerator: '1', denominator, source: 'Synthetic FX ' + denominator, effective_at: '2026-01-01T00:00:00Z' } }] });

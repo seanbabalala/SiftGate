@@ -253,5 +253,7 @@
   "setupGuide.copy": "Copy YAML",
   "setupGuide.copied": "Copied",
   "nav.alertConnectors": "Alert connectors",
-  "nav.pricing": "Pricing"
+  "nav.pricing": "Pricing",
+  "nav.launchpad": "First run",
+  "nav.controlRoom": "Host operations"
 }
