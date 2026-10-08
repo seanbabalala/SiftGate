@@ -128,5 +128,8 @@ describe('explicit pricing migration CLI', () => {
         expect(await pgRun(['--apply', '--remove-empty'])).toBe(0);
       }
     },
+    // This contract performs several complete PostgreSQL schema installations,
+    // inspections and removals. It is not a gateway latency/performance test.
+    30_000,
   );
 });

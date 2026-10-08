@@ -19,6 +19,9 @@
 
 ### Reliability And Operations
 
+- Update transitive `proxy-addr` to 2.0.8 for GHSA-jqcg-44mw-7w3h, preserving
+  correctly scoped proxy trust while preventing IPv4-mapped IPv6 trust bypass.
+  Three bounded regression cases protect subnet and forwarded-header behavior.
 - Actual HTTP/listener checks, bounded watchdog recovery, self-service alert
   connectors, timed call-log retention and WAL-aware backup tooling.
 - Node 22 (`>=22.13.0 <23`) development/build contract shared by CI and Docker;
@@ -26,8 +29,12 @@
 - Complete maintainer/customer runbooks, release-state gates and a command card.
 - Full CI test discovery is retained while unit and HTTP tests run in four shards
   each. Isolated PostgreSQL coverage is enabled, and a final accounting job
-  rejects missing/duplicate suites, failures or skipped tests. No test assertion
-  or per-test timeout was weakened to address the previous 30-minute job timeout.
+  rejects missing/duplicate suites, failures or skipped tests. The 30-minute job
+  limit and all data assertions remain intact. Three PostgreSQL migration
+  contracts receive explicit 30-second integration-test budgets instead of the
+  implicit 5-second Jest default; they perform repeated DDL/rollback operations
+  and are not request-latency or throughput gates. Business performance targets
+  are unchanged.
 
 ### Upgrade And Acceptance Boundaries
 

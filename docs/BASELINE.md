@@ -17,6 +17,8 @@ version by itself does not identify a deployed instance.
   the maintainer's configuration, provider credentials or deployment bundle.
 - Node 22 (`>=22.13.0 <23`) is enforced for gateway development/builds. CI and
   Docker share the contract; container-only customers do not need host Node.
+- The transitive `proxy-addr` 2.0.8 security fix closes GHSA-jqcg-44mw-7w3h.
+  Existing live images are not silently replaced by publishing this patch.
 - The release leaves existing running gateways untouched. See the
   [customer runbook](customer-install.md) and [publication state gates](customer-release.md).
 
@@ -27,10 +29,14 @@ SQLite/PostgreSQL test shards (four unit, four E2E). The previous combined job
 passed unit tests and continued passing HTTP suites until its 30-minute job
 limit; cancellation was not a complete validation result.
 
-Every shard retains normal Jest discovery and original assertions/timeouts.
+Every shard retains normal Jest discovery and all original assertions. Three
+PostgreSQL migration contracts use an explicit 30-second fixture execution
+budget after their repeated DDL/rollback sequences hit the implicit 5-second
+default on the hosted runner; application latency/throughput targets are unchanged.
 Its report carries the exact commit and full discovered suite list. A final
 coverage gate requires all eight reports, exactly-once suite coverage, no skipped
-or failed tests, and at least the accepted 4,469-unit/815-HTTP test baseline.
+or failed tests, and at least 4,472 unit / 815 HTTP tests (including three new
+proxy-trust security regressions beyond the accepted 4,469-unit baseline).
 The pricing and shared-budget PostgreSQL suites use an isolated per-job database
 with normal durability, never a production URL.
 
@@ -47,7 +53,8 @@ on October 1, 2026 with one quantified exception: PostgreSQL JSON with a 50ms mo
 upstream added **15.031749ms p95** and lost **15.532176% throughput**, against
 original limits of 5ms and 5%. Seven of eight original scenarios met their targets.
 The exception is not a measured pass, a new benchmark, or a general SLA promise.
-This release's packaging/CI changes do not claim a new performance improvement.
+This release's packaging/CI and bounded dependency-security changes do not claim
+a new performance improvement or a fresh benchmark of the final release.
 
 Earlier pricing documents are retained development checkpoints; their statements
 about unfinished experiments or pending acceptance must be interpreted at that

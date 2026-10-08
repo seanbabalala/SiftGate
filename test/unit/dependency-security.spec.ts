@@ -9,6 +9,34 @@ import { ROOT_CONTEXT, defaultTextMapGetter, propagation, trace } from '@opentel
 import { JaegerPropagator } from '@opentelemetry/propagator-jaeger';
 
 describe('bounded dependency security regressions', () => {
+  const proxyAddress = require('proxy-addr') as {
+    (request: { socket: { remoteAddress: string }; headers: Record<string, string> }, trust: string[]): string;
+    compile(trust: string[]): (address: string) => boolean;
+  };
+
+  it('does not trust arbitrary peers through a short-prefix IPv4-mapped IPv6 subnet', () => {
+    const trust = proxyAddress.compile(['::ffff:10.0.0.0/8']);
+    expect(trust('203.0.113.25')).toBe(false);
+    expect(trust('::ffff:203.0.113.25')).toBe(false);
+    expect(trust('::1')).toBe(false);
+  });
+
+  it('keeps properly scoped IPv4 and native IPv6 proxy trust working', () => {
+    const mapped = proxyAddress.compile(['::ffff:10.0.0.0/104']);
+    expect(mapped('10.1.2.3')).toBe(true);
+    expect(mapped('::ffff:10.1.2.3')).toBe(true);
+    expect(mapped('203.0.113.25')).toBe(false);
+    const native = proxyAddress.compile(['2001:db8::/32']);
+    expect(native('2001:db8::123')).toBe(true);
+    expect(native('::ffff:203.0.113.25')).toBe(false);
+  });
+
+  it('ignores spoofed forwarding metadata from an untrusted mapped IPv6 socket', () => {
+    const peer = '::ffff:203.0.113.25';
+    expect(proxyAddress({ socket: { remoteAddress: peer }, headers: { 'x-forwarded-for': '10.1.2.3' } },
+      ['::ffff:10.0.0.0/8'])).toBe(peer);
+  });
+
   it('preserves ordinary YAML merges and counts empty mappings against merge work limits', () => {
     expect(yaml.load('base: &base {enabled: true}\ncopy: {<<: *base, name: synthetic}\n')).toEqual({
       base: { enabled: true }, copy: { enabled: true, name: 'synthetic' },

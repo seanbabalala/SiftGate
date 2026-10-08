@@ -53,7 +53,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       expect((await applyPricingSchema(source)).create_indexes).toEqual([]);
       expect((await planPricingSchema(source)).state).toBe("applied");
       const before = await dump(); await applyPricingSchema(source); expect(await dump()).toEqual(before);
-    });
+    }, postgres ? 30_000 : 5_000); // Multiple real schema operations, not a request-latency gate.
 
     it("adds only the index/marker to version017 and preserves all seventeen previous migration records", async () => {
       await legacy();
@@ -163,7 +163,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       expect(await markers()).toEqual(before);
       expect(await planPricingSchema(source)).toMatchObject({ state: "pending", create_indexes: indexPlan });
       await applyPricingSchema(source); expect((await planPricingSchema(source)).state).toBe("applied");
-    });
+    }, postgres ? 30_000 : 5_000); // Includes legacy DDL, rollback inspection and a complete retry.
 
     it("removes an intact unused installation including its index and can install again", async () => {
       await applyPricingSchema(source); await removeEmptyPricingSchema(source);
