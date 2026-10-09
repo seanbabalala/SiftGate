@@ -1,7 +1,21 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-08
-Release: **v2.12.0** (availability requires the matching successful release workflow)
+Reviewed: 2026-10-09
+Release: **v2.12.1** (availability requires the matching successful release workflow)
+
+## v2.12.1 Release Scope
+
+Adds background public-release checks and dashboard notices from PRs #135/#136,
+with opt-out/preferences, ETag/backoff, safe failure/stale states, seven languages,
+mobile access and optional existing alert connectors. No implicit deployment.
+The release contract retains v2.11.7 and adds the published v2.12.0 image/installer
+as explicit sources; both must pass native upgrade, Fleet and source-recovery
+acceptance before signing. A version bump is not publication evidence.
+
+## Previous Published Lifecycle Baseline: v2.12.0
+
+Published from `94a1415` with its immutable signed quartet and dual-native cold
+install acceptance. Its image does not retroactively gain the v2.12.1 notifier.
 
 ## Lifecycle Scope And Evidence
 

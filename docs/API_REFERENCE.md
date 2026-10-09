@@ -976,7 +976,7 @@ Use the API documentation shipped with the selected release. These endpoints do 
 Managed identity is explicitly enabled by the matching installer and is not automatically applied to existing password/OIDC deployments. Codes and passwords are write-only. Launchpad preparation requires the current configuration digest, timezone acknowledgement, pricing review, explicit cost consent, selected key ID and that key's actual secret; the secret is compared but never persisted in the receipt. The real test uses `/v1/chat/completions`, not privileged Dashboard proxy access. See the customer identity and Launchpad guides for limits and failure states.
 
 
-## Release update notices (post-v2.12.0 source)
+## Release update notices (v2.12.1+)
 
 These endpoints observe public release metadata; none can pull an image, install
 an artifact, approve an upgrade, change provider configuration or restart a gateway.

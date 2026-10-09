@@ -1,12 +1,13 @@
 # Release update notifications / 正式版本提醒
 
-This describes the post-v2.12.0 source addition. It is not included retroactively
-in the immutable v2.12.0 image/tag. Use the next release containing this change;
-a source commit, release notice, or image publication never updates an existing
-container automatically.
+Available starting with v2.12.1, after its signed publication and cold-install
+gates succeed. It is not included retroactively in the immutable v2.12.0 image.
+A source commit, release notice or image publication never updates an existing
+container automatically. Existing customers must explicitly upgrade once to gain
+this notifier; subsequent releases can then be discovered automatically.
 
-本文描述 v2.12.0 之后的源码增量，不代表已发布的 v2.12.0 镜像自动具备此功能。
-安装包含这项改动的后续发行版后生效，发布与部署仍是两回事。
+本功能从 v2.12.1 起提供，以成功的正式发布与安装验收为准；旧 v2.12.0 镜像不会自动
+获得功能。既有客户先明确升级一次，之后即可自动发现后续正式版本。发现不等于升级。
 
 ## Customer experience / 客户体验
 

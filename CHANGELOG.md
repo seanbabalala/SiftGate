@@ -2,11 +2,18 @@
 
 ## Unreleased
 
+## 2.12.1 - 2026-10-09
+
 - Add optional server-scheduled public release discovery and dashboard notices, with
   six-hour jittered checks, persistent preferences, ETag/backoff, explicit stale/error
   states, seven locales, mobile access and opt-in existing alert connectors. No
   image pull, upgrade, restart or new host authority is introduced. Offline Vault
   probes explicitly disable update checks. See `docs/release-updates.md`.
+- Bound restored retry timestamps to prevent Node timer overflow after clock rollback.
+- Extend native upgrade/Fleet/recovery acceptance to the signed v2.12.0 baseline,
+  including managed activation, preserved business keys/sessions and image/kit pairing.
+- Publication requires exact main CI, both native architectures, signed artifacts
+  and cold anonymous installs; publishing does not deploy existing instances.
 
 ## 2.12.0 - 2026-10-08
 

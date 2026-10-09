@@ -229,14 +229,15 @@ class ReleaseGeneratorTests(unittest.TestCase):
         self.builder=importlib.util.module_from_spec(spec); spec.loader.exec_module(self.builder)
         self.contract=json.loads((root/"deploy/customer/release-contract.json").read_text())
         self.temp=tempfile.TemporaryDirectory(); self.root=Path(self.temp.name).resolve()
-        self.archive=self.root/"siftgate-v2.12.0-install.tar.gz"; self.archive.write_bytes(b"unit archive identity")
+        self.version=json.loads((root/"package.json").read_text())["version"]
+        self.archive=self.root/("siftgate-v"+self.version+"-install.tar.gz"); self.archive.write_bytes(b"unit archive identity")
         self.candidates={arch:{"architecture":arch,"commit":"a"*40,"digest":"sha256:"+d*64,"native_runner":True,
-            "config_digest":"sha256:"+d*64,"source_config_digests":{"2.11.7":"sha256:"+"f"*64},
+            "config_digest":"sha256:"+d*64,"source_config_digests":{item["version"]:"sha256:"+"f"*64 for item in self.contract["source_releases"]},
             "source_releases":{item["version"]:item["image"] for item in self.contract["source_releases"]},
             "checks":sorted(self.builder.REQUIRED_CHECKS)} for arch,d in (("amd64","b"),("arm64","c"))}
     def tearDown(self): self.temp.cleanup()
     def build(self):
-        return self.builder.build_manifest("2.12.0","a"*40,1791417600,release.REGISTRY+"@sha256:"+"d"*64,self.archive,self.contract,self.candidates)
+        return self.builder.build_manifest(self.version,"a"*40,1791417600,release.REGISTRY+"@sha256:"+"d"*64,self.archive,self.contract,self.candidates)
     def test_both_native_receipts_bind_platforms_sources_and_installer_bytes(self):
         manifest=self.build()
         self.assertEqual(release.canonical(manifest),release.canonical(self.build()))
@@ -244,6 +245,7 @@ class ReleaseGeneratorTests(unittest.TestCase):
         self.assertEqual(manifest["repository"],"seanbabalala/SiftGate")
         self.assertIn("ghcr.io/seanbabalala/ai-gateway@sha256:",manifest["image"])
         self.assertEqual(manifest["compatibility"]["source_config_digests"]["2.11.7"]["linux/arm64"],"sha256:"+"f"*64)
+        self.assertEqual(set(manifest["compatibility"]["source_config_digests"]), {r["version"] for r in self.contract["source_releases"]})
     def test_incomplete_or_foreign_native_evidence_cannot_form_a_release(self):
         for field,value in (("checks",[]),("architecture","amd64"),("commit","b"*40),
                             ("source_releases",{}),("source_config_digests",{}),("native_runner",False)):

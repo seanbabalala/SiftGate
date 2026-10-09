@@ -6,9 +6,18 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:c3121f2b02554bc31793ac4e8f14884b60adfc160b6c7a7e7b8f05aa56905ec7",
       "installer_sha256": "cb950a9ac7ac77fb9eb99da19fa0cb644965bc079a6911e51ffcce5f4d1b92a7",
       "source_commit": "e3e8697e422aa3647240b89791d2289e8ec41fed"
+    },
+    {
+      "version": "2.12.0",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:12bf52e23f65b7cdd940a3adfac8075cfad1f3c98c8b74134aec93549d91ac03",
+      "installer_sha256": "18441230c819a2ff346f4f50dfe752442a1a339814b30eda44d1e14b27ae0f92",
+      "source_commit": "94a141528c19908a7acd419a9cbd22be7db5f4d8"
     }
   ],
-  "source_kit_protocols": [1, 2],
+  "source_kit_protocols": [
+    1,
+    2
+  ],
   "target_kit_protocol": 2,
   "operator_protocol": 1,
   "database": {
@@ -18,8 +27,17 @@
   },
   "downtime_required": true,
   "changes": [
-    {"kind": "feature", "summary": "Customer lifecycle: independent host operations, release planning, recovery verification and explicitly enrolled fleets."},
-    {"kind": "security", "summary": "Publisher-attested immutable artifacts, separate maintenance identities and approvals, and verified offline image transport."},
-    {"kind": "breaking", "summary": "Authenticated source installs without configured credentials now fail closed. New managed installations use one-time activation; existing configured identities are preserved."}
+    {
+      "kind": "feature",
+      "summary": "Background public-release checks and dashboard notices, with opt-out preferences, ETag caching, backoff, seven languages and optional alert connectors."
+    },
+    {
+      "kind": "security",
+      "summary": "Discovery never grants upgrade authority or uploads customer credentials. Vault probes disable discovery; restored retry timestamps cannot overflow into rapid polling."
+    },
+    {
+      "kind": "feature",
+      "summary": "Native upgrade and recovery compatibility includes the published v2.11.7 and v2.12.0 baselines with preserved configuration, business keys and management sessions."
+    }
   ]
 }
