@@ -154,6 +154,17 @@ describe('background release notifications', () => {
     await service.preferences({ enabled: true, interval_hours: 6, notify_connectors: true }); await service.check();
     expect(emit).not.toHaveBeenCalled(); ready = true; now += 60001; await service.check(); expect(emit).toHaveBeenCalledTimes(1);
   });
+  it('bounds restored retry timestamps so a clock rollback cannot overflow Node timers into a tight loop', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'siftgate-release-clock-'));
+    const timer = jest.spyOn(global, 'setTimeout');
+    try {
+      const stateFile = path.join(root, 'state.json');
+      await new ReleaseUpdatesStore(stateFile).write({ ...initialUpdateState(), retry_after: base + 40 * 86400000 });
+      const h = harness({ stateFile, schedule: true }); await h.service.onModuleInit();
+      const delay = timer.mock.calls[timer.mock.calls.length - 1][1];
+      expect(delay).toBe(2147483647); expect(h.fetcher).not.toHaveBeenCalled(); await h.service.onModuleDestroy();
+    } finally { timer.mockRestore(); await fs.rm(root, { recursive: true, force: true }); }
+  });
   it('schedules outside the page lifecycle and cancels on disable and shutdown', async () => {
     jest.useFakeTimers({ now: base });
     try {

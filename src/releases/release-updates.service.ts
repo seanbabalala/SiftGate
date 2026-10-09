@@ -61,7 +61,7 @@ export class ReleaseUpdatesService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearTimeout(this.timer);
     if (!this.scheduling || this.stopped || this.hostDisabled || !this.state.enabled || this.state.error === 'storage_unavailable') return;
     const due = Math.max(this.state.next_check_at || this.now(), this.state.retry_after || 0);
-    this.timer = setTimeout(() => { void this.check(false).catch(() => undefined); }, Math.max(1000, due - this.now()));
+    this.timer = setTimeout(() => { void this.check(false).catch(() => undefined); }, Math.min(2147483647, Math.max(1000, due - this.now())));
     this.timer.unref();
   }
   private persist() {
