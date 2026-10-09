@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowUpRight, RefreshCw, ShieldCheck } from 'lucide-react'
+import { ExternalLink, RefreshCw, ShieldCheck } from 'lucide-react'
 import { useWorkspaces } from '@/hooks/use-workspaces'
 import { apiPost, apiPut } from '@/lib/api'
 import { RELEASE_UPDATE_KEY, releaseNotesUrl, useReleaseUpdates, type ReleaseUpdates } from '@/lib/release-updates'
@@ -44,7 +44,7 @@ export function ReleaseUpdatesPage() {
         {(data?.stale || data?.error || query.isError) && <p className="release-updates-warning">{t('updates.cachedNotice')}</p>}
         <div className="release-updates-boundary"><ShieldCheck size={18} aria-hidden="true" /><p>{t('updates.verificationRequired')}</p></div>
         <h3>{t('updates.changeNotes')}</h3><pre className="release-updates-notes">{release.notes || t('updates.noNotes')}</pre>
-        {url && <a className="release-updates-link" href={url} target="_blank" rel="noopener noreferrer">{t('updates.openRelease')}<ArrowUpRight size={16} aria-hidden="true" /></a>}
+        {url && <a className="release-updates-link" href={url} target="_blank" rel="noopener noreferrer">{t('updates.openRelease')}<ExternalLink size={16} aria-hidden="true" /></a>}
       </> : <p className="release-updates-empty">{t('updates.noResult')}</p>}
       <footer><Link to="/control-room">{t('updates.controlRoom')}</Link><p>{t('updates.noAutomaticUpgrade')}</p></footer>
     </article><aside className="release-updates-settings"><h2>{t('updates.preferences')}</h2><p>{t('updates.privacy')}</p>

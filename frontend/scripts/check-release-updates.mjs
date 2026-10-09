@@ -14,7 +14,7 @@ function load(file) {
     '@tanstack/react-query': { useQuery: options => { queryOptions = options; return { data, isError: failed, refetch: async () => {} } }, useQueryClient: () => ({ setQueryData: (_key, value) => { data = value } }) },
     '@/hooks/use-workspaces': { useWorkspaces: () => ({ data: { access: { role } } }) },
     '@/lib/api': { apiGet: async url => { calls.push({ method: 'GET', url }); return data }, apiPost: async (url, body) => { calls.push({ method: 'POST', url, body }); return data }, apiPut: async (url, body) => { calls.push({ method: 'PUT', url, body }); return data } },
-    'lucide-react': { Bell: 'svg', ArrowUpRight: 'svg', RefreshCw: 'svg', ShieldCheck: 'svg' },
+    'lucide-react': { Bell: 'svg', ExternalLink: 'svg', RefreshCw: 'svg', ShieldCheck: 'svg' },
   }
   if (file !== 'lib/release-updates.ts') imports['@/lib/release-updates'] = helpers
   const sandbox = { exports: {}, URL, Date, console, require: name => { if (name.endsWith('.css')) return {}; assert.ok(name in imports, name); return imports[name] } }
