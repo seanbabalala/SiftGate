@@ -75,13 +75,16 @@ def main():
         kit.run(["docker","pull",record["image"]],timeout=1200,output_limit=2*1024*1024)
         common=["--source-image",record["image"],"--image",args.image,"--baseline-kit",tools,"--output",private]
         migrated=run("upgrade-"+record["version"],"smoke-customer-upgrade.py",*common)
-        assert_checks(migrated,{"actual_cross_version_upgrade","actual_config_digest_compatibility","paired_image_and_host_kit","business_database_unchanged","existing_management_session_preserved"})
+        assert_checks(migrated,{"actual_cross_version_upgrade","actual_config_digest_compatibility","paired_image_and_host_kit","business_database_unchanged","existing_management_session_preserved","release_notice_api_available"})
         release.require(migrated["source_version"]==record["version"] and migrated["target_config_digest"]==target["config_digest"],"cross_version_receipt_mismatch")
         fleet=run("fleet-"+record["version"],"smoke-customer-fleet.py",*common)
         assert_checks(fleet,{"real_pinned_ssh_rpc","wrong_host_key_refused_before_agent","offline_import_and_layer_verification","actual_canary_upgrade","manual_next_wave","pause_prevents_dispatch","cancel_preserves_remaining_source","failure_threshold_prevents_later_targets"})
         release.require(fleet["target_config_digest"]==target["config_digest"] and fleet["source_config_digest"]==migrated["source_config_digest"],"fleet_receipt_mismatch")
-        legacy=run("legacy-"+record["version"],"smoke-customer-legacy-recovery.py","--image",record["image"],"--baseline-kit",tools,"--output",private)
-        assert_checks(legacy,{"actual_legacy_release","old_jwt_rejected_after_restore","same_password_works","business_key_preserved"})
+        recovered=run("source-recovery-"+record["version"],"smoke-customer-legacy-recovery.py","--image",record["image"],"--baseline-kit",tools,"--output",private)
+        assert_checks(recovered,{"actual_source_release","management_sessions_revoked","old_jwt_rejected_after_restore","same_password_works","business_key_preserved"})
+        release.require(recovered["source_version"]==record["version"],"source_recovery_version_mismatch")
+        expected_identity="managed" if release.version(record["version"])>=(2,12,0) else "legacy"
+        release.require(recovered["source_identity_mode"]==expected_identity and migrated["source_identity_mode"]==expected_identity,"source_identity_receipt_mismatch")
         sources[record["version"]]=record["image"]; source_digests[record["version"]]=migrated["source_config_digest"]
     final=release.inspect_local_image(ImageHost(),args.image,private)
     release.require(final==target,"candidate_changed_during_acceptance")

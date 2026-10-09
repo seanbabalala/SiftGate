@@ -59,6 +59,27 @@ def harness_release(folder,install,source,target,source_version,target_version):
     return release.VerifiedRelease(manifest,hashlib.sha256(raw).hexdigest())
 
 
+def source_session(install, source_version):
+    """Exercise the published installer's actual identity protocol, never fabricate login state."""
+    status=smoke.request(install,"/api/auth/status")
+    if release.version(source_version)>=(2,12,0):
+        assert status.get("identity",{}).get("mode")=="managed" and status["identity"]["setupRequired"] is True
+        assert not (install.root/"config/initial-admin-password.txt").exists()
+        password="synthetic baseline activation password"
+        code=(install.root/"config/activate-code.txt").read_text().strip()
+        smoke.request(install,"/api/auth/identity/activate",{"code":code,"password":password})
+        assert not (install.root/"config/activate-code.txt").exists()
+        assert smoke.request(install,"/api/auth/status")["identity"]["setupRequired"] is False
+        mode="managed"
+    else:
+        assert source_version=="2.11.7" and status.get("identity",{}).get("mode","legacy")=="legacy"
+        password=(install.root/"config/initial-admin-password.txt").read_text().strip()
+        mode="legacy"
+    token=smoke.request(install,"/api/auth/login",{"password":password})["token"]
+    assert token
+    return password,token,mode
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-image",required=True); parser.add_argument("--image",required=True)
@@ -84,12 +105,11 @@ def main():
         source_version=image_version(install.meta["image"]); target_version=image_version(args.image)
         assert source_version==baseline["version"].lstrip("v") and release.version(source_version)<release.version(target_version)
         assert target_version==json.loads((ROOT/"package.json").read_text())["version"]
-        password=(directory/"config/initial-admin-password.txt").read_text().strip()
-        token=smoke.request(install,"/api/auth/login",{"password":password})["token"]
+        password,token,identity_mode=source_session(install,source_version)
         mock=install.meta["project"]+"-upgrade-mock"
         handler="require('http').createServer((req,res)=>{req.resume();req.on('end',()=>{res.setHeader('content-type','application/json');res.end(JSON.stringify({id:'synthetic-upgrade',object:'chat.completion',model:'gpt-4o-mini',choices:[{index:0,message:{role:'assistant',content:'upgrade-ok'},finish_reason:'stop'}],usage:{prompt_tokens:3,completion_tokens:2,total_tokens:5}}))})}).listen(3099,'0.0.0.0')"
         install.docker("run","-d","--name",mock,"--network",install.meta["project"]+"_default","--entrypoint","node",install.meta["image"],"-e",handler)
-        smoke.request(install,"/api/dashboard/nodes/openai",{"base_url":"http://"+mock+":3099","api_key":"synthetic-provider"},token,"PUT")
+        smoke.request(install,"/api/dashboard/nodes/openai",{"base_url":"http://"+mock+":3099","api_key":"synthetic-provider",**({"disabled":False} if identity_mode=="managed" else {})},token,"PUT")
         key=smoke.request(install,"/api/dashboard/api-keys",{"name":"upgrade-synthetic-key","allow_auto":False,"allow_direct":True,
             "allowed_nodes":["openai"],"allowed_models":["gpt-4o-mini"],"daily_token_limit":10000,"daily_cost_limit":1},token)
         body={"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"synthetic migration acceptance"}],"max_tokens":16}
@@ -116,6 +136,8 @@ def main():
         assert install.meta["image"]==target["runtime_image_id"] and install.meta["app_version"]==target_version
         assert kit.tool_directory(directory,install.meta)!=old_tools and old_tools.exists()
         assert (directory/"config/gateway.config.yaml").read_bytes()==config
+        notice=smoke.request(install,"/api/dashboard/release-updates",token=token)
+        assert notice["current_version"]==target_version and notice["automatic_install"] is False and notice["publisher_verified"] is False
         before_db=vault.database_evidence(directory/"backups"/result["checkpoint"]["id"]/"data/gateway.db")
         # Snapshot the candidate to compare checkpointed databases, never pretend
         # immutable SQLite reads of a live WAL file are safe evidence.
@@ -125,12 +147,12 @@ def main():
         assert key["item"]["id"] in json.dumps(smoke.request(install,"/api/dashboard/api-keys",token=token))
         assert smoke.request(install,"/v1/chat/completions",body,key["key"])["choices"][0]["message"]["content"]=="upgrade-ok"
         receipt={"format":"siftgate-cross-version-smoke-v1","platform":"linux/"+target["architecture"],
-            "source_version":source_version,"target_version":target_version,"source_image":args.source_image,
+            "source_version":source_version,"source_identity_mode":identity_mode,"target_version":target_version,"source_image":args.source_image,
             "source_config_digest":source["config_digest"],"target_config_digest":target["config_digest"],
             "target_runtime_id":target["runtime_image_id"],"job_id":job["id"],"publisher_signature_tested":False,
             "harness_manifest_not_publishable":True,"checks":["actual_cross_version_upgrade","actual_config_digest_compatibility",
                 "paired_image_and_host_kit","old_kit_and_checkpoint_retained","business_database_unchanged","configuration_preserved",
-                "existing_management_session_preserved","business_key_and_mock_traffic_preserved","http_ready_after_upgrade"]}
+                "existing_management_session_preserved","business_key_and_mock_traffic_preserved","release_notice_api_available","http_ready_after_upgrade"]}
         kit.write_json(folder/"result.json",receipt); print(json.dumps(receipt,indent=2))
     finally:
         if install:

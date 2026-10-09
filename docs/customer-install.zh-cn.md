@@ -171,5 +171,5 @@ python3 "$HOME/siftgate/kit/siftgate.py" --directory "$HOME/siftgate" watchdog -
 
 ## 后续版本提醒
 
-v2.12.0之后的源码新增后台自动发现与站内提醒，详见[正式版本提醒](release-updates.md)。
-需安装包含改动的后续发行；既有v2.12.0镜像不会因为源码合入而自动获得功能，2099也不会自动升级。
+从v2.12.1开始提供后台自动发现与站内提醒，详见[正式版本提醒](release-updates.md)。
+需明确升级到该正式发行；既有v2.12.0镜像不会因为源码合入而自动获得功能，2099也不会自动升级。

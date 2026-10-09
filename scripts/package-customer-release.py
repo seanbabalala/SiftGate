@@ -41,6 +41,7 @@ FILES = {
     "docs/customer-control.zh-cn.md": "customer-control.zh-cn.md",
     "docs/customer-control.md": "customer-control.md",
     "docs/customer-artifact-verification.md": "customer-artifact-verification.md",
+    "docs/release-updates.md": "release-updates.md",
     "docs/customer-identity.zh-cn.md": "customer-identity.zh-cn.md",
     "docs/customer-launchpad.zh-cn.md": "customer-launchpad.zh-cn.md",
     "docs/customer-install.zh-cn.md": "README.zh-CN.md",

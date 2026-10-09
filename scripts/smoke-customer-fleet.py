@@ -150,8 +150,7 @@ def main():
             isolate="const fs=require('fs'),y=require('js-yaml'),p='/config/gateway.config.yaml',c=y.load(fs.readFileSync(p,'utf8'));c.nodes=c.nodes.map(n=>({...n,base_url:'http://127.0.0.1:1',api_key:'synthetic-no-vendor',health_check:{...n.health_check,enabled:false}}));fs.writeFileSync(p,y.dump(c,{lineWidth:110}));"
             install.compose("run","--rm","--no-deps","--entrypoint","node","siftgate","-e",isolate)
             cli(directory,current,"up")
-            password=(directory/"config/initial-admin-password.txt").read_text().strip()
-            token=smoke.request(install,"/api/auth/login",{"password":password})["token"]
+            password,token,identity_mode=upgrade.source_session(install,baseline["version"].lstrip("v"))
             key=smoke.request(install,"/api/dashboard/api-keys",{"name":"fleet-synthetic-key","allow_auto":False,"allow_direct":True,
                 "allowed_nodes":["openai"],"allowed_models":["gpt-4o-mini"],"daily_token_limit":100,"daily_cost_limit":1},token)
             identities.append((token,key["item"]["id"]))

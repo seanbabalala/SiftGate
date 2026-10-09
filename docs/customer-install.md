@@ -281,7 +281,7 @@ The new operator provides persistent host-approved backup/upgrade jobs and an in
 
 ## Release notifications
 
-The post-v2.12.0 source adds opt-out background version notices in the regular
+Starting with v2.12.1, the gateway adds opt-out background version notices in the regular
 dashboard; see [Release update notifications](release-updates.md) for privacy,
 offline policy and the distinction between discovery and actual upgrade. This
 does not retroactively change the published v2.12.0 image.

@@ -10,16 +10,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/seanbabalala/ai-gateway/releases/tag/v2.12.0"><img alt="Release" src="https://img.shields.io/badge/release-v2.12.0-22d7a8"></a>
+  <a href="https://github.com/seanbabalala/ai-gateway/releases/tag/v2.12.1"><img alt="Release" src="https://img.shields.io/badge/release-v2.12.1-22d7a8"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-062f25"></a>
   <a href="docs/SECURITY.md"><img alt="Privacy default" src="https://img.shields.io/badge/privacy-metadata--only%20by%20default-22d7a8"></a>
   <a href="docs/README.md"><img alt="Docs" src="https://img.shields.io/badge/docs-7%20languages-062f25"></a>
 </p>
 
 <p align="center">
-  Current release: <strong>v2.12.0</strong> (availability: signed release assets and successful release workflow)
+  Current release: <strong>v2.12.1</strong> (availability: signed release assets and successful release workflow)
 </p>
-<!-- Current release: **v2.12.0** — verify signed release assets and the release workflow before installing -->
+<!-- Current release: **v2.12.1** — verify signed release assets and the release workflow before installing -->
 
 <table>
   <tr>
