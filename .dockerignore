@@ -34,3 +34,7 @@ docs/DEVELOPMENT_SPECIFICATION.md
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local release-notice preferences/cache (never part of source or image).
+.siftgate-release-updates.json
+.siftgate-release-updates.json.*.tmp

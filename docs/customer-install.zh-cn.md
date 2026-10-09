@@ -168,3 +168,8 @@ python3 "$HOME/siftgate/kit/siftgate.py" --directory "$HOME/siftgate" watchdog -
 ## 可选：独立主机执行器
 
 本分支新增持久任务账本与只读Control Room，必须由安装账户明确启用，不自动接管既有实例，也不改系统自启动。只读挂载要到下一次单独批准的容器重建才生效。当前不验证发行签名或任意跨版本兼容性，启用前阅读配套的 [Operator手册](customer-operator.zh-cn.md)。
+
+## 后续版本提醒
+
+v2.12.0之后的源码新增后台自动发现与站内提醒，详见[正式版本提醒](release-updates.md)。
+需安装包含改动的后续发行；既有v2.12.0镜像不会因为源码合入而自动获得功能，2099也不会自动升级。

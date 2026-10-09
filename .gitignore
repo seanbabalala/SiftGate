@@ -73,3 +73,7 @@ __pycache__/
 # Frontend build
 frontend/dist/
 frontend/node_modules/
+
+# Local release-notice preferences/cache (never part of source or image).
+.siftgate-release-updates.json
+.siftgate-release-updates.json.*.tmp

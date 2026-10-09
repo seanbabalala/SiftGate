@@ -56,6 +56,7 @@ const navGroups = [
     items: [
       { to: '/launchpad', icon: SquareTerminal, labelKey: 'nav.launchpad' },
       { to: '/control-room', icon: Gauge, labelKey: 'nav.controlRoom' },
+      { to: '/updates', icon: BellRing, labelKey: 'nav.releaseUpdates' },
       { to: '/nodes', icon: Server, labelKey: 'nav.nodes' },
       { to: '/catalog', icon: Boxes, labelKey: 'nav.catalog' },
       { to: '/routing', icon: GitFork, labelKey: 'nav.routing' },

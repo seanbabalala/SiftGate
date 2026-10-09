@@ -119,5 +119,6 @@
   "event.database_size_high": "Database/WAL size threshold",
   "event.disk_check_failed": "Disk check failed",
   "event.database_size_check_failed": "Database size check failed",
-  "event.test": "Manual test notification"
+  "event.test": "Manual test notification",
+  "event.release_available": "New official release available"
 }

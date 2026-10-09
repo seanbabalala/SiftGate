@@ -1,7 +1,8 @@
+import { ReleaseUpdateBell } from '@/components/shared/ReleaseUpdateBell'
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Bell, Search, LogOut, Menu, Building2, ShieldCheck } from 'lucide-react'
+import { Search, LogOut, Menu, Building2, ShieldCheck } from 'lucide-react'
 import { useHealth } from '@/hooks/use-health'
 import { useWorkspaces } from '@/hooks/use-workspaces'
 import { useAuth } from '@/contexts/AuthContext'
@@ -95,6 +96,7 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
       </div>
 
       {identity.mode === 'managed' && <button type="button" onClick={() => navigate('/security')} className="sm:hidden p-2" aria-label={loginText('identity.changePassword')}><ShieldCheck className="h-5 w-5" aria-hidden="true" /></button>}
+      <ReleaseUpdateBell />
       {/* Right section */}
       <div className="hidden shrink-0 items-center gap-2 sm:flex xl:gap-3">
         <ThemeToggle />
@@ -131,13 +133,6 @@ export function Header({ onToggleSidebar, showHamburger }: HeaderProps) {
             </Tooltip>
           </div>
         )}
-
-        {/* Notification bell replaced with "Coming soon" tooltip */}
-        <Tooltip content={t('header.notificationsComingSoon')} side="bottom">
-          <div className={cn(headerControlClass, 'relative hidden w-9 justify-center text-[var(--foreground-dim)] transition-all duration-200 hover:-translate-y-0.5 hover:text-[var(--foreground-muted)] hover:shadow-[0_14px_30px_rgba(5,46,36,0.09)] cursor-default opacity-60 2xl:flex')}>
-            <Bell className="h-4 w-4" />
-          </div>
-        </Tooltip>
 
         {/* Gateway status pill */}
         <div className={cn(headerControlClass, 'hidden gap-2 px-3 xl:flex')}>

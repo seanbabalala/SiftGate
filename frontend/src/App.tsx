@@ -1,3 +1,4 @@
+const ReleaseUpdatesPage = lazy(() => import('@/pages/ReleaseUpdatesPage').then(m => ({ default: m.ReleaseUpdatesPage })))
 import { lazy, Suspense, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Routes, Route } from 'react-router-dom'
@@ -177,6 +178,7 @@ export function App() {
       >
         <Route path="/" element={page(<DashboardPage />)} />
         <Route path="/launchpad" element={page(<LaunchpadPage />)} />
+        <Route path="/updates" element={page(<ReleaseUpdatesPage />)} />
         <Route path="/control-room" element={page(<ControlRoomPage />)} />
         <Route path="/dashboard" element={page(<DashboardPage />)} />
         <Route path="/alerts" element={page(<AlertConnectorsPage />)} />

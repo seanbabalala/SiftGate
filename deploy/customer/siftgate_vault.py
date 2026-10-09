@@ -195,6 +195,7 @@ class Vault:
                 "--user", str(os.getuid()) + ":" + str(os.getgid()), "--memory", "1g", "--cpus", "1", "--pids-limit", "256",
                 "--log-driver", "none", "--tmpfs", "/tmp:rw,noexec,nosuid,size=33554432",
                 "--env", "NODE_ENV=production", "--env", "NODE_PATH=/app/node_modules",
+                "--env", "SIFTGATE_RELEASE_UPDATES_DISABLED=1",
                 "--env", "TZ=" + self.install.meta["timezone"], "--env", "GATEWAY_CONFIG_PATH=/config/gateway.config.yaml",
                 "--env", "SIFTGATE_PLUGINS_CONFIG=/config/plugins.config.yaml", "--env-file", str(copy / "provider.env")]
         for section, mount in (("config", "/config"), ("data", "/app/data"), ("state", "/app/.siftgate")):

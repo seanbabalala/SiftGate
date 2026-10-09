@@ -119,5 +119,6 @@
   "event.database_size_high": "ขนาดฐานข้อมูล/WAL เกินเกณฑ์",
   "event.disk_check_failed": "ตรวจสอบดิสก์ไม่สำเร็จ",
   "event.database_size_check_failed": "ตรวจขนาดฐานข้อมูลไม่สำเร็จ",
-  "event.test": "การแจ้งเตือนทดสอบด้วยตนเอง"
+  "event.test": "การแจ้งเตือนทดสอบด้วยตนเอง",
+  "event.release_available": "มีรุ่นทางการใหม่"
 }

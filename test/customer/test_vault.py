@@ -105,6 +105,7 @@ class VaultTests(unittest.TestCase):
             self.assertNotIn("restart",command)
             if command[0]=="run":
                 self.assertIn("--read-only",command); self.assertIn("none",command)
+                self.assertIn("SIFTGATE_RELEASE_UPDATES_DISABLED=1",command)
                 self.assertNotIn("--publish",command); self.assertNotIn("docker.sock"," ".join(command))
                 self.assertNotIn(str(self.backup)+":"," ".join(command))
         calls=len(self.install.actions); self.assertEqual(self.execute(result)["id"],result["id"])

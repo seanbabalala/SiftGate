@@ -119,5 +119,6 @@
   "event.database_size_high": "数据库/WAL 超过阈值",
   "event.disk_check_failed": "磁盘检查失败",
   "event.database_size_check_failed": "数据库大小检查失败",
-  "event.test": "手动测试通知"
+  "event.test": "手动测试通知",
+  "event.release_available": "发现正式新版本"
 }

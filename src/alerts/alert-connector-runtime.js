@@ -5,6 +5,7 @@
 const { createHmac } = require('node:crypto');
 const CONNECTOR_TYPES = ['webhook', 'feishu', 'wecom', 'telegram'];
 const ALERT_EVENTS = [
+  'release_available',
   'budget_threshold', 'budget_exceeded', 'node_down', 'node_recovered',
   'circuit_open', 'circuit_close', 'error_spike', 'latency_spike',
   'quality_gate_failed', 'cost_anomaly', 'gateway_unavailable', 'gateway_recovered',

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add optional server-scheduled public release discovery and dashboard notices, with
+  six-hour jittered checks, persistent preferences, ETag/backoff, explicit stale/error
+  states, seven locales, mobile access and opt-in existing alert connectors. No
+  image pull, upgrade, restart or new host authority is introduced. Offline Vault
+  probes explicitly disable update checks. See `docs/release-updates.md`.
+
 ## 2.12.0 - 2026-10-08
 
 Publication status is established by the matching annotated tag and successful

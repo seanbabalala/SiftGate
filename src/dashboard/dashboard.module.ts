@@ -1,3 +1,5 @@
+import { ReleaseUpdatesController } from '../releases/release-updates.controller';
+import { ReleaseUpdatesService } from '../releases/release-updates.service';
 import { OperatorStatusController } from '../operator/operator-status.controller';
 import { OperatorStatusService } from '../operator/operator-status.service';
 import { LaunchpadController } from '../launchpad/launchpad.controller';
@@ -64,9 +66,10 @@ import { ProvidersModule } from '../providers/providers.module';
       WorkspaceInvitation,
     ]),
   ],
-  controllers: [HealthController, DashboardController, LaunchpadController, OperatorStatusController],
+  controllers: [ReleaseUpdatesController, HealthController, DashboardController, LaunchpadController, OperatorStatusController],
   providers: [
     LogEventBus,
+    ReleaseUpdatesService,
     LaunchpadService,
     OperatorStatusService,
     ProviderCompatibilityService,

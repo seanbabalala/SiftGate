@@ -119,5 +119,6 @@
   "event.database_size_high": "DB/WAL サイズしきい値",
   "event.disk_check_failed": "ディスクチェック失敗",
   "event.database_size_check_failed": "DB サイズ確認失敗",
-  "event.test": "手動テスト通知"
+  "event.test": "手動テスト通知",
+  "event.release_available": "新しい正式リリース"
 }
