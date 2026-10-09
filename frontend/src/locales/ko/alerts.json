@@ -119,5 +119,6 @@
   "event.database_size_high": "DB/WAL 크기 임계값",
   "event.disk_check_failed": "디스크 확인 실패",
   "event.database_size_check_failed": "DB 크기 확인 실패",
-  "event.test": "수동 테스트 알림"
+  "event.test": "수동 테스트 알림",
+  "event.release_available": "새 공식 릴리스 사용 가능"
 }

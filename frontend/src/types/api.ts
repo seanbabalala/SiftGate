@@ -1752,6 +1752,7 @@ export interface HealthResponse {
 // ── Alerts ──
 
 export type AlertEventType =
+  | "release_available"
   | "budget_threshold"
   | "budget_exceeded"
   | "node_down"

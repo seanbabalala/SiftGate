@@ -55,6 +55,10 @@ export class AlertService implements OnModuleDestroy {
     }
   }
 
+  canNotify(type: AlertEventType): boolean {
+    return this.config.alerts.enabled && this.hasInterestedChannel(type);
+  }
+
   emit(event: GatewayAlertEvent): void {
     const alertsConfig = this.config.alerts;
     if (!alertsConfig.enabled) return;

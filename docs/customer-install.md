@@ -278,3 +278,10 @@ specific supported platform/runtime versions.
 ## Optional independent host operator
 
 The new operator provides persistent host-approved backup/upgrade jobs and an instance-bound, read-only Control Room. Enrollment does not start services; bridge changes take effect only at a separately approved recreation. It is not a publisher-signature verifier or an automatic cross-version upgrade system. Read the matching [operator guide](customer-operator.md) before enabling it. Existing running instances are not enrolled automatically.
+
+## Release notifications
+
+The post-v2.12.0 source adds opt-out background version notices in the regular
+dashboard; see [Release update notifications](release-updates.md) for privacy,
+offline policy and the distinction between discovery and actual upgrade. This
+does not retroactively change the published v2.12.0 image.

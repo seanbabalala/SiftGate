@@ -974,3 +974,23 @@ Use the API documentation shipped with the selected release. These endpoints do 
 | GET | `/api/dashboard/launchpad/attempts/:id` | Reconstruct scoped evidence from persisted call metadata; no request retry |
 
 Managed identity is explicitly enabled by the matching installer and is not automatically applied to existing password/OIDC deployments. Codes and passwords are write-only. Launchpad preparation requires the current configuration digest, timezone acknowledgement, pricing review, explicit cost consent, selected key ID and that key's actual secret; the secret is compared but never persisted in the receipt. The real test uses `/v1/chat/completions`, not privileged Dashboard proxy access. See the customer identity and Launchpad guides for limits and failure states.
+
+
+## Release update notices (post-v2.12.0 source)
+
+These endpoints observe public release metadata; none can pull an image, install
+an artifact, approve an upgrade, change provider configuration or restart a gateway.
+
+| Endpoint | Access | Effect |
+| --- | --- | --- |
+| `GET /api/dashboard/release-updates` | Dashboard viewer | Cached state only; no external request |
+| `POST /api/dashboard/release-updates/check` | Dashboard admin + same-origin | One bounded public-metadata check, with shared cooldown/backoff |
+| `PUT /api/dashboard/release-updates/preferences` | Dashboard admin + same-origin | Save `enabled`, `interval_hours` (6/12/24), `notify_connectors` |
+
+Responses always have `automatic_install:false` and `publisher_verified:false`.
+`last_attempt_at`, `last_success_at`, `next_check_at` and `retry_after` are nullable
+UTC epoch milliseconds. Status distinguishes not-checked, checking, available,
+current (no higher version number found), no-release, unknown-version, disabled,
+error and stale. A failed check retains historical metadata but cannot report a
+fresh success. Host `SIFTGATE_RELEASE_UPDATES_DISABLED=1` overrides dashboard opt-in.
+See [release notice policy](release-updates.md) for persistence and privacy.

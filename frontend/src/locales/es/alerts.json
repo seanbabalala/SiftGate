@@ -119,5 +119,6 @@
   "event.database_size_high": "Umbral de tamaño de base de datos/WAL",
   "event.disk_check_failed": "Comprobación de disco fallida",
   "event.database_size_check_failed": "Comprobación del tamaño de base de datos fallida",
-  "event.test": "Notificación de prueba manual"
+  "event.test": "Notificación de prueba manual",
+  "event.release_available": "Nueva versión oficial disponible"
 }

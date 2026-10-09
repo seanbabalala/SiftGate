@@ -119,5 +119,6 @@
   "event.database_size_high": "資料庫/WAL 超過閾值",
   "event.disk_check_failed": "磁碟檢查失敗",
   "event.database_size_check_failed": "資料庫大小檢查失敗",
-  "event.test": "手動測試通知"
+  "event.test": "手動測試通知",
+  "event.release_available": "發現正式新版本"
 }
