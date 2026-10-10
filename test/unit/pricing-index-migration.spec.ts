@@ -140,7 +140,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
         expect((await planPricingSchema(source)).state).toBe("conflict");
         expect(await definition()).toEqual(before);
       } finally { await source.query(`DROP SCHEMA "${other}" CASCADE`); }
-    });
+    }, 30_000); // Full legacy DDL plus cross-schema inspection; not a request-latency gate.
 
     it("rejects checksum drift and an index marker without earlier migrations", async () => {
       await applyPricingSchema(source);
