@@ -53,7 +53,10 @@
     "test:control-ui": "node --test test/customer-ui/*.test.cjs",
     "smoke:customer": "python3 scripts/smoke-customer-install.py",
     "benchmark:pricing": "ts-node scripts/benchmark-pricing.ts",
-    "smoke:operator": "python3 scripts/smoke-customer-operator.py"
+    "smoke:operator": "python3 scripts/smoke-customer-operator.py",
+    "security:scan": "python3 scripts/scan-secrets.py",
+    "security:boundary": "python3 scripts/check-publication-boundary.py",
+    "test:security": "python3 -m unittest discover -s test/security -v"
   },
   "dependencies": {
     "@nestjs/common": "^11.2.6",

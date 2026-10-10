@@ -12,6 +12,22 @@ permissions:
   contents: read
 
 jobs:
+  publication-security:
+    name: Publication security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan all tracked content and reachable commit history
+        run: python3 scripts/scan-secrets.py
+      - name: Test scanner and reviewed publication boundaries
+        run: python3 -m unittest discover -s test/security -v
+      - uses: docker/setup-buildx-action@v3
+      - name: Reject private inputs with the real Docker matcher
+        run: python3 scripts/check-publication-boundary.py --docker
+
   backend:
     name: Backend build, docs and audit
     runs-on: ubuntu-24.04

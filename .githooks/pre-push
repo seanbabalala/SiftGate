@@ -1,0 +1,13 @@
+#!/bin/sh
+# Scan every outgoing commit's history, including an old branch pushed from a
+# different checkout. Deletions do not carry source. Never silently skip a scan.
+set -eu
+root=$(git rev-parse --show-toplevel)
+while read -r local_ref local_oid remote_ref remote_oid; do
+  case "$local_oid" in 0000000000000000000000000000000000000000) continue ;; esac
+  if [ ! -f "$root/scripts/scan-secrets.py" ]; then
+    echo 'Push refused: this checkout lacks the publication security scanner.' >&2
+    exit 1
+  fi
+  python3 "$root/scripts/scan-secrets.py" --history-only --revision "$local_oid"
+done

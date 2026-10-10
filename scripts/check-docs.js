@@ -27,6 +27,7 @@ const requiredFiles = [
   'docs/CACHING.md',
   'docs/EVALUATION_FRAMEWORK.md',
   'docs/SECURITY.md',
+  'docs/PUBLICATION_SECURITY.md',
   '.github/ISSUE_TEMPLATE/bug_report.yml',
   '.github/ISSUE_TEMPLATE/feature_request.yml',
   '.github/ISSUE_TEMPLATE/config_help.yml',
@@ -58,6 +59,7 @@ const knownInternalLabelPattern = new RegExp(
 );
 
 const forbiddenPatterns = [
+  { name: 'internal reference repository identity', pattern: new RegExp(['relay', 'saas'].join('-'), 'i') },
   { name: 'private repo reference', pattern: privateRepoPattern },
   { name: 'OpenAI-style secret key', pattern: /\bsk-[A-Za-z0-9]{20,}\b/ },
   { name: 'Gateway secret key', pattern: /\bgw_sk_[A-Za-z0-9_]{16,}\b/ },

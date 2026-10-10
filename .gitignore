@@ -19,6 +19,7 @@ data/
 # Configuration (contains API keys — only track the example)
 gateway.config.yaml
 gateway.config.yaml.bak-*
+gateway.config.yaml.backup*
 !gateway.config.example.yaml
 catalog.override.yaml
 .siftgate/
@@ -42,6 +43,9 @@ docs/DEVELOPMENT_SPECIFICATION.md
 .local-dev/
 .playwright-cli/
 output/
+private-records/
+*.bundle
+security-audit-*/
 _request-logger-disabled/
 
 # IDE
