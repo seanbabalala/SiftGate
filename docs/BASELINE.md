@@ -1,7 +1,15 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-09
+Reviewed: 2026-10-10
 Release: **v2.12.1** (availability requires the matching successful release workflow)
+
+## Post-release publication hardening
+
+Source/build gates now include pinned full-history secret scanning, exact
+false-positive review, default-deny Docker inputs and reviewed media hashes.
+Personal engineering records are not customer documentation. These source/doc
+controls do not retroactively change v2.12.1 image bytes, erase public history or
+deploy any installation. See [publication privacy](PUBLICATION_SECURITY.md).
 
 ## v2.12.1 Release Scope
 

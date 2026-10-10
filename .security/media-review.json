@@ -1,0 +1,264 @@
+{
+  "format": 1,
+  "policy": "Human review required when a file or its content changes. Preserve official logos. No automatic re-approval or new unrelated reference screenshots.",
+  "files": {
+    "deploy/customer/favicon.svg": {
+      "sha256": "9202f30091fba0d85a1218d9bd5a4d8d69ef04b2d85b9457f334bfc45b863abb",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/brand/siftgate-logo.svg": {
+      "sha256": "157fb4239d36575e455b16bd0acfb3d5f4c4b5ba095afd938574a1f4f09dd51e",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/brand/siftgate-mark.svg": {
+      "sha256": "4fe3f5cf3eaa2c351960f3af69572baaf4355d040a59887026670beaac2e2db5",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/comparison/competitive-matrix.svg": {
+      "sha256": "7e313af9b15a80a9a19a33ae635d06c499e1a2069bc6760b68bdf09da75b0f61",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/dashboard/provider-catalog-dashboard.png": {
+      "sha256": "d61a8535a5240320272cac4e1209e024dd180f7bdc2453af83f0d4c4235d93d4",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/demo/agent-mcp-demo.svg": {
+      "sha256": "79019f97c80c160036c13255efa277190c13c520575ff7a2ac3f060bb7ac49c8",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/homepage/siftgate-hero.svg": {
+      "sha256": "05723e4cf3a2316eb302f2525ae69404736e1f3f1cfec02b8ebcb1a5f36da745",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/performance/benchmark-evidence.svg": {
+      "sha256": "6177a30e5840b126edb0a56d163c98900ba72807e20031559d79c90e1b1d7f95",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/providers/provider-smoke-matrix.svg": {
+      "sha256": "20807bf20251c5a9df7127df1cdde79d19ff57749816799585e1ed205056a088",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/cherry-studio.png": {
+      "sha256": "6a32a87d2c08b3940888ca484f8336f8ab30069bee3614294eefdbf8bcdbc710",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/claude-code.svg": {
+      "sha256": "74a1a515d8887e723733634d7808b05ce1689a14c1b5a99a944458a8513e197b",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/cline.svg": {
+      "sha256": "b83bebc9a3898a4317088b33c3539331879fee7c4dc592a90fbc80b217738512",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/codex.svg": {
+      "sha256": "a6f64c2670a20c03c134ae0ccf1dab4dfd817f10a41da21547f720c5c1fb6820",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/continue.svg": {
+      "sha256": "b061c6d727199180a2dde99ee7a67b75f2b6245144d25456cda69b25c90ee2e5",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/cursor.svg": {
+      "sha256": "ed557a05f5cd8fa526d570db27cb161aa4e39d57b839afd78e938169cd38ed99",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/generic-anthropic.svg": {
+      "sha256": "74a1a515d8887e723733634d7808b05ce1689a14c1b5a99a944458a8513e197b",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/generic-openai.svg": {
+      "sha256": "a6f64c2670a20c03c134ae0ccf1dab4dfd817f10a41da21547f720c5c1fb6820",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/hermes.png": {
+      "sha256": "5847654a3b7c692a8edcf3a2138bc2b5c1072362fe99c2dae033d2672d2a075a",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/openclaw.svg": {
+      "sha256": "c5ce1c6ff37480b10e85c5f8369cb3b352bfe47d0e90f2804e554a9c2bdf108f",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/opencode.svg": {
+      "sha256": "3d3469d910b6362d5e6f8246a7e096ea7d94dd03eb3cf88abb77115d96a9453f",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/agents/roo-code.svg": {
+      "sha256": "329cdf9605ca56bb329f12cd2107cd8ac6d7f0629331642a1bc594d4a649859b",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/favicon.svg": {
+      "sha256": "9202f30091fba0d85a1218d9bd5a4d8d69ef04b2d85b9457f334bfc45b863abb",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/alibaba.svg": {
+      "sha256": "48ee796c5b1da5f5f11dbd70c5c64a3f7efcb9eeb9022ae687d81fc813e942ee",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/amazon.svg": {
+      "sha256": "545ef51d627a699f2eacaf629d8f71cceb190446ec397fb0600a0d6bca0521f3",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/anthropic.svg": {
+      "sha256": "74a1a515d8887e723733634d7808b05ce1689a14c1b5a99a944458a8513e197b",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/azure.svg": {
+      "sha256": "77d2e821402b72fe78f6dfbc15b96707a0d0ba1e36cccc89e6be99f9c43b54c8",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/cerebras.svg": {
+      "sha256": "cdd898f88bf0b981171c75495c99c8bff7a0c34dfd5a50d0e1332de4cb517acf",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/cohere.svg": {
+      "sha256": "84d0ee3cbe66f030e5a18cb2c86da9166ab2137c7a98781693bb1fbf31e392b9",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/deepseek.svg": {
+      "sha256": "deba5f98a5c1796e20fcac3149bcd7eb8a32f0bdd04d048819400b1f28bd1439",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/gemini.svg": {
+      "sha256": "defc65f5f30d8d797f3aba3f5476d74b732849185b11bfeae1fa4e0b14c09d67",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/google.svg": {
+      "sha256": "4e6aa8892ef15a6b431f40f2c9045979bf7e2357524e7bbb89b353cf4f32a5ac",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/groq.svg": {
+      "sha256": "975d81f79ef5ff58da12031be48103a47c2f8793818feaaf0b70da9edfdc360f",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/meta.svg": {
+      "sha256": "64a8f1845c10bffcb68002b1d5b05aa8bb63c5847d90fb2bfa73de59879a3783",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/minimax.svg": {
+      "sha256": "685123888b115109f0cfac87aa0976b16502cdf507ba6d3278bc67a528b34687",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/mistral.svg": {
+      "sha256": "722f74b289d95486b43662fe24fa883b333701296f618406cd0ed502299170b6",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/moonshot.svg": {
+      "sha256": "435f41b74e6a87639b6bf860e9628f20cbe7d6229bece412d548f4cea3081852",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/nvidia.svg": {
+      "sha256": "3c1ec41a501c0e23cf3cbd3e594c6a59cd52050f81cfeb1732428c2888245b4e",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/ollama.svg": {
+      "sha256": "40921efa1c5b299846cc1dcc429b651199c9463dc12c37526f222963cd66545f",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/openai.svg": {
+      "sha256": "a6f64c2670a20c03c134ae0ccf1dab4dfd817f10a41da21547f720c5c1fb6820",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/openrouter.svg": {
+      "sha256": "f98294ba166c4a450a54d0f4a932b9ec2f447a6daadfde8b905f0da839d59b14",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/qwen.svg": {
+      "sha256": "8c0323ac0cbe104cffd95d8ba4a06ffb1c51c7aba99afb083e8e8b8abdcb9f76",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/xai.svg": {
+      "sha256": "afb81b82074827e77ea845c66181b2833c1bdc9469bd4257ffd316c4a770ffd9",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "frontend/public/providers/zhipu.svg": {
+      "sha256": "8174e65ff71647d5c705c920c953a82bd723d9e3e42887bdd4ffc9dfe51207a0",
+      "reviewed_on": "2026-10-10",
+      "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
+      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    }
+  }
+}

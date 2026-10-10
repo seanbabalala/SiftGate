@@ -1,0 +1,12 @@
+# Request maintainer review for security-boundary changes, never auto-baseline them.
+/.github/ @seanbabalala
+/.security/ @seanbabalala
+/.gitleaks.toml @seanbabalala
+/.githooks/ @seanbabalala
+/.dockerignore @seanbabalala
+/Dockerfile @seanbabalala
+/scripts/scan-secrets.py @seanbabalala
+/scripts/check-publication-boundary.py @seanbabalala
+/scripts/check-public-release.js @seanbabalala
+/scripts/package-customer-release.py @seanbabalala
+/docs/assets/ @seanbabalala

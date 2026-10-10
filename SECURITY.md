@@ -27,6 +27,10 @@ Do not include real provider API keys, customer prompts, customer responses, or 
 
 ## Security Defaults
 
+Repository, build-input, credential and screenshot controls are documented in
+[Publication privacy](docs/PUBLICATION_SECURITY.md). Raw audit evidence and
+installation-specific records must not be published with customer documentation.
+
 SiftGate should remain safe by default:
 
 - memory/SQLite local mode works without external services

@@ -1,0 +1,20 @@
+title = "SiftGate publication scan"
+
+[extend]
+useDefault = true
+
+# No path, test-directory, commit or inline-comment exclusions. Reviewed false
+# positives are matched by exact path + rule + value digest in the scan wrapper.
+[[rules]]
+id = "siftgate-gateway-key"
+description = "Full-length SiftGate business credential"
+regex = '''\bgw_sk_[A-Za-z0-9_-]{32,}\b'''
+keywords = ["gw_sk_"]
+
+# Catch provider-prefixed keys even when a newly introduced suffix/length does
+# not yet fit a vendor-specific detector in the pinned upstream rule set.
+[[rules]]
+id = "provider-prefixed-key"
+description = "Project or Anthropic-prefixed credential"
+regex = '''\bsk-(?:proj-|ant-)[A-Za-z0-9_-]{20,}\b'''
+keywords = ["sk-proj-", "sk-ant-"]

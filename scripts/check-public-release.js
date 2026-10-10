@@ -28,7 +28,7 @@ const requiredFiles = [
 ];
 
 const forbiddenTrackedPathPatterns = [
-  { name: 'local runtime config', pattern: /^gateway\.config\.ya?ml$/ },
+  { name: 'local runtime config or backup', pattern: /(^|\/)gateway\.config\.ya?ml(?:\..+)?$/ },
   { name: 'local environment file', pattern: /(^|\/)\.env(?:\..+)?$/ },
   { name: 'macOS metadata', pattern: /(^|\/)\.DS_Store$/ },
   { name: 'dependency directory', pattern: /(^|\/)node_modules\// },
@@ -45,14 +45,15 @@ const forbiddenTrackedPathPatterns = [
   { name: 'private planning doc', pattern: /^CLOUD_DEVELOPMENT_(PLAN|PROMPTS)\.md$/ },
   { name: 'local generated output', pattern: /^output\// },
   { name: 'local public-skills cache', pattern: /^public-skills\// },
+  { name: 'private review records', pattern: /^private-records\// },
+  { name: 'Git history archive', pattern: /\.bundle$/i },
+  { name: 'unreviewed design reference', pattern: /^frontend\/sample\.(png|jpe?g|webp)$/i },
 ];
 
+// Credential formats, all test files, extensionless files and Git history are
+// scanned by the pinned scanner (npm run security:scan). Do not maintain a
+// weaker token-regex/whole-test-directory exemption here.
 const forbiddenTextRules = [
-  { name: 'OpenAI-style secret key', pattern: /\bsk-[A-Za-z0-9]{20,}\b/ },
-  { name: 'Gateway secret key', pattern: /\bgw_sk_[A-Za-z0-9_]{16,}\b/ },
-  { name: 'AWS access key', pattern: /\bAKIA[0-9A-Z]{16}\b/ },
-  { name: 'private key block', pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
-  { name: 'literal long bearer token', pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{32,}\b/ },
   { name: 'local macOS home path', pattern: /\/Users\/[A-Za-z0-9._-]+/ },
 ];
 
@@ -128,8 +129,6 @@ function scanTrackedTextFiles(files) {
         failures.push(`${file}: forbidden ${rule.name}`);
       }
     }
-    if (file.startsWith('test/')) continue;
-
     for (const rule of forbiddenTextRules) {
       if (rule.pattern.test(text)) {
         failures.push(`${file}: forbidden ${rule.name}`);
@@ -139,7 +138,8 @@ function scanTrackedTextFiles(files) {
 }
 
 function isScannableTextPath(file) {
-  return /\.(md|txt|json|ya?ml|ts|tsx|js|mjs|cjs|html|css|svg|toml|py|sh)$/i.test(file);
+  const data = fs.readFileSync(path.join(root, file));
+  return !data.includes(0); // Include dotfiles/extensionless text, never raw binary.
 }
 
 function checkPackageMetadata(relPath, options) {

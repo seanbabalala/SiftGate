@@ -39,6 +39,10 @@ jobs:
           node-version-file: .nvmrc
       - name: Check Node runtime contract
         run: npm run runtime:check && npm run test:runtime
+      - name: Scan publication secrets and reviewed input boundaries
+        run: |
+          python3 scripts/scan-secrets.py
+          python3 scripts/check-publication-boundary.py
       - name: Check release boundary and version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -67,6 +71,8 @@ jobs:
           command -v /usr/sbin/sshd || { sudo apt-get update && sudo apt-get install -y openssh-server; }
           sudo install -d -m 0755 /run/sshd
       - uses: docker/setup-buildx-action@v3
+      - name: Verify private inputs never enter the Docker context
+        run: python3 scripts/check-publication-boundary.py --docker
       - uses: docker/build-push-action@v6
         with:
           context: .

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Harden source/image publication with default-deny Docker inputs, pinned secret
+  scanning of tracked files and full history, exact reviewed false-positive
+  exceptions, real Docker boundary tests and content-bound media review.
+- Replace private deployment/task diaries with public product guidance; correct
+  the security guide to describe managed activation and fail-closed direct startup.
+  These repository/documentation changes do not replace an existing release image
+  or restart a running installation. Historical Git objects are not erased.
+
 ## 2.12.1 - 2026-10-09
 
 - Add optional server-scheduled public release discovery and dashboard notices, with

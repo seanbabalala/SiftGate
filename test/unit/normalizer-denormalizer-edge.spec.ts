@@ -1034,7 +1034,7 @@ describe('ResponsesDenormalizer — additional edge cases', () => {
           {
             type: 'function_call_output',
             call_id: 'call_1',
-            output: '/Users/sean/Desktop/ai-gateway',
+            output: '/workspace/example-project',
           },
         ],
         stream: true,
@@ -1055,7 +1055,7 @@ describe('ResponsesDenormalizer — additional edge cases', () => {
       {
         type: 'function_call_output',
         call_id: 'call_1',
-        output: '/Users/sean/Desktop/ai-gateway',
+        output: '/workspace/example-project',
       },
     ]);
   });

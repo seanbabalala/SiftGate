@@ -24,6 +24,9 @@ Run the checks that match your change:
 
 ```bash
 npm run docs:check
+npm run security:scan
+npm run security:boundary
+npm run test:security
 npm run build
 npm test -- --runInBand
 npm run test:e2e
@@ -31,7 +34,10 @@ npm run validate:k8s
 cd frontend && npm test && npm run build
 ```
 
-For docs-only changes, `npm run docs:check` is the minimum.
+Docs-only changes also require the secret and publication-boundary checks.
+The scanner needs complete Git history and verifies its pinned binary before use.
+See [publication privacy](docs/PUBLICATION_SECURITY.md) for offline scanning,
+reviewed false positives, private records and screenshot approval.
 
 ## Contribution Rules
 

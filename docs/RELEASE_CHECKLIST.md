@@ -53,6 +53,12 @@ The check must be read-only. It should fail if version metadata is misaligned.
 
 ## Required CI Signals
 
+- `Publication security`: full-history/working-content secret scan, narrow
+  reviewed exceptions, media approvals and actual Docker context sentinel tests.
+- `npm run security:scan`, `npm run security:boundary` and `npm run test:security`
+  are also included in `release:hardening`. They never use production credentials
+  or restart an installed gateway. See [publication privacy](PUBLICATION_SECURITY.md).
+
 Gateway CI selects Node 22 from `.nvmrc`; root/frontend manifests and lockfiles
 require `>=22.13.0 <23`, enforced at installation by `.npmrc`. Run
 `npm run runtime:check` and `npm run test:runtime` before release preparation.
