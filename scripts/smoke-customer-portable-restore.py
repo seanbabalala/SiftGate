@@ -34,7 +34,7 @@ def main():
     try:
         source=folder/"source"; port=smoke.port(); assert port!=2099
         cli(source,"init","--image",args.image,"--local-image","--timezone","Asia/Shanghai","--port",str(port))
-        install=KIT.Install.load(source); installations.append(install); cli(source,"up")
+        install=KIT.Install.load(source); installations.append(install); smoke.disable_release_discovery(install); cli(source,"up")
         password="synthetic portable recovery password"
         smoke.request(install,"/api/auth/identity/activate",{"code":(source/"config/activate-code.txt").read_text().strip(),"password":password})
         token=smoke.request(install,"/api/auth/login",{"password":password})["token"]

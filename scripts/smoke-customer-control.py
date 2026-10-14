@@ -56,7 +56,7 @@ def main():
     try:
         port=smoke.port(); assert port!=2099
         kit_cli("init","--image",args.image,"--local-image","--port",str(port),"--timezone","Asia/Shanghai")
-        install=KIT.Install.load(directory); kit_cli("up")
+        install=KIT.Install.load(directory); smoke.disable_release_discovery(install); kit_cli("up")
         code=(directory/"config/activate-code.txt").read_text().strip()
         smoke.request(install,"/api/auth/identity/activate",{"code":code,"password":"synthetic gateway password"})
         gateway_token=smoke.request(install,"/api/auth/login",{"password":"synthetic gateway password"})["token"]

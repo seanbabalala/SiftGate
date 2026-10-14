@@ -1,7 +1,17 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-10-14
-Release: **v2.12.2** (availability requires the matching successful release workflow)
+Release: **v2.12.3** (availability requires the matching successful release workflow)
+
+## v2.12.3 Release Scope
+
+The v2.12.2 source tag is preserved; its publication failed during native Fleet
+acceptance from v2.12.1 when background release-cache writes changed an approved
+configuration fingerprint. This successor isolates fresh synthetic lifecycle
+fixtures with the existing host policy before first boot and requires native
+proof that discovery stayed disabled. Real configuration changes still reject
+execution before downtime; no fingerprint exclusion or production default change
+is introduced. The signed tag workflow and cold installs establish availability.
 
 ## v2.12.2 Release Scope
 

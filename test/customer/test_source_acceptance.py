@@ -13,6 +13,28 @@ upgrade=importlib.util.module_from_spec(spec); spec.loader.exec_module(upgrade)
 
 
 class SourceAcceptanceTests(unittest.TestCase):
+    def test_synthetic_host_policy_preserves_other_environment_bytes_and_permissions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory); environment=root/"provider.env"
+            previous=b"# Synthetic fixture\nSYNTHETIC_SETTING=preserved\n"
+            environment.write_bytes(previous); environment.chmod(0o600)
+            install=SimpleNamespace(root=root,meta={"port":32199})
+            upgrade.smoke.disable_release_discovery(install)
+            self.assertEqual(environment.read_bytes(),previous+b"\nSIFTGATE_RELEASE_UPDATES_DISABLED=1\n")
+            self.assertEqual(environment.stat().st_mode & 0o777,0o600)
+            self.assertEqual(list(root.iterdir()),[environment])
+            with self.assertRaises(AssertionError): upgrade.smoke.disable_release_discovery(install)
+            with self.assertRaises(AssertionError): upgrade.smoke.disable_release_discovery(SimpleNamespace(root=root,meta={"port":2099}))
+
+    def test_native_notice_probe_requires_host_policy_and_no_background_attempt(self):
+        expected={"host_disabled":True,"enabled":False,"state":"disabled","last_attempt_at":None}
+        with patch.object(upgrade.smoke,"request",return_value=expected) as request:
+            self.assertEqual(upgrade.assert_release_discovery_disabled(None,"synthetic-token"),expected)
+            request.assert_called_once_with(None,"/api/dashboard/release-updates",token="synthetic-token")
+        for field,value in (("host_disabled",False),("enabled",True),("state","error"),("last_attempt_at",1)):
+            with self.subTest(field=field),patch.object(upgrade.smoke,"request",return_value={**expected,field:value}),self.assertRaises(AssertionError):
+                upgrade.assert_release_discovery_disabled(None,"synthetic-token")
+
     def test_current_and_legacy_public_images_are_both_in_the_release_contract(self):
         contract=json.loads((ROOT/"deploy/customer/release-contract.json").read_text())
         records={r["version"]:r for r in contract["source_releases"]}
@@ -54,3 +76,5 @@ class SourceAcceptanceTests(unittest.TestCase):
         for check in ('source_recovery_version_mismatch','source_identity_receipt_mismatch','release_notice_api_available'):
             self.assertIn(check,collector)
         self.assertIn('"docs/release-updates.md": "release-updates.md"',(ROOT/"scripts/package-customer-release.py").read_text())
+        self.assertEqual(collector.count('assert_checks(migrated,{"background_release_checks_disabled"})'),1)
+        self.assertEqual(collector.count('assert_checks(fleet,{"background_release_checks_disabled"})'),1)

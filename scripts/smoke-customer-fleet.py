@@ -147,6 +147,7 @@ def main():
             directory=folder/("gateway-"+str(index)); port=smoke.port(); assert port!=2099
             cli(directory,args.baseline_kit/"siftgate.py","init","--image",args.source_image,"--local-image","--timezone","Asia/Shanghai","--port",str(port))
             install=kit.Install.load(directory); installations.append(install)
+            smoke.disable_release_discovery(install)
             isolate="const fs=require('fs'),y=require('js-yaml'),p='/config/gateway.config.yaml',c=y.load(fs.readFileSync(p,'utf8'));c.nodes=c.nodes.map(n=>({...n,base_url:'http://127.0.0.1:1',api_key:'synthetic-no-vendor',health_check:{...n.health_check,enabled:false}}));fs.writeFileSync(p,y.dump(c,{lineWidth:110}));"
             install.compose("run","--rm","--no-deps","--entrypoint","node","siftgate","-e",isolate)
             cli(directory,current,"up")
@@ -239,6 +240,7 @@ def main():
             current_install=kit.Install.load(install.root)
             assert current_install.meta["app_version"]==target_version
             token,key_id=identities[index]
+            upgrade.assert_release_discovery_disabled(current_install,token)
             assert key_id in json.dumps(smoke.request(current_install,"/api/dashboard/api-keys",token=token))
             assert service.observe("planner",sites[index])["ready"]
         receipt={"format":"siftgate-fleet-smoke-v1","platform":"linux/"+target["architecture"],"target_config_digest":target["config_digest"],
@@ -247,7 +249,7 @@ def main():
             "jobs":[failure["id"],job["id"],remaining["id"]],"checks":["real_pinned_ssh_rpc","wrong_host_key_refused_before_agent",
                 "offline_import_and_layer_verification","verified_local_image_export","import_does_not_deploy","independent_approver","actual_canary_upgrade",
                 "manual_next_wave","pause_prevents_dispatch","cancel_preserves_remaining_source","failure_threshold_prevents_later_targets",
-                "fresh_plan_for_remaining_target","existing_keys_and_sessions_preserved","final_http_observed"]}
+                "fresh_plan_for_remaining_target","existing_keys_and_sessions_preserved","background_release_checks_disabled","final_http_observed"]}
         kit.write_json(folder/"result.json",receipt); print(json.dumps(receipt,indent=2))
     finally:
         if sys.exc_info()[0] is not None:

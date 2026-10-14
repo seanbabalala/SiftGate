@@ -77,7 +77,16 @@ def source_session(install, source_version):
         mode="legacy"
     token=smoke.request(install,"/api/auth/login",{"password":password})["token"]
     assert token
+    if release.version(source_version)>=(2,12,1):
+        assert_release_discovery_disabled(install,token)
     return password,token,mode
+
+
+def assert_release_discovery_disabled(install,token):
+    notice=smoke.request(install,"/api/dashboard/release-updates",token=token)
+    assert notice["host_disabled"] is True and notice["enabled"] is False and notice["state"]=="disabled"
+    assert notice["last_attempt_at"] is None
+    return notice
 
 
 def main():
@@ -97,6 +106,7 @@ def main():
         port=smoke.port(); assert port!=2099
         cli(args.baseline_kit/"siftgate.py","init","--image",args.source_image,"--local-image","--timezone","Asia/Shanghai","--port",str(port))
         install=kit.Install.load(directory)
+        smoke.disable_release_discovery(install)
         isolate="const fs=require('fs'),y=require('js-yaml'),p='/config/gateway.config.yaml',c=y.load(fs.readFileSync(p,'utf8'));c.nodes=c.nodes.map(n=>({...n,base_url:'http://127.0.0.1:1',api_key:'synthetic-no-vendor',health_check:{...n.health_check,enabled:false}}));fs.writeFileSync(p,y.dump(c,{lineWidth:110}));"
         install.compose("run","--rm","--no-deps","--entrypoint","node","siftgate","-e",isolate)
         cli(current,"up")
@@ -114,7 +124,7 @@ def main():
             "allowed_nodes":["openai"],"allowed_models":["gpt-4o-mini"],"daily_token_limit":10000,"daily_cost_limit":1},token)
         body={"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"synthetic migration acceptance"}],"max_tokens":16}
         assert smoke.request(install,"/v1/chat/completions",body,key["key"])["usage"]["total_tokens"]==5
-        config=(directory/"config/gateway.config.yaml").read_bytes(); before=install.container()
+        config=(directory/"config/gateway.config.yaml").read_bytes(); environment=(directory/"provider.env").read_bytes(); before=install.container()
         tools.bootstrap(install,confirmed=True); old_tools=kit.tool_directory(install.root,install.meta)
         assert install.container()["State"]["StartedAt"]==before["State"]["StartedAt"]
         op=operator.Operator.enroll(directory)
@@ -136,7 +146,8 @@ def main():
         assert install.meta["image"]==target["runtime_image_id"] and install.meta["app_version"]==target_version
         assert kit.tool_directory(directory,install.meta)!=old_tools and old_tools.exists()
         assert (directory/"config/gateway.config.yaml").read_bytes()==config
-        notice=smoke.request(install,"/api/dashboard/release-updates",token=token)
+        assert (directory/"provider.env").read_bytes()==environment
+        notice=assert_release_discovery_disabled(install,token)
         assert notice["current_version"]==target_version and notice["automatic_install"] is False and notice["publisher_verified"] is False
         before_db=vault.database_evidence(directory/"backups"/result["checkpoint"]["id"]/"data/gateway.db")
         # Snapshot the candidate to compare checkpointed databases, never pretend
@@ -152,7 +163,7 @@ def main():
             "target_runtime_id":target["runtime_image_id"],"job_id":job["id"],"publisher_signature_tested":False,
             "harness_manifest_not_publishable":True,"checks":["actual_cross_version_upgrade","actual_config_digest_compatibility",
                 "paired_image_and_host_kit","old_kit_and_checkpoint_retained","business_database_unchanged","configuration_preserved",
-                "existing_management_session_preserved","business_key_and_mock_traffic_preserved","release_notice_api_available","http_ready_after_upgrade"]}
+                "existing_management_session_preserved","business_key_and_mock_traffic_preserved","release_notice_api_available","background_release_checks_disabled","http_ready_after_upgrade"]}
         kit.write_json(folder/"result.json",receipt); print(json.dumps(receipt,indent=2))
     finally:
         if install:

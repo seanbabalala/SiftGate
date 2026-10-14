@@ -23,6 +23,21 @@ def port():
         return sock.getsockname()[1]
 
 
+def disable_release_discovery(install):
+    """Freeze background discovery before a fresh synthetic fixture's first boot.
+
+    Operator plans deliberately bind every config byte. The release checker can
+    write its cache 30-120 seconds after startup, otherwise racing later Fleet
+    waves. Use the documented host policy, not a mocked clock or relaxed digest.
+    This helper is not part of the shipped installer or the customer defaults.
+    """
+    assert install.meta["port"] != 2099
+    environment = install.root / "provider.env"
+    assert b"SIFTGATE_RELEASE_UPDATES_DISABLED=" not in environment.read_bytes()
+    with environment.open("ab") as output:
+        output.write(b"\nSIFTGATE_RELEASE_UPDATES_DISABLED=1\n")
+
+
 def request(install, path, data=None, token=None, method=None):
     headers = {"Content-Type": "application/json"}
     if token:
@@ -67,6 +82,7 @@ def main():
         cli(directory, "init", "--image", args.image, "--local-image", "--timezone", "Asia/Shanghai", "--port", str(port()))
         install = KIT.Install.load(directory)
         installations.append(install)
+        disable_release_discovery(install)
         cli(directory, "up")
         password = "synthetic customer smoke passphrase"
         access = (directory / "config/activate-code.txt").read_text().strip()

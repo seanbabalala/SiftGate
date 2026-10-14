@@ -44,6 +44,10 @@
     {
       "kind": "feature",
       "summary": "Native upgrade and recovery acceptance includes the published v2.11.7, v2.12.0 and v2.12.1 baselines."
+    },
+    {
+      "kind": "fix",
+      "summary": "Native lifecycle fixtures disable background release discovery before first boot, preserving strict configuration-drift rejection and customer defaults."
     }
   ]
 }

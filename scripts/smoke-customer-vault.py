@@ -31,7 +31,7 @@ def main():
     try:
         port = smoke.port(); assert port != 2099
         cli("init", "--image", args.image, "--local-image", "--timezone", "Asia/Shanghai", "--port", str(port))
-        install = KIT.Install.load(directory); cli("up")
+        install = KIT.Install.load(directory); smoke.disable_release_discovery(install); cli("up")
         code = (directory / "config/activate-code.txt").read_text().strip()
         password = "synthetic vault acceptance password"
         smoke.request(install, "/api/auth/identity/activate", {"code": code, "password": password})
