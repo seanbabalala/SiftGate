@@ -53,6 +53,13 @@ finish reason. SiftGate emits these metadata chunks before its final stop event
 and `[DONE]`, retaining usage received in an earlier chunk. Stream-event hooks
 still process the events; this is not an opaque stream bypass.
 
+This preservation is conditional on the upstream actually sending metadata.
+Some OpenAI-compatible Gemini providers return grounding/URL metadata only in
+non-streaming JSON, not in SSE. SiftGate does not invent citations, run a second
+search, or silently replace a streaming request with a buffered non-streaming
+call. Use `stream: false` when complete citations or URL status are required from
+such a provider. A successful text stream alone is not execution evidence.
+
 Tool requests bypass exact, streaming and semantic response caches. This prevents
 a previously cached plain-chat answer from being mistaken for a fresh search or
 tool execution, and avoids storing grounding payloads through those caches.

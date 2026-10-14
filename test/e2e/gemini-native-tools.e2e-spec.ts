@@ -160,6 +160,28 @@ describe("Gemini native tools over HTTP", () => {
     expect(JSON.stringify(response.body)).toContain("google_search_retrieval");
   });
 
+  it("does not fabricate metadata when the upstream omits it from SSE", async () => {
+    h.fetchMock.setStreamingChatResponse(["Answer without provider metadata"]);
+    const response = await h.agent
+      .post("/v1/chat/completions")
+      .set("Authorization", `Bearer ${API_KEY}`)
+      .send({
+        model: models[0],
+        messages: [{ role: "user", content: "Find a source" }],
+        tools: [{ googleSearch: {} }],
+        stream: true,
+      })
+      .buffer(true);
+    expect(response.status).toBe(200);
+    expect(h.fetchMock.calls.at(-1)?.body.tools).toEqual([
+      { googleSearch: {} },
+    ]);
+    expect(response.text).not.toContain("vertex_ai_grounding_metadata");
+    expect(response.text).not.toContain("vertex_ai_url_context_metadata");
+    expect(response.text).toContain('"prompt_tokens":10');
+    expect(response.text.match(/\[DONE\]/g)).toHaveLength(1);
+  });
+
   it("does not serve a cached plain answer for a native-tool request", async () => {
     const body = {
       model: models[0],
