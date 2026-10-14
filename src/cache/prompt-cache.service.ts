@@ -24,6 +24,7 @@ import {
 } from '../canonical/canonical.types';
 import { StateBackendService } from '../state/state-backend.service';
 import { normalizeWorkspaceId } from '../workspaces/workspace-scope';
+import { hasGeminiNativeTools } from '../canonical/gemini-native-tools';
 
 interface CacheEntry {
   response: CanonicalResponse;
@@ -118,6 +119,8 @@ export class PromptCacheService {
    * Call this before lookup/store to avoid unnecessary key computation.
    */
   shouldCache(canonical: CanonicalRequest): boolean {
+    // Search/URL/Maps/execution results must not reuse ordinary chat answers.
+    if (hasGeminiNativeTools(canonical)) return false;
     const cfg = this.config.cache;
     if (!cfg.enabled) return false;
 
@@ -148,6 +151,7 @@ export class PromptCacheService {
    * Look up a cached response. Returns deep-cloned response on hit, null on miss.
    */
   lookup(canonical: CanonicalRequest): CanonicalResponse | null {
+    if (hasGeminiNativeTools(canonical)) return null;
     const cfg = this.config.cache;
     if (!cfg.enabled) return null;
 
@@ -184,6 +188,7 @@ export class PromptCacheService {
    * Redis mode reads a String+TTL entry from the shared state backend.
    */
   async lookupAsync(canonical: CanonicalRequest): Promise<CanonicalResponse | null> {
+    if (hasGeminiNativeTools(canonical)) return null;
     if (!this.stateBackend?.isRedisConfigured()) {
       return this.lookup(canonical);
     }
@@ -349,6 +354,7 @@ export class PromptCacheService {
   }
 
   shouldSemanticCache(canonical: CanonicalRequest): boolean {
+    if (hasGeminiNativeTools(canonical)) return false;
     const cfg = this.config.semanticCache;
     if (!cfg.enabled) return false;
     if (canonical.stream) return false;

@@ -276,7 +276,14 @@ export type StopReason =
 export type Tier = 'simple' | 'standard' | 'complex' | 'reasoning' | 'direct' | 'cached';
 
 // ===== Response =====
+export interface NativeChatMetadata {
+  vertex_ai_grounding_metadata?: unknown;
+  vertex_ai_url_context_metadata?: unknown;
+}
+
 export interface CanonicalResponse {
+  /** Provider grounding metadata, serialized only back to Chat Completions. */
+  native_chat_metadata?: NativeChatMetadata;
   /** Original Messages content, used only when serializing back to Messages. */
   native_messages_content?: Record<string, unknown>[];
   id: string;
@@ -482,7 +489,13 @@ export interface StreamRawSseEvent {
   events?: CanonicalStreamEvent[];
 }
 
+export interface StreamChatMetadataEvent {
+  type: 'chat_metadata';
+  metadata: NativeChatMetadata;
+}
+
 export type CanonicalStreamEvent =
+  | StreamChatMetadataEvent
   | StreamStartEvent
   | StreamDeltaEvent
   | StreamToolCallCompleteEvent

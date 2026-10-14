@@ -1,5 +1,6 @@
 import { attachTokenPricingEvidence } from '../pricing-usage-evidence';
 import { CanonicalStreamEvent, TokenUsage } from '../../canonical/canonical.types';
+import { nativeChatMetadata } from '../../canonical/gemini-native-tools';
 import {
   extractUsageBySchema,
   extractUsageByKnownFields,
@@ -25,7 +26,7 @@ export class ChatCompletionsStreamParser {
   private pendingStopReason: string | null = null;
   private readonly toolCallsByIndex = new Map<number, { id: string; name?: string }>();
 
-  constructor(private readonly usageSchema?: UsageSchema) {}
+  constructor(private readonly usageSchema?: UsageSchema, private readonly deferStop = false) {}
 
   /**
    * Feed raw SSE text chunks and get parsed events.
@@ -43,8 +44,8 @@ export class ChatCompletionsStreamParser {
 
       if (!trimmed || trimmed.startsWith(':')) continue; // skip empty lines and comments
 
-      if (trimmed.startsWith('data: ')) {
-        const data = trimmed.slice(6).trim();
+      if (trimmed.startsWith('data:')) {
+        const data = trimmed.slice(5).trim();
 
         if (data === '[DONE]') {
           if (!this.hasSentStop) {
@@ -92,11 +93,20 @@ export class ChatCompletionsStreamParser {
     }
 
     if (data.usage) this.resolveUsage(data);
+    const metadata = nativeChatMetadata(data);
+    if (metadata) {
+      yield* this.ensureStarted(data);
+      yield { type: 'chat_metadata', metadata };
+    }
     const choices = data.choices as Record<string, unknown>[];
     if (!choices || choices.length === 0) {
       if (data.usage && !this.hasSentStop) {
         if (!this.hasStarted && (data.id || data.model)) {
           yield* this.ensureStarted(data);
+        }
+        if (this.deferStop) {
+          this.pendingStopReason ??= 'end_turn';
+          return;
         }
         this.hasSentStop = true;
         yield {
@@ -159,7 +169,7 @@ export class ChatCompletionsStreamParser {
     // Finish reason — end of stream
     if (finishReason) {
       const stopReason = this.mapFinishReason(finishReason);
-      if (data.usage) {
+      if (data.usage && !this.deferStop) {
         this.hasSentStop = true;
         this.pendingStopReason = null;
         yield {
@@ -211,6 +221,8 @@ export class ChatCompletionsStreamParser {
   }
 
   private resolveUsage(data: Record<string, unknown>): TokenUsage {
+    // A late grounding-only chunk / [DONE] must not erase earlier accounting.
+    if (Object.keys(data).length === 0 && this.pricingUsage) return this.pricingUsage;
     const usage = (data.usage || {}) as Record<string, unknown>;
     const promptDetails = (usage.prompt_tokens_details || {}) as Record<
       string,

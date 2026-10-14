@@ -12,6 +12,12 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:12bf52e23f65b7cdd940a3adfac8075cfad1f3c98c8b74134aec93549d91ac03",
       "installer_sha256": "18441230c819a2ff346f4f50dfe752442a1a339814b30eda44d1e14b27ae0f92",
       "source_commit": "94a141528c19908a7acd419a9cbd22be7db5f4d8"
+    },
+    {
+      "version": "2.12.1",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:695cc662caa19a3a9c4c01404b6c0c78268396471a86719be6249fc76ee1f481",
+      "installer_sha256": "accf019039d4810ecbe25db9c7934077ed8824306593703b309daf6df842bd10",
+      "source_commit": "281316d993990c2fd872f90bf4438918431c6cf6"
     }
   ],
   "source_kit_protocols": [
@@ -29,15 +35,15 @@
   "changes": [
     {
       "kind": "feature",
-      "summary": "Background public-release checks and dashboard notices, with opt-out preferences, ETag caching, backoff, seven languages and optional alert connectors."
+      "summary": "Gemini native Chat Completions tools and grounding/URL metadata survive JSON and streaming requests without bypassing stream-event hooks."
     },
     {
       "kind": "security",
-      "summary": "Discovery never grants upgrade authority or uploads customer credentials. Vault probes disable discovery; restored retry timestamps cannot overflow into rapid polling."
+      "summary": "Provider-executed tools bypass response caches; unsupported cross-protocol translation is rejected rather than silently dropping tools."
     },
     {
       "kind": "feature",
-      "summary": "Native upgrade and recovery compatibility includes the published v2.11.7 and v2.12.0 baselines with preserved configuration, business keys and management sessions."
+      "summary": "Native upgrade and recovery acceptance includes the published v2.11.7, v2.12.0 and v2.12.1 baselines."
     }
   ]
 }
