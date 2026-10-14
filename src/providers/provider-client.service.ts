@@ -28,6 +28,7 @@ import {
   TokenUsage,
 } from '../canonical/canonical.types';
 import { ChatCompletionsDenormalizer } from '../canonical/denormalizers/chat-completions.denormalizer';
+import { hasGeminiNativeTools, mergeGeminiNativeTools, nativeChatMetadata } from '../canonical/gemini-native-tools';
 import { ResponsesDenormalizer } from '../canonical/denormalizers/responses.denormalizer';
 import { MessagesDenormalizer } from '../canonical/denormalizers/messages.denormalizer';
 import { GeminiDenormalizer } from '../canonical/denormalizers/gemini.denormalizer';
@@ -175,6 +176,7 @@ export class ProviderClientService {
       async (span) => {
         const node = this.config.getNode(nodeId);
         if (!node) throw new Error(`Node not found: ${nodeId}`);
+        this.assertGeminiToolProtocol(canonical, node);
 
         const startTime = Date.now();
         const upstreamModel = this.resolveUpstreamModel(node, targetModel);
@@ -479,6 +481,7 @@ export class ProviderClientService {
   ): AsyncGenerator<CanonicalStreamEvent> {
     const node = this.config.getNode(nodeId);
     if (!node) throw new Error(`Node not found: ${nodeId}`);
+    this.assertGeminiToolProtocol(canonical, node);
 
     const upstreamModel = this.resolveUpstreamModel(node, targetModel);
     const passthroughNativeStream = this.shouldPassthroughRawSse(
@@ -512,6 +515,7 @@ export class ProviderClientService {
     const parser = this.createStreamParser(
       node.protocol,
       this.resolveUsageSchemaForNode(node),
+      hasGeminiNativeTools(canonical),
     );
     let latestUsage: TokenUsage | undefined;
     let pricingFailure: string | undefined;
@@ -1463,10 +1467,11 @@ export class ProviderClientService {
   private createStreamParser(
     protocol: NodeProtocol,
     usageSchema?: UsageSchema,
+    deferChatStop = false,
   ) {
     switch (protocol) {
       case 'chat_completions':
-        return new ChatCompletionsStreamParser(usageSchema);
+        return new ChatCompletionsStreamParser(usageSchema, deferChatStop);
       case 'responses':
         return new ResponsesStreamParser(usageSchema);
       case 'messages':
@@ -1532,6 +1537,9 @@ export class ProviderClientService {
     requestBody: Record<string, unknown>,
   ): void {
     if (canonical.metadata.source_format !== 'chat_completions') return;
+    if (hasGeminiNativeTools(canonical)) {
+      requestBody.tools = mergeGeminiNativeTools(canonical, requestBody.tools);
+    }
     const rawBody =
       canonical.metadata.raw_body &&
       typeof canonical.metadata.raw_body === 'object' &&
@@ -2243,6 +2251,18 @@ export class ProviderClientService {
     return protocol === 'responses' && canonical.metadata.source_format === 'responses';
   }
 
+  private assertGeminiToolProtocol(canonical: CanonicalRequest, node: NodeConfig): void {
+    if (hasGeminiNativeTools(canonical) &&
+        (canonical.metadata.source_format !== 'chat_completions' ||
+          (node.protocol !== 'chat_completions' && node.protocol !== 'gemini'))) {
+      throw new ProviderError(
+        'Gemini native tools require Chat Completions ingress and a Chat Completions or native Gemini upstream; Responses/Messages tool translation is not supported.',
+        400,
+        node.id,
+      );
+    }
+  }
+
   private shouldPassthroughRawSse(
     canonical: CanonicalRequest,
     protocol: NodeProtocol,
@@ -2759,6 +2779,7 @@ export class ProviderClientService {
 
     return {
       id: (body.id as string) || `gen_${Date.now()}`, content,
+      native_chat_metadata: nativeChatMetadata(body),
       stop_reason: this.mapChatFinishReason(choice.finish_reason as string),
       usage: this.resolveNormalizedUsage(body, usageSchema, fallbackUsage),
       model: (body.model as string) || model,

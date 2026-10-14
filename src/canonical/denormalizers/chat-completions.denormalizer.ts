@@ -5,6 +5,7 @@ import {
   CanonicalMessage,
   CanonicalContentBlock,
 } from '../canonical.types';
+import { nativeChatMetadata } from '../gemini-native-tools';
 import { toOpenAiChatResponseFormat } from '../structured-output';
 import { toOpenAiChatReasoning } from '../reasoning-effort';
 
@@ -238,6 +239,7 @@ export class ChatCompletionsDenormalizer implements RequestDenormalizer {
         },
       ],
       usage,
+      ...nativeChatMetadata({ ...canonical.native_chat_metadata }),
     };
   }
 

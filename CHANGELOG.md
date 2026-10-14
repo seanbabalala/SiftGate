@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2.12.2 - 2026-10-14
+
+- Preserve Gemini native tools on Chat Completions routes, including search, URL
+  context, code execution and Maps; keep upstream rejection of deprecated tools.
+- Return grounding and URL metadata in JSON and SSE, preserving late metadata
+  before the terminal event and retaining token usage and stream-event hooks.
+- Bypass response caches for these provider-executed tools and reject unsupported
+  cross-protocol routes instead of silently dropping tool intent.
+- Extend native upgrade acceptance to the published v2.12.1 baseline.
+
 - Harden source/image publication with default-deny Docker inputs, pinned secret
   scanning of tracked files and full history, exact reviewed false-positive
   exceptions, real Docker boundary tests and content-bound media review.

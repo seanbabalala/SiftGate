@@ -2,6 +2,7 @@ import {
   CanonicalStreamEvent,
   TokenUsage,
 } from '../../canonical/canonical.types';
+import { nativeChatMetadata } from '../../canonical/gemini-native-tools';
 
 /**
  * Serializes CanonicalStreamEvent → SSE text for each client protocol.
@@ -25,6 +26,16 @@ export class ChatCompletionsStreamSerializer {
     switch (event.type) {
       case 'raw_sse':
         return event.text;
+
+      case 'chat_metadata':
+        return this.sse({
+          id: this.id,
+          object: 'chat.completion.chunk',
+          created: Math.floor(Date.now() / 1000),
+          model: this.model,
+          choices: [],
+          ...nativeChatMetadata({ ...event.metadata }),
+        });
 
       case 'tool_call_complete':
         return '';
@@ -203,6 +214,8 @@ export class ResponsesStreamSerializer {
 
   serialize(event: CanonicalStreamEvent): string {
     switch (event.type) {
+      case 'chat_metadata':
+        return '';
       case 'raw_sse':
         return event.text;
 
@@ -528,6 +541,8 @@ export class MessagesStreamSerializer {
 
   serialize(event: CanonicalStreamEvent): string {
     switch (event.type) {
+      case 'chat_metadata':
+        return '';
       case 'raw_sse':
         return event.text;
 

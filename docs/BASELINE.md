@@ -1,9 +1,20 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-10
-Release: **v2.12.1** (availability requires the matching successful release workflow)
+Reviewed: 2026-10-14
+Release: **v2.12.2** (availability requires the matching successful release workflow)
 
-## Post-release publication hardening
+## v2.12.2 Release Scope
+
+Preserve Gemini native Chat Completions tools and whitelisted grounding/URL
+metadata in JSON and SSE. Streaming continues through existing event hooks;
+late metadata precedes the terminal marker without losing token accounting.
+Provider-executed tools bypass exact/stream/semantic response caches, and
+cross-protocol translation is rejected rather than silently omitting tools.
+See [Gemini native tools](GEMINI_NATIVE_TOOLS.md). Public availability requires
+the exact main CI and successful tag-publication workflow; a merge is not a
+deployment. Upgrade acceptance also covers the published v2.12.1 baseline.
+
+## Publication hardening
 
 Source/build gates now include pinned full-history secret scanning, exact
 false-positive review, default-deny Docker inputs and reviewed media hashes.
