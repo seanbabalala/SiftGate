@@ -67,6 +67,20 @@ The owner should repair storage before restarting the checker; do not delete a
 saved disabled preference blindly, since a genuinely new state defaults to enabled.
 Backups include these preferences with the configuration directory.
 
+For Operator/Fleet maintenance, plans bind the entire configuration directory,
+including this cache. Stop background discovery **before** creating/reviewing a
+plan (disable it in the dashboard and wait for that save to finish, or apply the
+host policy before the next scheduled start). Re-plan after any later change;
+do not bypass configuration-drift rejection. Re-enable discovery after the
+maintenance operation, not between approved waves. Native release fixtures use
+the host policy on their fresh synthetic installs to keep this boundary stable;
+normal customer installs still default to discovery enabled.
+
+Operator/Fleet 维护计划会绑定整个配置目录（含更新缓存）。先关闭后台发现并等待
+保存完成，再生成/审批计划；之后如有变化必须重新规划，不能绕过漂移保护。维护完成
+后再恢复发现，不要在已审批的执行批次之间修改。发行验收仅对新建测试实例禁用发现，
+不会改变客户默认设置。
+
 只访问固定公开发行列表，不携带账号令牌、业务密钥、客户配置或用量；远端服务自然
 可以看到来源IP。安装所有者可在首次启动前设置环境变量禁止联网，后台不能覆盖。
 完全离线环境由企业管理员提供发行资料与经验证的离线包，不伪造“已是最新版”。

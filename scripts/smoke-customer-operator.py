@@ -80,6 +80,7 @@ def main():
         selected_port = smoke.port(); assert selected_port != 2099
         cli("init", "--image", args.image, "--local-image", "--timezone", "Asia/Shanghai", "--port", str(selected_port))
         install = KIT.Install.load(directory); assert install.meta["port"] != 2099
+        smoke.disable_release_discovery(install)
         cli("up")
         password = "synthetic operator smoke passphrase"
         access = (directory / "config/activate-code.txt").read_text().strip()

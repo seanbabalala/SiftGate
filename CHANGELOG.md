@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 2.12.3 - 2026-10-14
+
+- Include the Gemini native-tool and grounding-metadata fixes from v2.12.2,
+  whose source tag is preserved but whose publication did not complete.
+- Disable background public-release discovery in fresh synthetic lifecycle
+  fixtures before first boot. This prevents cache writes from racing approved
+  Fleet plans; production configuration-drift protection and customer defaults
+  remain unchanged, with native assertions and regression tests for both paths.
+- Require exact main CI, both native rehearsals, signed artifacts and anonymous
+  cold installs before announcing publication. No database or runtime migration
+  is introduced by this patch.
+
 ## 2.12.2 - 2026-10-14
 
 - Preserve Gemini native tools on Chat Completions routes, including search, URL

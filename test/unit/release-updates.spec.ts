@@ -176,6 +176,38 @@ describe('background release notifications', () => {
       await h.service.onModuleDestroy(); expect(jest.getTimerCount()).toBe(0);
     } finally { jest.useRealTimers(); }
   });
+  it.each([false, true])('host discovery prohibition %s controls startup cache writes during maintenance planning', async disabled => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'siftgate-release-planning-'));
+    const previous = process.env.SIFTGATE_RELEASE_UPDATES_DISABLED;
+    process.env.SIFTGATE_RELEASE_UPDATES_DISABLED = disabled ? '1' : '0';
+    jest.useFakeTimers({ now: base });
+    const stateFile = path.join(root, '.siftgate-release-updates.json');
+    const h = harness({ now: () => Date.now(), random: () => 0, schedule: true, stateFile });
+    try {
+      await h.service.onModuleInit();
+      await expect(fs.stat(stateFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      await jest.advanceTimersByTimeAsync(120001);
+      if (disabled) {
+        expect(h.service.status()).toMatchObject({ state: 'disabled', host_disabled: true, last_attempt_at: null });
+        await h.service.check();
+        expect(h.fetcher).not.toHaveBeenCalled();
+        await expect(fs.stat(stateFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      } else {
+        // The timer has begun the real asynchronous file write. Join that
+        // in-flight check instead of assuming fake timers flush filesystem I/O.
+        expect(h.service.status().last_attempt_at).toBe(base + 30000);
+        await h.service.check(false);
+        expect(h.fetcher).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(await fs.readFile(stateFile, 'utf8')).last_attempt_at).toBe(base + 30000);
+      }
+    } finally {
+      await h.service.onModuleDestroy();
+      jest.useRealTimers();
+      if (previous === undefined) delete process.env.SIFTGATE_RELEASE_UPDATES_DISABLED;
+      else process.env.SIFTGATE_RELEASE_UPDATES_DISABLED = previous;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });
 describe('bounded public metadata store', () => {
   it('rejects unsafe files and malformed cache instead of silently enabling checks', async () => {

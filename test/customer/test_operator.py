@@ -203,6 +203,15 @@ class OperatorTests(unittest.TestCase):
         restored = op.Operator(self.root, now=lambda:self.clock[0], install=self.install)
         self.assertEqual(restored.store.get(result["id"])["status"], "succeeded")
 
+    def test_release_cache_write_after_approval_is_still_rejected_before_stop(self):
+        job=self.plan(); self.approve(job)
+        (self.root/"config/.siftgate-release-updates.json").write_text('{"last_attempt_at":1}')
+        result=self.operator.run_once()
+        self.assertEqual(result["status"],"rejected")
+        self.assertEqual(result["error_code"],"configuration_changed_after_plan")
+        self.assertNotIn("stop",self.install.actions)
+        self.assertNotIn("snapshot",self.install.actions)
+
     def test_candidate_check_is_networkless_readonly_and_before_stop(self):
         self.run_job(self.plan("upgrade"))
         args = next(value[1] for value in self.install.actions if isinstance(value,tuple) and value[1][0]=="run")

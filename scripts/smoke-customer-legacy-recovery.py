@@ -35,6 +35,7 @@ def main():
         port=smoke.port(); assert port!=2099
         cli(args.baseline_kit/"siftgate.py",source,"init","--image",args.image,"--local-image","--timezone","Asia/Shanghai","--port",str(port))
         install=KIT.Install.load(source); installations.append(install)
+        smoke.disable_release_discovery(install)
         actual_version=install.docker("run","--rm","--network","none","--read-only","--cap-drop","ALL",
             "--security-opt","no-new-privileges:true","--entrypoint","node",install.meta["image"],"-p","require('/app/package.json').version")
         assert actual_version==baseline["version"].lstrip("v")

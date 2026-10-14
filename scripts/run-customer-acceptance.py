@@ -75,9 +75,11 @@ def main():
         kit.run(["docker","pull",record["image"]],timeout=1200,output_limit=2*1024*1024)
         common=["--source-image",record["image"],"--image",args.image,"--baseline-kit",tools,"--output",private]
         migrated=run("upgrade-"+record["version"],"smoke-customer-upgrade.py",*common)
+        assert_checks(migrated,{"background_release_checks_disabled"})
         assert_checks(migrated,{"actual_cross_version_upgrade","actual_config_digest_compatibility","paired_image_and_host_kit","business_database_unchanged","existing_management_session_preserved","release_notice_api_available"})
         release.require(migrated["source_version"]==record["version"] and migrated["target_config_digest"]==target["config_digest"],"cross_version_receipt_mismatch")
         fleet=run("fleet-"+record["version"],"smoke-customer-fleet.py",*common)
+        assert_checks(fleet,{"background_release_checks_disabled"})
         assert_checks(fleet,{"real_pinned_ssh_rpc","wrong_host_key_refused_before_agent","offline_import_and_layer_verification","actual_canary_upgrade","manual_next_wave","pause_prevents_dispatch","cancel_preserves_remaining_source","failure_threshold_prevents_later_targets"})
         release.require(fleet["target_config_digest"]==target["config_digest"] and fleet["source_config_digest"]==migrated["source_config_digest"],"fleet_receipt_mismatch")
         recovered=run("source-recovery-"+record["version"],"smoke-customer-legacy-recovery.py","--image",record["image"],"--baseline-kit",tools,"--output",private)
