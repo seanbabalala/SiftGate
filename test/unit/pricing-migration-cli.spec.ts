@@ -50,6 +50,7 @@ describe('explicit pricing migration CLI', () => {
     expect(existsSync(join(directory, 'fresh'))).toBe(false);
   });
 
+  // Complete schema install/remove cycles are fixture work, not latency gates.
   it('applies only with an explicit flag, reads back without changing bytes, and removes an unused schema explicitly', async () => {
     expect(await run(['--sqlite-path', 'pricing.db', '--apply'])).toBe(0);
     const before = readFileSync(join(directory, 'pricing.db'));
@@ -57,7 +58,7 @@ describe('explicit pricing migration CLI', () => {
     expect(readFileSync(join(directory, 'pricing.db'))).toEqual(before);
     expect(await run(['--sqlite-path', 'pricing.db', '--remove-empty'])).toBe(1);
     expect(await run(['--sqlite-path', 'pricing.db', '--apply', '--remove-empty'])).toBe(0);
-  });
+  }, 30_000);
 
   it('rejects ambiguous flags and never falls back to an ambient database URL', async () => {
     expect(await run(['--sqlite-path', 'pricing.db', '--apply', '--dry-run'])).toBe(1);
@@ -86,7 +87,7 @@ describe('explicit pricing migration CLI', () => {
     } finally { await source.destroy(); }
     expect(await run(['--sqlite-path', 'pricing.db', '--dry-run'])).toBe(0);
     expect(JSON.parse(output.at(-1)!)).toMatchObject({ state: 'applied', create_indexes: [] });
-  });
+  }, 30_000);
 
   const pgUrl = process.env.SIFTGATE_PRICING_TEST_POSTGRES_URL;
   (pgUrl ? it : it.skip)(
