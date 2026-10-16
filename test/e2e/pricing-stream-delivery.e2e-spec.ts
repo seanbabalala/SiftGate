@@ -27,7 +27,7 @@ describe("durable stream receipt before HTTP end, tracked delivery afterward", (
       { id: 'synthetic', model: 'gpt-4o', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
       { id: 'synthetic', model: 'gpt-4o', choices: [], usage: { prompt_tokens: 1000, completion_tokens: 100, total_tokens: 1100, prompt_tokens_details: { cached_tokens: 0 }, cache_creation_input_tokens: 0 } },
     ].map(frame => `data: ${JSON.stringify(frame)}\n\n`).join('') + 'data: [DONE]\n\n', { headers: { 'content-type': 'text/event-stream' } }));
-  });
+  }, 30_000); // Full app/schema fixture setup is not the stream I/O deadline below.
   afterEach(async () => { jest.restoreAllMocks(); await runtime?.waitForRequests(); await h?.close(); });
   async function actual(enabled: boolean) {
     if (!enabled) return;
