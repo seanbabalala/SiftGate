@@ -38,6 +38,31 @@ provider I/O. The existing native Gemini adapter remains available separately.
 
 ## Response metadata and streaming
 
+### Function-call thought signatures
+
+For Chat Completions function calls, SiftGate preserves the opaque signature from
+`tool_calls[].extra_content.google.thought_signature` or the compatibility alias
+`tool_calls[].provider_specific_fields.thought_signature`. When both are strings,
+the Google field takes precedence (including an empty string). Values are never
+decoded, trimmed, concatenated, regenerated or replaced with a dummy signature.
+Absent or non-string values do not create a signature.
+
+Chat JSON and SSE output use `extra_content.google.thought_signature` on the
+corresponding tool call. Keep that field when replaying the assistant message
+alongside its tool results on the next turn; SiftGate carries it through request
+normalization and upstream serialization. This contract covers Chat Completions
+ingress and Chat Completions upstream, not cross-protocol signature translation.
+
+In SSE, merge tool deltas by `index`, preserving signatures even when a chunk has
+no `function` fields. Signatures can precede the ID or follow argument/finish/usage
+chunks. SiftGate correlates explicit indexes and known IDs, never function names,
+and drains tool streams through `[DONE]` or EOF before emitting its terminal event.
+An unaddressed continuation cannot be assigned safely among parallel calls and is
+ignored rather than attached to the last call. Ordinary unsigned calls acquire no
+signature metadata. Arbitrary provider-specific fields are not copied.
+
+### Grounding metadata
+
 For non-streaming Chat Completions responses, these fields remain at the JSON
 root, with their upstream JSON structure preserved:
 
@@ -79,4 +104,6 @@ Argon-style synthetic model; they do not assert remote model availability.
 ```bash
 npm test -- --runInBand test/unit/gemini-native-tools.spec.ts
 npm run test:e2e -- --runTestsByPath test/e2e/gemini-native-tools.e2e-spec.ts
+npm test -- --runInBand test/unit/gemini-thought-signature.spec.ts
+npm run test:e2e -- --runTestsByPath test/e2e/gemini-thought-signature.e2e-spec.ts
 ```

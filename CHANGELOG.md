@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 2.12.4 - 2026-10-16
+
+- Preserve opaque Gemini function-call `thought_signature` values across Chat
+  Completions JSON responses, client history and subsequent upstream requests.
+  Accept both Google `extra_content` and `provider_specific_fields`; emit the
+  Google structure without decoding, trimming or synthesizing signatures.
+- Associate streaming tool deltas by index/ID, including signature-only chunks,
+  late IDs and interleaved parallel calls. Drain late signatures after finish
+  reason/usage before emitting the terminal marker, retaining token accounting.
+- Include published v2.12.3 in native upgrade, Fleet and recovery acceptance.
+- Add synthetic two-turn HTTP and fragmented-SSE regressions, with a provider
+  that rejects missing signatures. No runtime restart or new logging is implied.
+
 ## 2.12.3 - 2026-10-14
 
 - Include the Gemini native-tool and grounding-metadata fixes from v2.12.2,

@@ -3,6 +3,7 @@ import {
   TokenUsage,
 } from '../../canonical/canonical.types';
 import { nativeChatMetadata } from '../../canonical/gemini-native-tools';
+import { chatToolThoughtSignature } from '../../canonical/tool-thought-signature';
 
 /**
  * Serializes CanonicalStreamEvent → SSE text for each client protocol.
@@ -76,7 +77,10 @@ export class ChatCompletionsStreamSerializer {
 
         if (event.content.type === 'tool_use') {
           const state = this.resolveToolCallState(event.content);
-          const toolCall: Record<string, unknown> = { index: state.index };
+          const toolCall: Record<string, unknown> = {
+            index: state.index,
+            ...chatToolThoughtSignature(event.content.thought_signature),
+          };
           const fn: Record<string, unknown> = {};
 
           if (!state.started && state.id) toolCall.id = state.id;
@@ -88,7 +92,8 @@ export class ChatCompletionsStreamSerializer {
             fn.arguments = event.content.input_delta;
           }
           if (Object.keys(fn).length > 0) toolCall.function = fn;
-          state.started = true;
+          // Signature-only chunks may precede the ID. Emit it once it arrives.
+          if (toolCall.id) state.started = true;
 
           return this.sse({
             id: this.id,
@@ -157,20 +162,25 @@ export class ChatCompletionsStreamSerializer {
       type: 'tool_use';
     },
   ): { index: number; id: string; name?: string; started: boolean } {
+    const indexKey = content.index === undefined ? undefined : `index:${content.index}`;
+    const idKey = content.id ? `id:${content.id}` : undefined;
     const key =
-      content.id ||
+      indexKey || idKey ||
       this.activeToolCallKey ||
       (content.name ? `name:${content.name}` : `anonymous:${this.nextToolCallIndex}`);
-    let state = this.toolCalls.get(key);
+    let state = this.toolCalls.get(key) || (idKey ? this.toolCalls.get(idKey) : undefined);
     if (!state) {
       state = {
-        index: this.nextToolCallIndex++,
+        index: content.index ?? this.nextToolCallIndex,
         id: content.id || '',
         name: content.name,
         started: false,
       };
       this.toolCalls.set(key, state);
+      this.nextToolCallIndex = Math.max(this.nextToolCallIndex, state.index + 1);
     }
+    if (indexKey) this.toolCalls.set(indexKey, state);
+    if (idKey) this.toolCalls.set(idKey, state);
     if (content.id) state.id = content.id;
     if (content.name) state.name = content.name;
     this.activeToolCallKey = key;

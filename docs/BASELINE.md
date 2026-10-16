@@ -1,7 +1,19 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-14
-Release: **v2.12.3** (availability requires the matching successful release workflow)
+Reviewed: 2026-10-16
+Release: **v2.12.4** (availability requires the matching successful release workflow)
+
+## v2.12.4 Release Scope
+
+Preserve opaque Gemini Chat Completions function-call signatures through JSON,
+SSE and next-turn assistant history. Both upstream signature aliases normalize
+into one field; Chat output uses `extra_content.google.thought_signature`.
+Streaming retains index/ID association before IDs arrive and across parallel
+calls, draining late signatures before the final stop without losing usage.
+Synthetic provider-backed HTTP tests cover both turns and reject missing state;
+they do not establish remote model availability. Existing release and native
+acceptance gates remain mandatory, including upgrade/Fleet/recovery from the
+published v2.12.3 predecessor. Publication does not restart any instance.
 
 ## v2.12.3 Release Scope
 
