@@ -29,6 +29,7 @@ import {
 } from '../canonical/canonical.types';
 import { ChatCompletionsDenormalizer } from '../canonical/denormalizers/chat-completions.denormalizer';
 import { hasGeminiNativeTools, mergeGeminiNativeTools, nativeChatMetadata } from '../canonical/gemini-native-tools';
+import { toolThoughtSignature } from '../canonical/tool-thought-signature';
 import { ResponsesDenormalizer } from '../canonical/denormalizers/responses.denormalizer';
 import { MessagesDenormalizer } from '../canonical/denormalizers/messages.denormalizer';
 import { GeminiDenormalizer } from '../canonical/denormalizers/gemini.denormalizer';
@@ -2762,6 +2763,7 @@ export class ProviderClientService {
         content.push({
           type: 'tool_use', id: (tc.id as string) || '', name: (fn.name as string) || '',
           input: this.safeParseJson((fn.arguments as string) || '{}'),
+          ...toolThoughtSignature(tc),
         });
       }
     }

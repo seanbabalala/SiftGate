@@ -30,6 +30,8 @@ export interface ToolUseBlock {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  /** Opaque Gemini tool-call state, preserved verbatim across turns. */
+  thought_signature?: string;
   cache_control?: Record<string, unknown>;
 }
 
@@ -452,8 +454,11 @@ export interface StreamTextDelta {
 export interface StreamToolUseDelta {
   type: 'tool_use';
   id: string;
+  /** Stable upstream tool index, including chunks received before the ID. */
+  index?: number;
   name?: string;
   input_delta?: string;
+  thought_signature?: string;
 }
 
 export interface StreamDeltaEvent {

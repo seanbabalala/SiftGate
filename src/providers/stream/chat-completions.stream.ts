@@ -1,6 +1,7 @@
 import { attachTokenPricingEvidence } from '../pricing-usage-evidence';
 import { CanonicalStreamEvent, TokenUsage } from '../../canonical/canonical.types';
 import { nativeChatMetadata } from '../../canonical/gemini-native-tools';
+import { toolThoughtSignature } from '../../canonical/tool-thought-signature';
 import {
   extractUsageBySchema,
   extractUsageByKnownFields,
@@ -104,7 +105,7 @@ export class ChatCompletionsStreamParser {
         if (!this.hasStarted && (data.id || data.model)) {
           yield* this.ensureStarted(data);
         }
-        if (this.deferStop) {
+        if (this.shouldDeferStop()) {
           this.pendingStopReason ??= 'end_turn';
           return;
         }
@@ -137,19 +138,17 @@ export class ChatCompletionsStreamParser {
     if (delta.tool_calls && Array.isArray(delta.tool_calls)) {
       for (const tc of delta.tool_calls as Record<string, unknown>[]) {
         const fn = (tc.function || {}) as Record<string, unknown>;
-        const index =
-          typeof tc.index === 'number' && Number.isFinite(tc.index)
-            ? tc.index
-            : this.toolCallsByIndex.size;
+        const signature = toolThoughtSignature(tc);
+        const index = this.resolveToolCallIndex(tc, fn);
+        // An unaddressed parallel delta cannot safely be assigned to any call.
+        if (index === undefined) continue;
         const state = this.toolCallsByIndex.get(index) || { id: '' };
         const id = typeof tc.id === 'string' && tc.id ? tc.id : state.id;
         const name =
           typeof fn.name === 'string' && fn.name
             ? fn.name
             : state.name;
-        if (id || name) {
-          this.toolCallsByIndex.set(index, { id, name });
-        }
+        this.toolCallsByIndex.set(index, { id, name });
         const inputDelta =
           fn.arguments === undefined || fn.arguments === null
             ? undefined
@@ -159,8 +158,10 @@ export class ChatCompletionsStreamParser {
           content: {
             type: 'tool_use',
             id,
+            index,
             name: typeof fn.name === 'string' && fn.name ? fn.name : undefined,
             input_delta: inputDelta,
+            ...signature,
           },
         };
       }
@@ -169,7 +170,7 @@ export class ChatCompletionsStreamParser {
     // Finish reason — end of stream
     if (finishReason) {
       const stopReason = this.mapFinishReason(finishReason);
-      if (data.usage && !this.deferStop) {
+      if (data.usage && !this.shouldDeferStop()) {
         this.hasSentStop = true;
         this.pendingStopReason = null;
         yield {
@@ -184,6 +185,7 @@ export class ChatCompletionsStreamParser {
   }
 
   *flush(): Generator<CanonicalStreamEvent> {
+    if (this.buffer.trim()) yield* this.parse('\n');
     if (!this.hasSentStop && this.pendingStopReason) {
       this.hasSentStop = true;
       yield {
@@ -193,6 +195,31 @@ export class ChatCompletionsStreamParser {
       };
       this.pendingStopReason = null;
     }
+  }
+
+  private shouldDeferStop(): boolean {
+    // Tool signatures can follow finish_reason/usage. Drain until DONE or EOF.
+    return this.deferStop || this.toolCallsByIndex.size > 0;
+  }
+
+  private resolveToolCallIndex(
+    tc: Record<string, unknown>,
+    fn: Record<string, unknown>,
+  ): number | undefined {
+    if (typeof tc.index === 'number' && Number.isInteger(tc.index) && tc.index >= 0) {
+      return tc.index;
+    }
+    if (typeof tc.id === 'string' && tc.id) {
+      for (const [index, state] of this.toolCallsByIndex) {
+        if (state.id === tc.id) return index;
+      }
+    } else if (!fn.name) {
+      if (this.toolCallsByIndex.size === 1) return this.toolCallsByIndex.keys().next().value;
+      if (this.toolCallsByIndex.size > 1) return undefined;
+    }
+    let index = 0;
+    while (this.toolCallsByIndex.has(index)) index++;
+    return index;
   }
 
   private *ensureStarted(

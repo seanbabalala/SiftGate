@@ -6,6 +6,7 @@ import {
   CanonicalContentBlock,
 } from '../canonical.types';
 import { nativeChatMetadata } from '../gemini-native-tools';
+import { chatToolThoughtSignature } from '../tool-thought-signature';
 import { toOpenAiChatResponseFormat } from '../structured-output';
 import { toOpenAiChatReasoning } from '../reasoning-effort';
 
@@ -115,6 +116,7 @@ export class ChatCompletionsDenormalizer implements RequestDenormalizer {
               name: block.name,
               arguments: JSON.stringify(block.input),
             },
+            ...chatToolThoughtSignature(block.thought_signature),
           });
         }
       }
@@ -201,6 +203,7 @@ export class ChatCompletionsDenormalizer implements RequestDenormalizer {
             name: block.name,
             arguments: JSON.stringify(block.input),
           },
+          ...chatToolThoughtSignature(block.thought_signature),
         });
       }
     }

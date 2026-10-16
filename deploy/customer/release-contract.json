@@ -48,6 +48,10 @@
     {
       "kind": "fix",
       "summary": "Native lifecycle fixtures disable background release discovery before first boot, preserving strict configuration-drift rejection and customer defaults."
+    },
+    {
+      "kind": "fix",
+      "summary": "Opaque Gemini function-call thought signatures survive Chat Completions JSON, SSE and next-turn history, with parallel index/ID correlation and late-signature draining."
     }
   ]
 }

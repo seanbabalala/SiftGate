@@ -13,6 +13,7 @@ import {
 import { normalizeStructuredOutputFromBody } from '../structured-output';
 import { normalizeReasoningFromBody } from '../reasoning-effort';
 import { normalizeRequestIdentityHeaders } from './request-metadata';
+import { toolThoughtSignature } from '../tool-thought-signature';
 
 /**
  * Normalizes OpenAI Chat Completions format → Canonical format.
@@ -103,6 +104,7 @@ export class ChatCompletionsNormalizer implements Normalizer {
             id: (tc.id as string) || '',
             name: (fn.name as string) || '',
             input: this.safeParseJson(fn.arguments as string),
+            ...toolThoughtSignature(tc),
           } satisfies ToolUseBlock);
         }
 
