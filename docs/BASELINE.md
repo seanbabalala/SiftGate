@@ -12,7 +12,8 @@ Streaming retains index/ID association before IDs arrive and across parallel
 calls, draining late signatures before the final stop without losing usage.
 Synthetic provider-backed HTTP tests cover both turns and reject missing state;
 they do not establish remote model availability. Existing release and native
-acceptance gates remain mandatory. Publication does not restart any instance.
+acceptance gates remain mandatory, including upgrade/Fleet/recovery from the
+published v2.12.3 predecessor. Publication does not restart any instance.
 
 ## v2.12.3 Release Scope
 

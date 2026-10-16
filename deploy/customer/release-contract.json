@@ -18,6 +18,12 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:695cc662caa19a3a9c4c01404b6c0c78268396471a86719be6249fc76ee1f481",
       "installer_sha256": "accf019039d4810ecbe25db9c7934077ed8824306593703b309daf6df842bd10",
       "source_commit": "281316d993990c2fd872f90bf4438918431c6cf6"
+    },
+    {
+      "version": "2.12.3",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:2a7eb90c3ebf6c0373457777ecb25a06c21925fc1e9346d426004f0bfe123ea3",
+      "installer_sha256": "68a9a1b6309d6aaec9bbfc29c37c0b272345673c2090bcc07405c1ebd271a356",
+      "source_commit": "b5140f2a7a2e8abd46366ef1212236ba1f297601"
     }
   ],
   "source_kit_protocols": [
@@ -52,6 +58,10 @@
     {
       "kind": "fix",
       "summary": "Opaque Gemini function-call thought signatures survive Chat Completions JSON, SSE and next-turn history, with parallel index/ID correlation and late-signature draining."
+    },
+    {
+      "kind": "fix",
+      "summary": "Native upgrade, Fleet and recovery acceptance includes the published v2.12.3 baseline so existing installations can upgrade to this release."
     }
   ]
 }

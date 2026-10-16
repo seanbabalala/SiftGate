@@ -11,6 +11,7 @@
 - Associate streaming tool deltas by index/ID, including signature-only chunks,
   late IDs and interleaved parallel calls. Drain late signatures after finish
   reason/usage before emitting the terminal marker, retaining token accounting.
+- Include published v2.12.3 in native upgrade, Fleet and recovery acceptance.
 - Add synthetic two-turn HTTP and fragmented-SSE regressions, with a provider
   that rejects missing signatures. No runtime restart or new logging is implied.
 
