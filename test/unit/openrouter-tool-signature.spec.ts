@@ -47,6 +47,23 @@ function stream(wire: string) {
 }
 
 describe('Google/OpenRouter tool signature bridge', () => {
+  it.each(['history', 'response'])('indexes %s signatures once for large parallel batches', (path) => {
+    let reads = 0;
+    const count = 200;
+    const batch = Array.from({ length: count }, (_, index) => ({ ...plainCalls()[0], id: `batch_${index}` }));
+    const reasoning_details = batch.map((call) => ({
+      type: 'reasoning.encrypted', id: call.id,
+      get data() { reads++; return 'synthetic-parallel'; },
+      format: 'google-gemini-v1',
+    }));
+    const message = { role: 'assistant', content: null, tool_calls: batch, reasoning_details };
+    const content = path === 'history'
+      ? normalizer.normalize({ messages: [message] }, {}).messages[0].content
+      : provider['normalizeChatCompletionsResponse']({ choices: [{ message, finish_reason: 'tool_calls' }] },
+        { tier: 'standard', score: 0, is_fallback: false }, 'test', 'gemini-test', 0).content;
+    expect(reads).toBe(count * 2); // Validation + copy, not a scan for every tool.
+    expect(content).toHaveLength(count);
+  });
   it.each(['google', 'openrouter', 'both'])('normalizes %s JSON responses and request history by call ID, never reasoning index', (path) => {
     const source = message(path);
     const response = provider['normalizeChatCompletionsResponse']({ id: 'test', choices: [{ message: source, finish_reason: 'tool_calls' }] },

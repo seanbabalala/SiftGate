@@ -12,6 +12,17 @@ export interface ToolThoughtSignature {
   thought_signature_detail_order?: number;
 }
 
+export type ToolSignatureDetailIndex = ReadonlyMap<string, { detail: ToolThoughtSignatureDetail; order: number }>;
+
+/** Index once per message/response, rather than rescanning for each parallel call. */
+export function indexToolSignatureDetails(value: unknown): ToolSignatureDetailIndex {
+  const result = new Map<string, { detail: ToolThoughtSignatureDetail; order: number }>();
+  toolSignatureDetails(value).forEach((detail, order) => {
+    if (!result.has(detail.id)) result.set(detail.id, { detail, order });
+  });
+  return result;
+}
+
 /** Read only Gemini-compatible encrypted entries; their index is never identity. */
 export function toolSignatureDetails(value: unknown): ToolThoughtSignatureDetail[] {
   if (!Array.isArray(value)) return [];
@@ -33,19 +44,19 @@ export function toolSignatureDetails(value: unknown): ToolThoughtSignatureDetail
 }
 
 /** Opaque provider state: never trim, decode, concatenate or synthesize it. */
-export function toolThoughtSignature(toolCall: Record<string, unknown>, reasoningDetails?: unknown): ToolThoughtSignature {
+export function toolThoughtSignature(toolCall: Record<string, unknown>, reasoningDetails?: unknown, indexedDetails?: ToolSignatureDetailIndex): ToolThoughtSignature {
   const google = asRecord(asRecord(toolCall.extra_content)?.google);
   const provider = asRecord(toolCall.provider_specific_fields);
   const native = typeof google?.thought_signature === 'string'
     ? google.thought_signature
     : provider?.thought_signature;
-  const details = toolSignatureDetails(reasoningDetails);
-  const order = details.findIndex((entry) => entry.id === toolCall.id);
-  const detail = details[order];
+  const indexed = indexedDetails ?? (reasoningDetails === undefined ? undefined : indexToolSignatureDetails(reasoningDetails));
+  const entry = typeof toolCall.id === 'string' ? indexed?.get(toolCall.id) : undefined;
+  const detail = entry?.detail;
   const signature = typeof native === 'string' ? native : detail?.data;
   return typeof signature === 'string' ? {
     thought_signature: signature,
-    ...(detail?.data === signature ? { thought_signature_detail: detail, thought_signature_detail_order: order } : {}),
+    ...(detail?.data === signature ? { thought_signature_detail: detail, thought_signature_detail_order: entry?.order } : {}),
   } : {};
 }
 

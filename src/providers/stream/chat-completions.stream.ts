@@ -184,12 +184,17 @@ export class ChatCompletionsStreamParser {
       }
     }
 
+    const callsById = new Map<string, [number, ChatToolCallState] | null>();
+    if (reasoningDetails.length) for (const entry of this.toolCallsByIndex) {
+      const id = entry[1].id;
+      if (id) callsById.set(id, callsById.has(id) ? null : entry);
+    }
     for (const detail of reasoningDetails) {
-      const matches = [...this.toolCallsByIndex].filter(([, state]) => state.id === detail.id);
+      const match = callsById.get(detail.id);
       // A reasoning-detail index is unrelated to a tool-call index. Wait for
       // the matching ID instead of binding an early/orphan entry by position.
-      if (matches.length !== 1) continue;
-      const [index, state] = matches[0];
+      if (!match) continue;
+      const [index, state] = match;
       const signature = this.signatureDelta(state);
       if (Object.keys(signature).length) yield {
         type: 'delta', content: { type: 'tool_use', id: state.id, index, ...signature },
