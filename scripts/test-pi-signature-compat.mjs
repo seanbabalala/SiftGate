@@ -76,7 +76,7 @@ async function runCase(dialect, when, bridge = true, clientProvider = 'siftgate-
         }
         upstreamStatuses.push(200);
         const signed = dialect === 'google'
-          ? { tool_calls: signatures.map((signature, index) => ({ index, ...google(signature) })) }
+          ? { tool_calls: signatures.map((signature, index) => ({ index, ...google(signature) })).reverse() }
           : { reasoning_details: [...details].reverse() };
         const first = [];
         if (when === 'early') first.push(chunk(signed));

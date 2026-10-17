@@ -239,6 +239,9 @@ export class ChatCompletionsStreamParser {
   private signatureDelta(state: ChatToolCallState, toolCall?: Record<string, unknown>): ToolThoughtSignature {
     const native = toolCall ? toolThoughtSignature(toolCall).thought_signature : undefined;
     if (native !== undefined) state.nativeSignature = native;
+    // Do not make pi create a placeholder tool from a signature-only chunk.
+    // Retain the bytes by index and emit them once the real ID arrives.
+    if (!state.id) return {};
     const detail = this.reasoningDetailsById.get(state.id);
     const signature = state.nativeSignature ?? detail?.data;
     const result: ToolThoughtSignature = {};

@@ -60,7 +60,7 @@ normalization and upstream serialization. This contract covers Chat Completions
 ingress and Chat Completions upstream, not cross-protocol signature translation.
 
 In SSE, merge tool deltas by `index`, preserving signatures even when a chunk has
-no `function` fields. Signatures can precede the ID or follow argument/finish/usage
+no `function` fields. Upstream signatures can precede the ID or follow argument/finish/usage
 chunks. SiftGate correlates explicit indexes and known IDs, never function names,
 and drains tool streams through `[DONE]` or EOF before emitting its terminal event.
 An unaddressed continuation cannot be assigned safely among parallel calls and is
@@ -73,7 +73,9 @@ pi's Chat Completions adapter replays encrypted state through `reasoning_details
 Older pi 0.73.1 only attaches a detail after it has seen the matching tool ID;
 newer pi 1.3.0 preserves the details in a thinking-signature block. SiftGate emits
 the complete encrypted envelopes once, after tool IDs are known and before its
-terminal event. Text and argument deltas still flow immediately. The original
+terminal event. Signature-only chunks without IDs are retained by index until
+identity arrives, so clients do not create empty tool items in signature-arrival
+order. Text and argument deltas still flow immediately. The original
 encrypted-detail sequence and recognized `format`/`index` metadata survive;
 the reasoning `index` is **not** a tool-call index and is never used for matching.
 Signatures arriving before IDs, after usage/finish, or through repeated aliases

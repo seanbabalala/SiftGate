@@ -115,9 +115,8 @@ describe('Gemini opaque Chat Completions tool signatures', () => {
       + 'data: [DONE]\n\n',
     );
     expect(tools).toEqual([
-      { index: 1, ...standard('second') }, { index: 0, ...standard(signature) },
-      { index: 0, id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"q":' } },
-      { index: 1, id: 'call_2', type: 'function', function: { name: 'search', arguments: '{"q":' } },
+      { index: 0, id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"q":' }, ...standard(signature) },
+      { index: 1, id: 'call_2', type: 'function', function: { name: 'search', arguments: '{"q":' }, ...standard('second') },
       { index: 1, function: { arguments: '"b"}' } },
       { index: 0, function: { arguments: '"a"}' } },
     ]);
