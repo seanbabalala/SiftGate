@@ -21,7 +21,7 @@
   one. Preserve explicit zero/dynamic budgets and unrelated Google extensions.
   Keep legacy Gemini/Anthropic budget mappings and ordinary model behavior.
 - Extend real pi 0.73.1/1.3.0 and JSON/SSE regressions while retaining tool-signature
-  round-trip tests. Include published v2.12.5 in native upgrade/Fleet/recovery
+  replay tests. Include published v2.12.5 in native upgrade/Fleet/recovery
   acceptance. No database migration or automatic installation restart is added.
 
 ## 2.12.5 - 2026-10-17
