@@ -87,6 +87,13 @@ v0.6 adds canonical structured-output fields so the pipeline preserves OpenAI Ch
 
 v1.0 extends the same canonical layer for reasoning controls. Normalizers preserve OpenAI Chat `reasoning_effort`, OpenAI Responses `reasoning`, Anthropic Messages `thinking`, and Gemini-style `thinking_config` intent as metadata-safe fields: requested status, effort, source, budget token count, and raw provider-specific shape. Denormalizers only emit a cross-protocol value when the mapping is safe; otherwise the provider call is marked downgraded or unsupported for logs and route explanations without storing prompts, responses, hidden reasoning text, raw headers, or provider keys.
 
+v2.12.6 distinguishes Chat/OpenRouter reasoning from Responses reasoning and
+recognizes nested Google thinking controls. A node's `chat_reasoning_format`
+selects the outgoing Chat dialect after drops and semantic default merging.
+Official host detection is conservative; private proxies opt in explicitly.
+Known level-based Gemini models use levels, while legacy native budget mappings
+remain unchanged. Canonical request state is not mutated between fallback attempts.
+
 ### Authentication And Governance
 
 Gateway API keys are generated in the Dashboard and used by client applications. Provider API keys are configured on upstream nodes and used only by the gateway.

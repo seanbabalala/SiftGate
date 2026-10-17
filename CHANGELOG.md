@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 2.12.6 - 2026-10-17
+
+- Add model- and upstream-aware Gemini reasoning controls. Level-based Gemini
+  3/4 requests use `thinking_level` on Google Chat routes and `thinkingLevel` on
+  native Gemini routes, rather than inventing a legacy thinking budget.
+- Add `request_compatibility.chat_reasoning_format` for private proxies and
+  opaque model aliases. Auto mode recognizes official Google/OpenRouter hosts;
+  unknown Chat proxies keep their existing OpenAI effort behavior. A proxy which
+  rejects `reasoning_effort` can opt into `google-thinking-level`, which also
+  remains compatible with Google's official Chat endpoint.
+- Recognize pi/OpenRouter `reasoning` and nested Google thinking configuration.
+  Preserve OpenRouter effort, explicit budget, enable/disable and visibility
+  controls on OpenRouter routes; record nested Google controls in reasoning
+  metadata without logging hidden reasoning text.
+- Prefer explicit client controls over equivalent node defaults in another
+  dialect; reject contradictory client controls instead of silently choosing
+  one. Preserve explicit zero/dynamic budgets and unrelated Google extensions.
+  Keep legacy Gemini/Anthropic budget mappings and ordinary model behavior.
+- Extend real pi 0.73.1/1.3.0 and JSON/SSE regressions while retaining tool-signature
+  round-trip tests. Include published v2.12.5 in native upgrade/Fleet/recovery
+  acceptance. No database migration or automatic installation restart is added.
+
 ## 2.12.5 - 2026-10-17
 
 - Bridge Gemini tool signatures between Google `extra_content` and OpenRouter

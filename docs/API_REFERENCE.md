@@ -176,10 +176,19 @@ v1.0 adds privacy-safe canonical reasoning intent so production clients can ask 
 
 | Ingress | Supported Field | Behavior |
 | --- | --- | --- |
-| `/v1/chat/completions` | `reasoning_effort` | Passed through to Chat targets, mapped to Responses `reasoning.effort`, or mapped to Anthropic `thinking.budget_tokens` only when a safe budget can be derived |
+| `/v1/chat/completions` | `reasoning_effort` | Uses the selected Chat reasoning dialect; mapped to Responses `reasoning.effort` or Anthropic `thinking.budget_tokens` only when safe |
+| `/v1/chat/completions` | `reasoning.effort`, `reasoning.max_tokens`, `reasoning.enabled`, `reasoning.exclude` | OpenRouter controls remain intact on OpenRouter targets; explicit Gemini modes translate supported controls |
 | `/v1/responses` | `reasoning.effort` | Passed through to Responses targets or mapped to OpenAI-compatible `reasoning_effort` / Anthropic thinking when safe |
 | `/v1/messages` | `thinking.type=enabled`, `thinking.budget_tokens` | Passed through for native Messages targets; cross-protocol forwarding keeps the original intent in canonical metadata and marks downgraded when no safe effort mapping exists |
 | OpenAI-compatible Gemini-style Chat | `thinking_config` | Preserved for compatible Chat targets as `thinking_config`; other protocols record the downgrade instead of inventing provider-specific values |
+| Google-compatible Chat | `extra_body.google.thinking_config` | Preserved and included in metadata-only reasoning diagnostics; known level-based native Gemini targets use `thinkingLevel` instead of an inferred budget |
+
+For private Gemini proxies which reject `reasoning_effort`, set the node's
+`request_compatibility.chat_reasoning_format: google-thinking-level`. This also
+works against Google's official Chat endpoint. Default `auto` only recognizes
+known official Google/OpenRouter hosts; unknown proxies retain their existing
+behavior. See [Gemini reasoning controls](GEMINI_NATIVE_TOOLS.md#gemini-reasoning-controls-and-upstream-dialects)
+for all modes, explicit budgets, defaults, conflicts and compatibility limits.
 
 Canonical OpenAI effort levels include `none`, `minimal`, `low`, `medium`,
 `high`, `xhigh`, and `max`; actual support remains model-specific. GPT-5.6 uses

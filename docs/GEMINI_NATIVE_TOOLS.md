@@ -105,6 +105,59 @@ request_compatibility:
 the signature bridge does not resurrect removed history. No new secret or
 reasoning-payload logging is enabled.
 
+### Gemini reasoning controls and upstream dialects
+
+Starting in v2.12.6, reasoning strength is separate from tool signatures. A
+compatible client can send `reasoning_effort: "high"` or OpenRouter-style
+`reasoning: { effort: "high" }`. The outgoing **wire model** and upstream dialect
+determine the control sent; routing aliases do not change the intended strength.
+
+For a private proxy which translates OpenAI effort into a legacy budget and
+rejects it for a level-based model, configure its node explicitly:
+
+```yaml
+request_compatibility:
+  chat_reasoning_format: google-thinking-level
+```
+
+This emits `extra_body.google.thinking_config.thinking_level`, not a guessed
+token budget. The same mode works if that node later points to Google's official
+Chat endpoint. It applies to the whole node: use separate nodes for different
+upstream dialects. Available modes:
+
+| Mode | Outgoing Chat controls |
+| --- | --- |
+| `auto` (default) | Official Google hosts + known Gemini 3/4 wire model IDs use Google levels; `openrouter.ai` uses OpenRouter `reasoning`; unknown proxies retain OpenAI effort |
+| `openai` | Preserve the existing OpenAI `reasoning_effort` behavior; explicit opt-out from automatic Google mapping |
+| `openrouter` | Preserve the unified `reasoning` object, including `max_tokens`, `enabled` and `exclude`; useful for private OpenRouter proxies |
+| `google-thinking-level` | Google nested thinking config, including aliases whose model name does not identify Gemini |
+| `google-thinking-budget` | Google nested budget config for explicitly selected legacy budget endpoints |
+
+Auto detection never trusts a hostname merely containing `googleapis.com` or
+`openrouter.ai`. The native `gemini` protocol uses `generationConfig.thinkingConfig`
+with `thinkingLevel` for known Gemini 3/4 models, keeping the prior budget mapping
+for older/unknown models. This reasoning change does not add native Gemini tool
+signature replay; the tool-signature guarantees above concern Chat Completions.
+
+Generic low/medium/high efforts map to those levels. Extended `xhigh`/`max` efforts
+saturate at `high`; `minimal` maps to `low` for Argon, 3.8 Flash and Pro, while
+other Flash variants retain `minimal`. An explicit native level is not clamped.
+Unsupported values remain subject to upstream validation. Disabling thinking on
+a level-only route is rejected, not silently converted into enabled thinking.
+
+Explicit Google configuration is preserved, including `include_thoughts`, budget
+`0` (off) and `-1` (dynamic). Explicit numeric budgets are not fabricated into
+levels: a model which does not support budgets can still reject that explicit
+request. Existing native Gemini/Anthropic effort-to-budget values are unchanged.
+`exclude` controls returned thinking visibility, not reasoning strength.
+
+Client-specified strength/visibility takes precedence over node defaults written
+in another dialect. Contradictory client level/budget/effort controls are rejected
+before dispatch. Dropped fields are not reconstructed from raw history. All
+conversions operate on a request copy, including JSON, SSE and fallback attempts.
+Nested Google controls now populate metadata-only reasoning diagnostics; a
+supported mapping is not proof that an upstream accepted or executed it.
+
 ### Grounding metadata
 
 For non-streaming Chat Completions responses, these fields remain at the JSON
@@ -152,6 +205,8 @@ npm test -- --runInBand test/unit/gemini-thought-signature.spec.ts
 npm run test:e2e -- --runTestsByPath test/e2e/gemini-thought-signature.e2e-spec.ts
 npm test -- --runInBand test/unit/openrouter-tool-signature.spec.ts
 npm run test:e2e -- --runTestsByPath test/e2e/openrouter-tool-signature.e2e-spec.ts
+npm test -- --runInBand test/unit/gemini-reasoning-compat.spec.ts
+npm run test:e2e -- --runTestsByPath test/e2e/gemini-reasoning-compat.e2e-spec.ts
 ```
 
 CI additionally installs pinned, unmodified pi clients **outside** the gateway
@@ -166,5 +221,7 @@ To reproduce locally after `npm run build`:
 npm install --prefix .local-dev/pi-compat --ignore-scripts @mariozechner/pi-ai@0.73.1
 PI_AI_PACKAGE_DIR="$PWD/.local-dev/pi-compat/node_modules/@mariozechner/pi-ai" \
   node scripts/test-pi-signature-compat.mjs
+PI_AI_PACKAGE_DIR="$PWD/.local-dev/pi-compat/node_modules/@mariozechner/pi-ai" \
+  node scripts/test-pi-reasoning-compat.mjs
 # Repeat with @earendil-works/pi-ai@1.3.0 in a separate prefix.
 ```

@@ -790,6 +790,8 @@ export interface NodeRequestCompatibilityConfig {
   chat_tool_messages?: 'native' | 'stringify_as_user' | 'drop';
   /** Upstream signature dialect. Default: OpenRouter for openrouter.ai, Google otherwise. Client responses expose both. */
   chat_tool_signatures?: 'google' | 'openrouter' | 'both';
+  /** Auto: official OpenRouter/Google hosts use their native controls; unknown Chat proxies retain OpenAI effort. */
+  chat_reasoning_format?: 'auto' | 'openai' | 'openrouter' | 'google-thinking-level' | 'google-thinking-budget';
   /** Request body fields to omit before forwarding to this upstream node. */
   drop_parameters?: string[];
   /** Request body fields to add when the client did not provide them; plain objects merge by missing nested keys. */

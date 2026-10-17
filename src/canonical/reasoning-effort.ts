@@ -6,7 +6,8 @@ import type {
   ReasoningStrategy,
   SourceFormat,
 } from './canonical.types';
-import type { NodeProtocol } from '../config/gateway.config';
+import type { NodeProtocol, NodeRequestCompatibilityConfig } from '../config/gateway.config';
+import { assertGoogleThinkingControls, geminiThinkingConfig, googleThinkingFromBody, resolveChatReasoningFormat } from './gemini-reasoning';
 
 export interface ReasoningFields {
   reasoning_effort?: CanonicalReasoningEffort;
@@ -42,8 +43,13 @@ export function normalizeReasoningFromBody(
   sourceFormat: SourceFormat,
   body: Record<string, unknown>,
 ): ReasoningFields {
+  assertGoogleThinkingControls(body);
   const intent = extractReasoningIntent(sourceFormat, body);
   if (!intent) return {};
+  const google = normalizeGeminiThinkingBody(body);
+  if (!intent.thinking && google?.thinking) intent.thinking = google.thinking;
+  const exclude = booleanOrUndefined(asRecord(body.reasoning)?.exclude);
+  if (sourceFormat === 'chat_completions' && exclude !== undefined) intent.exclude = exclude;
 
   return {
     reasoning_effort: intent.effort,
@@ -57,23 +63,30 @@ export function toOpenAiChatReasoning(
   intent?: CanonicalReasoningIntent,
 ): Record<string, unknown> {
   if (!intent?.requested) return {};
+  const google = intent.thinking?.source === 'gemini.thinking_config' && intent.thinking.raw
+    ? intent.thinking.nested_google
+      ? { extra_body: { google: { thinking_config: clone(intent.thinking.raw) } } }
+      : { thinking_config: clone(intent.thinking.raw) }
+    : {};
+
+  if (intent.source === 'chat_completions.reasoning') return { reasoning: clone(intent.raw), ...google };
 
   if (intent.source === 'chat_completions.reasoning_effort') {
     // Native Chat forwarding must remain transparent for provider extensions.
     // Unknown values are deliberately not mapped across protocols below.
     const rawEffort = rawStringEffort(intent.raw);
-    if (rawEffort) return { reasoning_effort: rawEffort };
+    if (rawEffort) return { reasoning_effort: rawEffort, ...google, ...(intent.exclude !== undefined ? { reasoning: { exclude: intent.exclude } } : {}) };
 
     const effort = intent.effort;
     return effort && effort !== 'unknown' ? { reasoning_effort: effort } : {};
   }
 
   if (intent.source === 'gemini.thinking_config' && intent.thinking?.raw) {
-    return { thinking_config: clone(intent.thinking.raw) };
+    return { ...google, ...(intent.exclude !== undefined ? { reasoning: { exclude: intent.exclude } } : {}) };
   }
 
   if (intent.effort && intent.effort !== 'unknown') {
-    return { reasoning_effort: intent.effort };
+    return { reasoning_effort: intent.effort, ...google };
   }
 
   return {};
@@ -105,10 +118,10 @@ export function toAnthropicThinking(
     return clone(intent.thinking.raw) as Record<string, unknown>;
   }
 
-  if (intent.effort === 'none') return { type: 'disabled' };
+  if (intent.effort === 'none' || intent.enabled === false || intent.budget_tokens === 0) return { type: 'disabled' };
 
   const budget = intent.budget_tokens || budgetTokensForEffort(intent.effort);
-  if (!budget) return undefined;
+  if (!budget || budget < 0) return undefined;
   if (maxTokens && maxTokens <= budget) return undefined;
 
   return {
@@ -122,6 +135,7 @@ export function resolveReasoningForwarding(
   sourceFormat: SourceFormat,
   targetProtocol: NodeProtocol | undefined,
   declaredSupport: boolean | null | undefined,
+  target?: { model: string; base_url?: string; request_compatibility?: NodeRequestCompatibilityConfig },
 ): ReasoningForwarding {
   if (!intent?.requested) {
     return {
@@ -138,7 +152,7 @@ export function resolveReasoningForwarding(
   const base = {
     requested: true,
     effort: intent.effort || null,
-    budget_tokens: intent.budget_tokens || null,
+    budget_tokens: intent.budget_tokens ?? null,
     source: intent.source,
   };
 
@@ -158,6 +172,26 @@ export function resolveReasoningForwarding(
       supported: false,
       reason: 'target declares supports_reasoning=false',
     };
+  }
+
+  if (target && (targetProtocol === 'chat_completions' || targetProtocol === 'gemini')) {
+    const format = targetProtocol === 'gemini' ? undefined
+      : resolveChatReasoningFormat(target.model, target.base_url, target.request_compatibility?.chat_reasoning_format);
+    if (format === 'openrouter' && intent.source === 'chat_completions.reasoning') {
+      return { ...base, strategy: 'passthrough', supported: true, reason: null };
+    }
+    if (targetProtocol === 'gemini' || format === 'google-thinking-level' || format === 'google-thinking-budget') {
+      try {
+        const raw = intent.source === 'gemini.thinking_config' ? asRecord(intent.thinking?.raw) : undefined;
+        const config = geminiThinkingConfig(intent, target.model, raw,
+          format === 'google-thinking-level' ? 'level' : format === 'google-thinking-budget' ? 'budget' : undefined);
+        const supported = config !== undefined || intent.enabled === true;
+        return { ...base, strategy: supported ? 'native' : 'downgraded', supported,
+          reason: supported ? null : 'No safe Gemini thinking control can be derived.' };
+      } catch {
+        return { ...base, strategy: 'unsupported', supported: false, reason: 'Conflicting or unsupported Gemini thinking controls.' };
+      }
+    }
   }
 
   const passthrough =
@@ -206,8 +240,9 @@ export function resolveReasoningForwarding(
   if (targetProtocol === 'messages') {
     const mappedBudget = budgetTokensForEffort(intent.effort);
     const canMap = Boolean(
-      intent.budget_tokens ||
+      (intent.budget_tokens !== undefined && intent.budget_tokens >= 0) ||
         intent.effort === 'none' ||
+        intent.enabled === false ||
         intent.source === 'messages.thinking' ||
         (mappedBudget !== undefined && mappedBudget > 0),
     );
@@ -275,11 +310,13 @@ function extractReasoningIntent(
   body: Record<string, unknown>,
 ): CanonicalReasoningIntent | undefined {
   if (sourceFormat === 'chat_completions') {
+    const google = normalizeGeminiThinkingBody(body);
     return (
       normalizeOpenAiReasoningEffort(body.reasoning_effort, 'chat_completions.reasoning_effort') ||
-      normalizeGeminiThinkingConfig(body.thinking_config) ||
-      normalizeResponsesReasoning(body.reasoning, 'responses.reasoning') ||
-      normalizeAnthropicThinking(body.thinking)
+      (google?.effort !== undefined || google?.budget_tokens !== undefined ? google : undefined) ||
+      normalizeResponsesReasoning(body.reasoning, 'chat_completions.reasoning') ||
+      normalizeAnthropicThinking(body.thinking) ||
+      google
     );
   }
 
@@ -287,7 +324,7 @@ function extractReasoningIntent(
     return (
       normalizeResponsesReasoning(body.reasoning, 'responses.reasoning') ||
       normalizeOpenAiReasoningEffort(body.reasoning_effort, 'responses.reasoning_effort') ||
-      normalizeGeminiThinkingConfig(body.thinking_config) ||
+      normalizeGeminiThinkingBody(body) ||
       normalizeAnthropicThinking(body.thinking)
     );
   }
@@ -297,7 +334,7 @@ function extractReasoningIntent(
       normalizeAnthropicThinking(body.thinking) ||
       normalizeOpenAiReasoningEffort(body.reasoning_effort, 'chat_completions.reasoning_effort') ||
       normalizeResponsesReasoning(body.reasoning, 'responses.reasoning') ||
-      normalizeGeminiThinkingConfig(body.thinking_config)
+      normalizeGeminiThinkingBody(body)
     );
   }
 
@@ -324,8 +361,9 @@ function normalizeResponsesReasoning(
 ): CanonicalReasoningIntent | undefined {
   const reasoning = asRecord(value);
   if (!reasoning) return undefined;
-  const effort = normalizeEffort(reasoning.effort) || 'unknown';
-  const budget = numberOrUndefined(reasoning.budget_tokens);
+  const isChat = source === 'chat_completions.reasoning';
+  const effort = (isChat && reasoning.enabled === false ? 'none' : normalizeEffort(reasoning.effort)) || 'unknown';
+  const budget = isChat ? nonNegativeBudget(reasoning.max_tokens) ?? numberOrUndefined(reasoning.budget_tokens) : numberOrUndefined(reasoning.budget_tokens);
   const thinking: CanonicalThinkingConfig | undefined = budget
     ? {
         source,
@@ -339,6 +377,7 @@ function normalizeResponsesReasoning(
     source,
     effort,
     budget_tokens: budget,
+    ...(isChat ? { enabled: booleanOrUndefined(reasoning.enabled), exclude: booleanOrUndefined(reasoning.exclude) } : {}),
     thinking,
     raw: clone(reasoning),
   };
@@ -350,7 +389,7 @@ function normalizeAnthropicThinking(
   const thinking = asRecord(value);
   if (!thinking) return undefined;
   const budget = numberOrUndefined(thinking.budget_tokens);
-  const effort = normalizeEffort(thinking.effort) || (budget ? 'unknown' : undefined);
+  const effort = thinking.type === 'disabled' ? 'none' : normalizeEffort(thinking.effort) || (budget ? 'unknown' : undefined);
   const requested =
     typeof thinking.type === 'string' ||
     budget !== undefined ||
@@ -368,23 +407,30 @@ function normalizeAnthropicThinking(
     requested: true,
     source: 'messages.thinking',
     effort,
+    ...(thinking.type === 'disabled' ? { enabled: false } : {}),
     budget_tokens: budget,
     thinking: config,
     raw: clone(thinking),
   };
 }
 
+function normalizeGeminiThinkingBody(body: Record<string, unknown>): CanonicalReasoningIntent | undefined {
+  const found = googleThinkingFromBody(body);
+  return found ? normalizeGeminiThinkingConfig(found.config, found.nested) : undefined;
+}
+
 function normalizeGeminiThinkingConfig(
   value: unknown,
+  nested = false,
 ): CanonicalReasoningIntent | undefined {
   const thinking = asRecord(value);
   if (!thinking) return undefined;
   const budget =
-    numberOrUndefined(thinking.budget_tokens) ??
-    numberOrUndefined(thinking.thinking_budget_tokens) ??
-    numberOrUndefined(thinking.thinking_budget);
-  const effort = normalizeEffort(thinking.effort) || (budget ? 'unknown' : undefined);
-  const includeThoughts = booleanOrUndefined(thinking.include_thoughts);
+    geminiBudget(thinking.thinkingBudget) ?? geminiBudget(thinking.budget_tokens) ??
+    geminiBudget(thinking.thinking_budget_tokens) ?? geminiBudget(thinking.thinking_budget);
+  const effort = normalizeEffort(thinking.thinking_level ?? thinking.thinkingLevel ?? thinking.effort)
+    || (budget === 0 ? 'none' : budget !== undefined ? 'unknown' : undefined);
+  const includeThoughts = booleanOrUndefined(thinking.include_thoughts ?? thinking.includeThoughts);
   const requested =
     effort !== undefined ||
     budget !== undefined ||
@@ -398,6 +444,7 @@ function normalizeGeminiThinkingConfig(
     type: stringOrUndefined(thinking.type),
     budget_tokens: budget,
     include_thoughts: includeThoughts,
+    ...(nested ? { nested_google: true } : {}),
   };
 
   return {
@@ -440,6 +487,14 @@ function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? value
     : undefined;
+}
+
+function geminiBudget(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= -1 ? value : undefined;
+}
+
+function nonNegativeBudget(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function clone<T>(value: T): T {

@@ -1,7 +1,7 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-10-17
-Release: **v2.12.5** (availability requires the matching successful release workflow)
+Release: **v2.12.6** (availability requires the matching successful release workflow)
 
 ## v2.12.5 Release Scope
 
