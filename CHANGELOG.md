@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 2.12.5 - 2026-10-17
+
+- Bridge Gemini tool signatures between Google `extra_content` and OpenRouter
+  `reasoning_details` for Chat Completions JSON, SSE and assistant history.
+  Preserve opaque data and match exact tool IDs, not reasoning-detail indexes.
+- Emit both client dialects without buffering text/arguments. Drain tool-linked
+  encrypted envelopes once after tool IDs arrive and before the terminal marker,
+  supporting older pi clients, parallel tools, late signatures and alias updates.
+- Select the upstream dialect without sending OpenRouter-only fields to strict
+  Google endpoints; recognize openrouter.ai automatically and support an explicit
+  `request_compatibility.chat_tool_signatures` override for private proxies.
+- Add real unmodified pi 0.73.1 and 1.3.0 client CI tests, including a missing-bridge
+  negative control and two-turn Google/OpenRouter replay. Ordinary unsigned calls
+  and unrelated reasoning metadata are not converted into Gemini signatures.
+- Include published v2.12.4 in native upgrade/Fleet/recovery acceptance. No new
+  database schema, logging or automatic deployment behavior is introduced.
+
 ## 2.12.4 - 2026-10-16
 
 - Preserve opaque Gemini function-call `thought_signature` values across Chat

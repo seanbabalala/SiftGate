@@ -1688,6 +1688,13 @@ function validateNodeRequestCompatibility(
   }
 
   const chatToolMessages = compatibility.chat_tool_messages;
+  if (compatibility.chat_tool_signatures !== undefined &&
+    (typeof compatibility.chat_tool_signatures !== 'string' ||
+      !['google', 'openrouter', 'both'].includes(compatibility.chat_tool_signatures))) {
+    issues.push(issue('error', 'invalid_node_request_compatibility_chat_tool_signatures',
+      'nodes[].request_compatibility.chat_tool_signatures must be "google", "openrouter", or "both".',
+      `${basePath}.request_compatibility.chat_tool_signatures`));
+  }
   if (
     chatToolMessages !== undefined &&
     chatToolMessages !== 'native' &&

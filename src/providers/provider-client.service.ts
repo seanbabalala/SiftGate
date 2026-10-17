@@ -29,7 +29,7 @@ import {
 } from '../canonical/canonical.types';
 import { ChatCompletionsDenormalizer } from '../canonical/denormalizers/chat-completions.denormalizer';
 import { hasGeminiNativeTools, mergeGeminiNativeTools, nativeChatMetadata } from '../canonical/gemini-native-tools';
-import { toolThoughtSignature } from '../canonical/tool-thought-signature';
+import { applyChatToolSignatureFormat, indexToolSignatureDetails, toolThoughtSignature } from '../canonical/tool-thought-signature';
 import { ResponsesDenormalizer } from '../canonical/denormalizers/responses.denormalizer';
 import { MessagesDenormalizer } from '../canonical/denormalizers/messages.denormalizer';
 import { GeminiDenormalizer } from '../canonical/denormalizers/gemini.denormalizer';
@@ -1735,6 +1735,10 @@ export class ProviderClientService {
         requestBody,
         node.request_compatibility?.chat_tool_messages,
       );
+      let openRouter = false;
+      try { openRouter = new URL(node.base_url).hostname === 'openrouter.ai'; } catch { /* Config validation owns invalid URLs. */ }
+      applyChatToolSignatureFormat(requestBody,
+        node.request_compatibility?.chat_tool_signatures ?? (openRouter ? 'openrouter' : 'google'));
     }
 
     if (
@@ -2758,12 +2762,13 @@ export class ProviderClientService {
       content.push({ type: 'text', text: message.content });
     }
     if (message.tool_calls && Array.isArray(message.tool_calls)) {
+      const signatureDetails = indexToolSignatureDetails(message.reasoning_details);
       for (const tc of message.tool_calls as Record<string, unknown>[]) {
         const fn = tc.function as Record<string, unknown>;
         content.push({
           type: 'tool_use', id: (tc.id as string) || '', name: (fn.name as string) || '',
           input: this.safeParseJson((fn.arguments as string) || '{}'),
-          ...toolThoughtSignature(tc),
+          ...toolThoughtSignature(tc, undefined, signatureDetails),
         });
       }
     }

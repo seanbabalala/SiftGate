@@ -13,7 +13,7 @@ import {
 import { normalizeStructuredOutputFromBody } from '../structured-output';
 import { normalizeReasoningFromBody } from '../reasoning-effort';
 import { normalizeRequestIdentityHeaders } from './request-metadata';
-import { toolThoughtSignature } from '../tool-thought-signature';
+import { indexToolSignatureDetails, toolThoughtSignature } from '../tool-thought-signature';
 
 /**
  * Normalizes OpenAI Chat Completions format → Canonical format.
@@ -97,6 +97,7 @@ export class ChatCompletionsNormalizer implements Normalizer {
 
         // Then tool calls
         const toolCalls = m.tool_calls as Record<string, unknown>[];
+        const signatureDetails = indexToolSignatureDetails(m.reasoning_details);
         for (const tc of toolCalls) {
           const fn = tc.function as Record<string, unknown>;
           blocks.push({
@@ -104,7 +105,7 @@ export class ChatCompletionsNormalizer implements Normalizer {
             id: (tc.id as string) || '',
             name: (fn.name as string) || '',
             input: this.safeParseJson(fn.arguments as string),
-            ...toolThoughtSignature(tc),
+            ...toolThoughtSignature(tc, undefined, signatureDetails),
           } satisfies ToolUseBlock);
         }
 

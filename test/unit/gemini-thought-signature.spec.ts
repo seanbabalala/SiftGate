@@ -65,9 +65,11 @@ describe('Gemini opaque Chat Completions tool signatures', () => {
     // Exercise both inbound aliases independently of the standard client output.
     for (const history of [message, { role: 'assistant', tool_calls: [call(fields as Record<string, unknown>)] }]) {
       const request = normalizer.normalize({ messages: [history] }, {});
-      expect(request.messages[0].content).toEqual(canonicalResponse.content);
+      expect(request.messages[0].content).toMatchObject(canonicalResponse.content);
       expect(denormalizer.denormalize(request, 'gemini-test').messages).toEqual([
-        { role: 'assistant', content: null, tool_calls: [call(standard(expected))] },
+        { role: 'assistant', content: null, tool_calls: [call(standard(expected))], reasoning_details: [
+          { type: 'reasoning.encrypted', id: 'call_1', data: expected, format: 'google-gemini-v1' },
+        ] },
       ]);
     }
   });
@@ -113,9 +115,8 @@ describe('Gemini opaque Chat Completions tool signatures', () => {
       + 'data: [DONE]\n\n',
     );
     expect(tools).toEqual([
-      { index: 1, ...standard('second') }, { index: 0, ...standard(signature) },
-      { index: 0, id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"q":' } },
-      { index: 1, id: 'call_2', type: 'function', function: { name: 'search', arguments: '{"q":' } },
+      { index: 0, id: 'call_1', type: 'function', function: { name: 'search', arguments: '{"q":' }, ...standard(signature) },
+      { index: 1, id: 'call_2', type: 'function', function: { name: 'search', arguments: '{"q":' }, ...standard('second') },
       { index: 1, function: { arguments: '"b"}' } },
       { index: 0, function: { arguments: '"a"}' } },
     ]);

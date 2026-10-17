@@ -133,13 +133,20 @@ describe('Gemini Chat Completions signature two-turn HTTP contract', () => {
     const history = [user, assistant, ...calls.map((call, i) => ({ role: 'tool', tool_call_id: call.id, content: `${20 + i}` }))];
     const second = await h.agent.post('/v1/chat/completions').set('Authorization', `Bearer ${API_KEY}`)
       .send({ model, messages: history, tools, stream }).buffer(true);
-    expect(h.fetchMock.calls[1].body.messages).toMatchObject(history);
+    // Google upstreams receive only the Google extension; dual client output
+    // must not send an OpenRouter-only message field to a strict Google API.
+    expect(h.fetchMock.calls[1].body.messages).toMatchObject(history.map((message) => {
+      const expected = { ...message };
+      delete expected.reasoning_details;
+      return expected;
+    }));
     expect(second.status).toBe(200);
     expect(stream ? second.text : second.body.choices[0].message.content).toContain('Both temperatures received.');
     expect(h.fetchMock.calls).toHaveLength(2);
     if (!stream && path === 'standard') {
       const unsigned = JSON.parse(JSON.stringify(history));
       delete unsigned[1].tool_calls[0].extra_content;
+      delete unsigned[1].reasoning_details;
       const rejected = await h.agent.post('/v1/chat/completions').set('Authorization', `Bearer ${API_KEY}`)
         .send({ model, messages: unsigned, tools, stream });
       expect(rejected.status).toBe(400);

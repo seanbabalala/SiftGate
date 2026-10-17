@@ -459,6 +459,9 @@ nodes:
   - id: openai
     name: "OpenAI"
     protocol: chat_completions
+    # Optional upstream signature dialect for private proxies:
+    # request_compatibility: { chat_tool_signatures: openrouter } # google | openrouter | both
+    # Default: openrouter for openrouter.ai, google otherwise; client output supports both.
     # Optional. If omitted, SiftGate resolves profiles from the Provider Catalog
     # or infers them from protocol/endpoints/model buckets. Examples:
     #   compatibility_profile: openai_compatible

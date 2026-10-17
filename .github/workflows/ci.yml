@@ -81,6 +81,36 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=critical
 
+  pi-compatibility:
+    name: Real pi client (${{ matrix.version }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: '@mariozechner/pi-ai'
+            version: '0.73.1'
+          - package: '@earendil-works/pi-ai'
+            version: '1.3.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci && npm run build
+      - name: Install the pinned client separately (not a gateway dependency)
+        env:
+          PI_PACKAGE: ${{ matrix.package }}
+          PI_VERSION: ${{ matrix.version }}
+        run: npm install --prefix "$RUNNER_TEMP/pi-compat" --ignore-scripts --no-audit --no-fund "$PI_PACKAGE@$PI_VERSION"
+      - name: Real client two-turn signature replay and missing-bridge negative control
+        env:
+          PI_PACKAGE: ${{ matrix.package }}
+        run: PI_AI_PACKAGE_DIR="$RUNNER_TEMP/pi-compat/node_modules/$PI_PACKAGE" node scripts/test-pi-signature-compat.mjs
+
   tests:
     name: ${{ matrix.kind }} (${{ matrix.shard }}/4, SQLite + PostgreSQL)
     runs-on: ubuntu-24.04
