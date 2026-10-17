@@ -1688,6 +1688,13 @@ function validateNodeRequestCompatibility(
   }
 
   const chatToolMessages = compatibility.chat_tool_messages;
+  if (compatibility.chat_reasoning_format !== undefined &&
+    (typeof compatibility.chat_reasoning_format !== 'string' ||
+      !['auto', 'openai', 'openrouter', 'google-thinking-level', 'google-thinking-budget'].includes(compatibility.chat_reasoning_format))) {
+    issues.push(issue('error', 'invalid_node_request_compatibility_chat_reasoning_format',
+      'nodes[].request_compatibility.chat_reasoning_format must be "auto", "openai", "openrouter", "google-thinking-level", or "google-thinking-budget".',
+      `${basePath}.request_compatibility.chat_reasoning_format`));
+  }
   if (compatibility.chat_tool_signatures !== undefined &&
     (typeof compatibility.chat_tool_signatures !== 'string' ||
       !['google', 'openrouter', 'both'].includes(compatibility.chat_tool_signatures))) {

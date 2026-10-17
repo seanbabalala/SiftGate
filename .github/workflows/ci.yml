@@ -110,6 +110,10 @@ jobs:
         env:
           PI_PACKAGE: ${{ matrix.package }}
         run: PI_AI_PACKAGE_DIR="$RUNNER_TEMP/pi-compat/node_modules/$PI_PACKAGE" node scripts/test-pi-signature-compat.mjs
+      - name: Real client reasoning levels through strict Google and OpenRouter fixtures
+        env:
+          PI_PACKAGE: ${{ matrix.package }}
+        run: PI_AI_PACKAGE_DIR="$RUNNER_TEMP/pi-compat/node_modules/$PI_PACKAGE" node scripts/test-pi-reasoning-compat.mjs
 
   tests:
     name: ${{ matrix.kind }} (${{ matrix.shard }}/4, SQLite + PostgreSQL)

@@ -188,6 +188,7 @@ export type CanonicalReasoningEffort =
 
 export type ReasoningSource =
   | 'chat_completions.reasoning_effort'
+  | 'chat_completions.reasoning'
   | 'responses.reasoning'
   | 'responses.reasoning_effort'
   | 'messages.thinking'
@@ -207,6 +208,8 @@ export interface CanonicalThinkingConfig {
   type?: string;
   budget_tokens?: number;
   include_thoughts?: boolean;
+  /** Google Chat extension envelope, rather than legacy top-level thinking_config. */
+  nested_google?: boolean;
 }
 
 export interface CanonicalReasoningIntent {
@@ -214,6 +217,8 @@ export interface CanonicalReasoningIntent {
   source: ReasoningSource;
   effort?: CanonicalReasoningEffort;
   budget_tokens?: number;
+  enabled?: boolean;
+  exclude?: boolean;
   thinking?: CanonicalThinkingConfig;
   raw: unknown;
 }

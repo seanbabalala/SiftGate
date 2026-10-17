@@ -5,12 +5,12 @@ import {
   CanonicalTool,
   RequestDenormalizer,
 } from '../canonical.types';
-import { budgetTokensForEffort } from '../reasoning-effort';
+import { geminiThinkingConfig, googleThinkingFromBody } from '../gemini-reasoning';
 
 export class GeminiDenormalizer implements RequestDenormalizer {
   denormalize(
     canonical: CanonicalRequest,
-    _targetModel: string,
+    targetModel: string,
   ): Record<string, unknown> {
     const body: Record<string, unknown> = {};
     const systemMessages = canonical.messages.filter(
@@ -28,7 +28,7 @@ export class GeminiDenormalizer implements RequestDenormalizer {
       canonical.messages.filter((message) => message.role !== 'system'),
     );
 
-    const generationConfig = this.generationConfig(canonical);
+    const generationConfig = this.generationConfig(canonical, targetModel);
     if (Object.keys(generationConfig).length > 0) {
       body.generationConfig = generationConfig;
     }
@@ -134,6 +134,7 @@ export class GeminiDenormalizer implements RequestDenormalizer {
 
   private generationConfig(
     canonical: CanonicalRequest,
+    targetModel: string,
   ): Record<string, unknown> {
     const config: Record<string, unknown> = {};
     if (canonical.max_tokens !== undefined) {
@@ -157,7 +158,7 @@ export class GeminiDenormalizer implements RequestDenormalizer {
       config.responseSchema = format.json_schema.schema;
     }
 
-    const thinkingConfig = this.thinkingConfig(canonical);
+    const thinkingConfig = this.thinkingConfig(canonical, targetModel);
     if (thinkingConfig && config.thinkingConfig === undefined) {
       config.thinkingConfig = thinkingConfig;
     }
@@ -256,42 +257,17 @@ export class GeminiDenormalizer implements RequestDenormalizer {
 
   private thinkingConfig(
     canonical: CanonicalRequest,
+    targetModel: string,
   ): Record<string, unknown> | null {
-    const raw =
-      this.rawObject(canonical, 'thinkingConfig') ||
-      this.rawObject(canonical, 'thinking_config') ||
-      this.asObject(canonical.reasoning?.thinking?.raw) ||
-      this.asObject(canonical.thinking?.raw);
-    const source = raw ? { ...raw } : {};
-    const budget =
-      source.thinkingBudget ??
-      source.thinking_budget ??
-      source.thinking_budget_tokens ??
-      source.budget_tokens ??
-      canonical.reasoning?.budget_tokens ??
-      canonical.thinking?.budget_tokens ??
-      budgetTokensForEffort(canonical.reasoning?.effort);
-    const includeThoughts =
-      source.includeThoughts ??
-      source.include_thoughts ??
-      canonical.reasoning?.thinking?.include_thoughts ??
-      canonical.thinking?.include_thoughts;
-
-    delete source.thinking_budget;
-    delete source.thinking_budget_tokens;
-    delete source.budget_tokens;
-    delete source.include_thoughts;
-    delete source.effort;
-    delete source.type;
-
-    if (budget !== undefined) {
-      source.thinkingBudget = budget;
-    }
-    if (includeThoughts !== undefined) {
-      source.includeThoughts = includeThoughts;
-    }
-
-    return Object.keys(source).length > 0 ? source : null;
+    const body = this.asObject(canonical.metadata.raw_body) || {};
+    const raw = googleThinkingFromBody(body)?.config ||
+      (canonical.reasoning?.source === 'gemini.thinking_config' ? this.asObject(canonical.reasoning.thinking?.raw) : null) ||
+      (canonical.thinking?.source === 'gemini.thinking_config' ? this.asObject(canonical.thinking.raw) : null);
+    const intent = canonical.reasoning || (canonical.thinking ? {
+      requested: true, source: canonical.thinking.source, raw: canonical.thinking.raw,
+      budget_tokens: canonical.thinking.budget_tokens, thinking: canonical.thinking,
+    } : undefined);
+    return geminiThinkingConfig(intent, targetModel, raw || undefined) || null;
   }
 
   private functionResponsePayload(

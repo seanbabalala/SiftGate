@@ -6,7 +6,7 @@ import { isMeteredRequest, meterMediaUsage, meterRerankProviderUsage, mediaPrici
 import { attachUsageEvidence, getUsageEvidence } from '../canonical/usage-evidence';
 import { attachTokenPricingEvidence } from './pricing-usage-evidence';
 import { geminiCompatibilityUsage, isNativeGeminiUsageSchema } from './gemini-pricing-usage';
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { SpanKind } from '@opentelemetry/api';
 import { ConfigService } from '../config/config.service';
 import { NodeConfig, NodeProtocol } from '../config/gateway.config';
@@ -35,6 +35,7 @@ import { MessagesDenormalizer } from '../canonical/denormalizers/messages.denorm
 import { GeminiDenormalizer } from '../canonical/denormalizers/gemini.denormalizer';
 import { toAnthropicMessagesOutputFormat } from '../canonical/structured-output';
 import { toAnthropicThinking } from '../canonical/reasoning-effort';
+import { applyChatReasoningFormat, chatReasoningDefaults } from '../canonical/gemini-reasoning';
 import { ChatCompletionsStreamParser } from './stream/chat-completions.stream';
 import { ResponsesStreamParser } from './stream/responses.stream';
 import { MessagesStreamParser } from './stream/messages.stream';
@@ -181,13 +182,7 @@ export class ProviderClientService {
 
         const startTime = Date.now();
         const upstreamModel = this.resolveUpstreamModel(node, targetModel);
-        const requestBody = this.denormalizeRequest(canonical, node.protocol, upstreamModel);
-        this.applyNodeRequestCompatibility(
-          node,
-          requestBody,
-          this.shouldPassthroughNativeResponses(canonical, node.protocol),
-        );
-        this.applyStreamFlag(node, requestBody, false);
+        const requestBody = this.prepareRequest(canonical, node, upstreamModel, false);
 
         const response = await this.sendRequest(
           node,
@@ -489,13 +484,7 @@ export class ProviderClientService {
       canonical,
       node.protocol,
     );
-    const requestBody = this.denormalizeRequest(canonical, node.protocol, upstreamModel);
-    this.applyNodeRequestCompatibility(
-      node,
-      requestBody,
-      this.shouldPassthroughNativeResponses(canonical, node.protocol),
-    );
-    this.applyStreamFlag(node, requestBody, true);
+    const requestBody = this.prepareRequest(canonical, node, upstreamModel, true);
 
     const response = await this.sendRequest(
       node,
@@ -1488,6 +1477,19 @@ export class ProviderClientService {
   // Request Denormalization
   // ══════════════════════════════════════════════════════
 
+  private prepareRequest(canonical: CanonicalRequest, node: NodeConfig, targetModel: string, stream: boolean): Record<string, unknown> {
+    try {
+      const body = this.denormalizeRequest(canonical, node.protocol, targetModel);
+      this.applyNodeRequestCompatibility(node, body, this.shouldPassthroughNativeResponses(canonical, node.protocol));
+      this.applyStreamFlag(node, body, stream);
+      return body;
+    } catch (error) {
+      // A client control error is not an upstream outage (including before SSE headers).
+      if (error instanceof BadRequestException) throw new ProviderRequestError(error.message, node.id);
+      throw error;
+    }
+  }
+
   private denormalizeRequest(
     canonical: CanonicalRequest,
     protocol: NodeProtocol,
@@ -1579,6 +1581,9 @@ export class ProviderClientService {
     ]) {
       if (requestBody[field] === undefined && rawBody[field] !== undefined) {
         requestBody[field] = this.cloneJson(rawBody[field]);
+      } else if (field === 'extra_body' && rawBody[field] !== undefined) {
+        // Canonical Google thinking intent must not hide sibling native extensions.
+        requestBody[field] = this.mergeMissingDefaults(requestBody[field], rawBody[field]);
       }
     }
 
@@ -1705,8 +1710,9 @@ export class ProviderClientService {
       delete requestBody[parameter];
     }
 
-    const defaultParameters =
-      node.request_compatibility?.default_parameters || {};
+    const configuredDefaults = node.request_compatibility?.default_parameters || {};
+    const defaultParameters = node.protocol === 'chat_completions'
+      ? chatReasoningDefaults(requestBody, configuredDefaults) : configuredDefaults;
     for (const [parameter, value] of Object.entries(defaultParameters)) {
       if (requestBody[parameter] === undefined) {
         requestBody[parameter] = this.cloneJson(value);
@@ -1731,6 +1737,7 @@ export class ProviderClientService {
     );
 
     if (node.protocol === 'chat_completions') {
+      applyChatReasoningFormat(requestBody, node.base_url, node.request_compatibility?.chat_reasoning_format);
       this.applyChatToolMessageCompatibility(
         requestBody,
         node.request_compatibility?.chat_tool_messages,
@@ -3077,5 +3084,13 @@ export class ProviderError extends Error {
   ) {
     super(message);
     this.name = 'ProviderError';
+  }
+}
+
+/** Rejected before dispatch: never retry, fall back, or penalize an upstream. */
+export class ProviderRequestError extends ProviderError {
+  constructor(message: string, nodeId: string) {
+    super(message, 400, nodeId);
+    this.name = 'ProviderRequestError';
   }
 }

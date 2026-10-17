@@ -55,6 +55,7 @@ import {
 import {
   ProviderClientService,
   ProviderError,
+  ProviderRequestError,
 } from '../providers/provider-client.service';
 import { ScoringService } from '../scoring/scoring.service';
 import {
@@ -1882,6 +1883,10 @@ export class PipelineService implements BeforeApplicationShutdown {
         };
       } catch (err) {
         lastError = err as Error;
+        if (lastError instanceof ProviderRequestError) {
+          await this.releaseBudgetReservation(reservation);
+          throw new GatewayRequestRejectedError(lastError.message, lastError.statusCode);
+        }
         const fallbackReason = this.resolveFallbackReason(lastError);
         if (lastError instanceof ConcurrencyLimitError) {
           this.logger.warn(lastError.message);
@@ -3466,6 +3471,10 @@ export class PipelineService implements BeforeApplicationShutdown {
             }
           } catch (err) {
             lastError = err as Error;
+            if (lastError instanceof ProviderRequestError) {
+              await this.releaseBudgetReservation(targetBudgetReservation);
+              throw new GatewayRequestRejectedError(lastError.message, lastError.statusCode);
+            }
             const attemptFallbackReason = this.resolveFallbackReason(lastError);
             if (streamCanceled) {
               await this.releaseBudgetReservation(targetBudgetReservation);
@@ -5614,7 +5623,7 @@ export class PipelineService implements BeforeApplicationShutdown {
     return {
       requires_reasoning: Boolean(intent?.requested),
       reasoning_effort: intent?.effort || null,
-      reasoning_budget_tokens: intent?.budget_tokens || null,
+      reasoning_budget_tokens: intent?.budget_tokens ?? null,
       reasoning_strategy: intent?.source || null,
     };
   }
@@ -6822,6 +6831,7 @@ export class PipelineService implements BeforeApplicationShutdown {
       canonical.metadata.source_format,
       node?.protocol,
       declaredSupport,
+      node ? { model: node.upstream_model_aliases?.[model] || model, base_url: node.base_url, request_compatibility: node.request_compatibility } : undefined,
     );
 
     return {
