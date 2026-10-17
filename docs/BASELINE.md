@@ -1,7 +1,21 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-16
-Release: **v2.12.4** (availability requires the matching successful release workflow)
+Reviewed: 2026-10-17
+Release: **v2.12.5** (availability requires the matching successful release workflow)
+
+## v2.12.5 Release Scope
+
+Bridge opaque Gemini Chat Completions tool signatures between Google and
+OpenRouter envelopes. Client JSON/SSE exposes both; upstream requests select a
+compatible dialect (Google by default, OpenRouter for openrouter.ai, explicit
+per-node override for proxies). Tool IDs, not reasoning sequence indexes, bind
+signatures. Streams retain native metadata and emit encrypted envelopes after
+IDs are known, without buffering text/arguments. Tests include real pinned pi
+0.73.1 and 1.3.0 clients and strict two-dialect HTTP fixtures. Only tool-linked
+Gemini-compatible encrypted state is covered, not generic reasoning translation.
+The published v2.12.4 predecessor joins native upgrade/Fleet/recovery acceptance.
+Exact main CI, native rehearsals and signed publication/cold installs remain
+mandatory. Publication never deploys a running instance.
 
 ## v2.12.4 Release Scope
 

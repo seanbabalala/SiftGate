@@ -25,6 +25,16 @@ export interface ImageBlock {
   cache_control?: Record<string, unknown>;
 }
 
+/** Only opaque, tool-ID-linked OpenRouter signature metadata, never reasoning text. */
+export interface ToolThoughtSignatureDetail {
+  type: 'reasoning.encrypted';
+  id: string;
+  data: string;
+  format?: string | null;
+  /** Reasoning-detail sequence index, NOT a tool-call index. */
+  index?: number | null;
+}
+
 export interface ToolUseBlock {
   type: 'tool_use';
   id: string;
@@ -32,6 +42,9 @@ export interface ToolUseBlock {
   input: Record<string, unknown>;
   /** Opaque Gemini tool-call state, preserved verbatim across turns. */
   thought_signature?: string;
+  thought_signature_detail?: ToolThoughtSignatureDetail;
+  /** Original encrypted-detail sequence position; never sent as a wire field. */
+  thought_signature_detail_order?: number;
   cache_control?: Record<string, unknown>;
 }
 
@@ -459,6 +472,8 @@ export interface StreamToolUseDelta {
   name?: string;
   input_delta?: string;
   thought_signature?: string;
+  thought_signature_detail?: ToolThoughtSignatureDetail;
+  thought_signature_detail_order?: number;
 }
 
 export interface StreamDeltaEvent {

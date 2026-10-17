@@ -3,7 +3,7 @@ import {
   TokenUsage,
 } from '../../canonical/canonical.types';
 import { nativeChatMetadata } from '../../canonical/gemini-native-tools';
-import { chatToolThoughtSignature } from '../../canonical/tool-thought-signature';
+import { chatToolThoughtSignature, chatToolReasoningDetails, ToolThoughtSignature } from '../../canonical/tool-thought-signature';
 
 /**
  * Serializes CanonicalStreamEvent → SSE text for each client protocol.
@@ -20,7 +20,7 @@ export class ChatCompletionsStreamSerializer {
   private activeToolCallKey = '';
   private readonly toolCalls = new Map<
     string,
-    { index: number; id: string; name?: string; started: boolean }
+    { index: number; id: string; name?: string; started: boolean } & ToolThoughtSignature
   >();
 
   serialize(event: CanonicalStreamEvent): string {
@@ -77,6 +77,13 @@ export class ChatCompletionsStreamSerializer {
 
         if (event.content.type === 'tool_use') {
           const state = this.resolveToolCallState(event.content);
+          if (event.content.thought_signature !== undefined && event.content.thought_signature !== state.thought_signature) {
+            delete state.thought_signature_detail;
+            delete state.thought_signature_detail_order;
+          }
+          if (event.content.thought_signature !== undefined) state.thought_signature = event.content.thought_signature;
+          if (event.content.thought_signature_detail !== undefined) state.thought_signature_detail = event.content.thought_signature_detail;
+          if (event.content.thought_signature_detail_order !== undefined) state.thought_signature_detail_order = event.content.thought_signature_detail_order;
           const toolCall: Record<string, unknown> = {
             index: state.index,
             ...chatToolThoughtSignature(event.content.thought_signature),
@@ -94,6 +101,8 @@ export class ChatCompletionsStreamSerializer {
           if (Object.keys(fn).length > 0) toolCall.function = fn;
           // Signature-only chunks may precede the ID. Emit it once it arrives.
           if (toolCall.id) state.started = true;
+          // Metadata-only alias updates need not create an empty tool delta.
+          if (Object.keys(toolCall).length === 1) return '';
 
           return this.sse({
             id: this.id,
@@ -126,7 +135,16 @@ export class ChatCompletionsStreamSerializer {
         if (hasUsage && event.usage.cache_read_input_tokens) {
           usageObj.prompt_tokens_details = { cached_tokens: event.usage.cache_read_input_tokens };
         }
-        let result = this.sse({
+        // pi 0.73.1 only attaches encrypted details to IDs it has already seen.
+        // Emit each complete envelope once, after all tool IDs and alias updates
+        // have arrived, while text/arguments remain streamed without buffering.
+        const details = chatToolReasoningDetails([...new Set(this.toolCalls.values())]
+          .sort((a, b) => a.index - b.index));
+        let result = details.reasoning_details ? this.sse({
+          id: this.id, object: 'chat.completion.chunk', created: Math.floor(Date.now() / 1000), model: this.model,
+          choices: [{ index: 0, delta: details, finish_reason: null }],
+        }) : '';
+        result += this.sse({
           id: this.id,
           object: 'chat.completion.chunk',
           created: Math.floor(Date.now() / 1000),
@@ -161,7 +179,7 @@ export class ChatCompletionsStreamSerializer {
     content: Extract<CanonicalStreamEvent, { type: 'delta' }>['content'] & {
       type: 'tool_use';
     },
-  ): { index: number; id: string; name?: string; started: boolean } {
+  ): { index: number; id: string; name?: string; started: boolean } & ToolThoughtSignature {
     const indexKey = content.index === undefined ? undefined : `index:${content.index}`;
     const idKey = content.id ? `id:${content.id}` : undefined;
     const key =

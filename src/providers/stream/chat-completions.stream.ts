@@ -1,7 +1,7 @@
 import { attachTokenPricingEvidence } from '../pricing-usage-evidence';
-import { CanonicalStreamEvent, TokenUsage } from '../../canonical/canonical.types';
+import { CanonicalStreamEvent, TokenUsage, ToolThoughtSignatureDetail } from '../../canonical/canonical.types';
 import { nativeChatMetadata } from '../../canonical/gemini-native-tools';
-import { toolThoughtSignature } from '../../canonical/tool-thought-signature';
+import { toolThoughtSignature, toolSignatureDetails, ToolThoughtSignature } from '../../canonical/tool-thought-signature';
 import {
   extractUsageBySchema,
   extractUsageByKnownFields,
@@ -17,6 +17,14 @@ import {
  *   data: {"id":"...","choices":[{"delta":{"content":"..."}}],...}
  *   data: [DONE]
  */
+interface ChatToolCallState {
+  id: string;
+  name?: string;
+  nativeSignature?: string;
+  emittedSignature?: string;
+  emittedDetail?: ToolThoughtSignatureDetail;
+}
+
 export class ChatCompletionsStreamParser {
   private buffer = '';
   private pricingUsage?: TokenUsage;
@@ -25,7 +33,9 @@ export class ChatCompletionsStreamParser {
   private hasStarted = false;
   private hasSentStop = false;
   private pendingStopReason: string | null = null;
-  private readonly toolCallsByIndex = new Map<number, { id: string; name?: string }>();
+  private readonly toolCallsByIndex = new Map<number, ChatToolCallState>();
+  private readonly reasoningDetailsById = new Map<string, ToolThoughtSignatureDetail>();
+  private readonly reasoningOrderById = new Map<string, number>();
 
   constructor(private readonly usageSchema?: UsageSchema, private readonly deferStop = false) {}
 
@@ -123,6 +133,11 @@ export class ChatCompletionsStreamParser {
     const choice = choices[0];
     const delta = (choice.delta || {}) as Record<string, unknown>;
     const finishReason = choice.finish_reason as string | null;
+    const reasoningDetails = toolSignatureDetails(delta.reasoning_details);
+    for (const detail of reasoningDetails) {
+      if (!this.reasoningOrderById.has(detail.id)) this.reasoningOrderById.set(detail.id, this.reasoningOrderById.size);
+      this.reasoningDetailsById.set(detail.id, detail);
+    }
 
     yield* this.ensureStarted(data);
 
@@ -138,7 +153,6 @@ export class ChatCompletionsStreamParser {
     if (delta.tool_calls && Array.isArray(delta.tool_calls)) {
       for (const tc of delta.tool_calls as Record<string, unknown>[]) {
         const fn = (tc.function || {}) as Record<string, unknown>;
-        const signature = toolThoughtSignature(tc);
         const index = this.resolveToolCallIndex(tc, fn);
         // An unaddressed parallel delta cannot safely be assigned to any call.
         if (index === undefined) continue;
@@ -148,7 +162,10 @@ export class ChatCompletionsStreamParser {
           typeof fn.name === 'string' && fn.name
             ? fn.name
             : state.name;
-        this.toolCallsByIndex.set(index, { id, name });
+        state.id = id;
+        state.name = name;
+        this.toolCallsByIndex.set(index, state);
+        const signature = this.signatureDelta(state, tc);
         const inputDelta =
           fn.arguments === undefined || fn.arguments === null
             ? undefined
@@ -165,6 +182,18 @@ export class ChatCompletionsStreamParser {
           },
         };
       }
+    }
+
+    for (const detail of reasoningDetails) {
+      const matches = [...this.toolCallsByIndex].filter(([, state]) => state.id === detail.id);
+      // A reasoning-detail index is unrelated to a tool-call index. Wait for
+      // the matching ID instead of binding an early/orphan entry by position.
+      if (matches.length !== 1) continue;
+      const [index, state] = matches[0];
+      const signature = this.signatureDelta(state);
+      if (Object.keys(signature).length) yield {
+        type: 'delta', content: { type: 'tool_use', id: state.id, index, ...signature },
+      };
     }
 
     // Finish reason — end of stream
@@ -199,7 +228,27 @@ export class ChatCompletionsStreamParser {
 
   private shouldDeferStop(): boolean {
     // Tool signatures can follow finish_reason/usage. Drain until DONE or EOF.
-    return this.deferStop || this.toolCallsByIndex.size > 0;
+    return this.deferStop || this.toolCallsByIndex.size > 0 || this.reasoningDetailsById.size > 0;
+  }
+
+  private signatureDelta(state: ChatToolCallState, toolCall?: Record<string, unknown>): ToolThoughtSignature {
+    const native = toolCall ? toolThoughtSignature(toolCall).thought_signature : undefined;
+    if (native !== undefined) state.nativeSignature = native;
+    const detail = this.reasoningDetailsById.get(state.id);
+    const signature = state.nativeSignature ?? detail?.data;
+    const result: ToolThoughtSignature = {};
+    if (signature !== undefined && signature !== state.emittedSignature) {
+      result.thought_signature = signature;
+      state.emittedSignature = signature;
+    }
+    if (detail && detail.data === signature &&
+      (detail.data !== state.emittedDetail?.data || detail.format !== state.emittedDetail?.format ||
+       detail.index !== state.emittedDetail?.index || detail.id !== state.emittedDetail?.id)) {
+      result.thought_signature_detail = detail;
+      result.thought_signature_detail_order = this.reasoningOrderById.get(detail.id);
+      state.emittedDetail = detail;
+    }
+    return result;
   }
 
   private resolveToolCallIndex(

@@ -104,7 +104,7 @@ export class ChatCompletionsNormalizer implements Normalizer {
             id: (tc.id as string) || '',
             name: (fn.name as string) || '',
             input: this.safeParseJson(fn.arguments as string),
-            ...toolThoughtSignature(tc),
+            ...toolThoughtSignature(tc, m.reasoning_details),
           } satisfies ToolUseBlock);
         }
 

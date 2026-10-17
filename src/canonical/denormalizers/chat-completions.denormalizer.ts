@@ -6,7 +6,7 @@ import {
   CanonicalContentBlock,
 } from '../canonical.types';
 import { nativeChatMetadata } from '../gemini-native-tools';
-import { chatToolThoughtSignature } from '../tool-thought-signature';
+import { chatToolThoughtSignature, chatToolReasoningDetails } from '../tool-thought-signature';
 import { toOpenAiChatResponseFormat } from '../structured-output';
 import { toOpenAiChatReasoning } from '../reasoning-effort';
 
@@ -124,6 +124,7 @@ export class ChatCompletionsDenormalizer implements RequestDenormalizer {
       const result: Record<string, unknown> = {
         role: 'assistant',
         content: textParts.join('') || null,
+        ...chatToolReasoningDetails(msg.content.filter((block) => block.type === 'tool_use')),
       };
 
       if (toolCalls.length > 0) {
@@ -211,6 +212,7 @@ export class ChatCompletionsDenormalizer implements RequestDenormalizer {
     const message: Record<string, unknown> = {
       role: 'assistant',
       content: textParts.join('') || null,
+      ...chatToolReasoningDetails(canonical.content.filter((block) => block.type === 'tool_use')),
     };
 
     if (toolCalls.length > 0) {
