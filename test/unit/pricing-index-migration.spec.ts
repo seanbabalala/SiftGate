@@ -93,7 +93,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       expect((await cold.restoreRequest("request", actor.workspace_id)).quote(target, usage).cost).toEqual(cost);
       expect(await ledger.summary("request", actor.workspace_id)).toEqual(summary);
       await expect(removeEmptyPricingSchema(source)).rejects.toThrow("nonempty");
-    });
+    }, postgres ? 30_000 : 5_000); // Populated fixture plus two index-only teardowns and rebuilds; not a latency gate.
 
     it.each(["matching", "wrong-table", "name-collision"])("refuses an unmarked %s index/object instead of adopting or replacing it", async kind => {
       await legacy();
@@ -172,7 +172,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       await applyPricingSchema(source); await removeEmptyPricingSchema(source);
       expect(await planPricingSchema(source)).toMatchObject({ state: "pending", create_indexes: indexPlan });
       await applyPricingSchema(source); expect((await planPricingSchema(source)).state).toBe("applied");
-    });
+    }, postgres ? 30_000 : 5_000); // Two complete installs and one removal.
 
     async function pending019() {
       await applyPricingSchema(source);
@@ -190,7 +190,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       expect(after).toHaveLength(PRICING_MIGRATIONS.length);
       expect(after.filter((row: { id: string }) => row.id !== "pricing-engine-019")).toEqual(before);
       expect((await planPricingSchema(source)).state).toBe("applied");
-    });
+    }, postgres ? 30_000 : 5_000); // Complete install, teardown and upgrade.
 
     it("installs the canonical attempt index beside an equivalent index under another name without adopting it", async () => {
       await pending019();
@@ -203,7 +203,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
         ? await source.query("SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema() AND indexname = $1", [operatorIndex])
         : await source.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?", [operatorIndex]);
       expect(remaining).toHaveLength(1);
-    });
+    }, postgres ? 30_000 : 5_000); // Complete install, teardown and upgrade.
 
     it("refuses an unmarked index that already uses the canonical attempt index name", async () => {
       await pending019();
@@ -212,7 +212,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       expect((await planPricingSchema(source)).state).toBe("conflict");
       await expect(applyPricingSchema(source)).rejects.toThrow("conflict");
       expect(await dump()).toEqual(before);
-    });
+    }, postgres ? 30_000 : 5_000); // Complete install, teardown and refused upgrade.
 
     if (!postgres) it("lets recovery's reservation-to-attempt lookups seek both key columns", async () => {
       await applyPricingSchema(source);
