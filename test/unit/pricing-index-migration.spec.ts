@@ -13,8 +13,10 @@ import { tokenBook, tokens } from "./pricing-fixtures";
 import { mockConfigService } from "../helpers";
 
 const indexName = "idx_pricing_task_reservation_state", version = "pricing-engine-018";
+const attemptIndexName = "idx_pricing_attempt_reservation";
 const actor = { id: "synthetic-admin", workspace_id: "default-workspace", role: "admin" as const, global_admin: true };
-const indexPlan = [{ table: "pricing_media_tasks", name: indexName, column_names: ["workspace_id", "reservation_id", "state"] }];
+const attemptIndexPlan = [{ table: "pricing_attempts", name: attemptIndexName, column_names: ["workspace_id", "reservation_id"] }];
+const indexPlan = [{ table: "pricing_media_tasks", name: indexName, column_names: ["workspace_id", "reservation_id", "state"] }, ...attemptIndexPlan];
 function contract(label: string, connect: () => Promise<{ source: DataSource; cleanup(): Promise<void> }>, run = describe, postgres = false) {
   run(label, () => {
     let source: DataSource, cleanup: () => Promise<void>;
@@ -55,7 +57,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       const before = await dump(); await applyPricingSchema(source); expect(await dump()).toEqual(before);
     }, postgres ? 30_000 : 5_000); // Multiple real schema operations, not a request-latency gate.
 
-    it("adds only the index/marker to version017 and preserves all seventeen previous migration records", async () => {
+    it("adds only the index/marker migrations to version017 and preserves all seventeen previous migration records", async () => {
       await legacy();
       const before = await markers(), plan = await planPricingSchema(source);
       expect(plan).toMatchObject({ state: "pending", create_tables: [], create_indexes: indexPlan });
@@ -78,9 +80,10 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       await ledger.persistRuntimeOutcome({ type: "settlement", workspace: actor.workspace_id, reservationId: "reservation", payload: { kind: "commit", tokens: "1100", cost_usd: cost.report_amount!, budget_basis: "legacy_logical", receipt: { attemptId: "attempt", cost, errorCode: null } } });
       await ledger.applySettlement("reservation", actor.workspace_id);
       const summary = await ledger.summary("request", actor.workspace_id);
-      // Index018 adds no data fields. Removing only its index/marker faithfully
-      // reconstructs the017 schema around real candidate-generated records.
-      await dropIndex(); await source.query("DELETE FROM pricing_schema_versions WHERE id = 'pricing-engine-018'");
+      // Index018 and 019 add no data fields. Removing only their indexes/markers
+      // faithfully reconstructs the017 schema around real candidate-generated records.
+      await dropIndex(); await source.query(`DROP INDEX "${attemptIndexName}"`);
+      await source.query("DELETE FROM pricing_schema_versions WHERE id IN ('pricing-engine-018', 'pricing-engine-019')");
       const before = await dump(), oldMarkers = await markers();
       expect((await planPricingSchema(source)).create_indexes).toEqual(indexPlan);
       await applyPricingSchema(source);
@@ -146,7 +149,7 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       await applyPricingSchema(source);
       await source.query("UPDATE pricing_schema_versions SET checksum = 'wrong' WHERE id = 'pricing-engine-018'");
       expect((await planPricingSchema(source)).state).toBe("conflict");
-      await source.createQueryBuilder().update("pricing_schema_versions").set({ checksum: PRICING_MIGRATIONS.at(-1)!.checksum }).where("id = :id", { id: version }).execute();
+      await source.createQueryBuilder().update("pricing_schema_versions").set({ checksum: PRICING_MIGRATIONS.find(step => step.version === version)!.checksum }).where("id = :id", { id: version }).execute();
       await source.query("DELETE FROM pricing_schema_versions WHERE id = 'pricing-engine-017'");
       expect((await planPricingSchema(source)).issues.some(issue => issue.includes("requires all earlier"))).toBe(true);
     });
@@ -169,6 +172,54 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       await applyPricingSchema(source); await removeEmptyPricingSchema(source);
       expect(await planPricingSchema(source)).toMatchObject({ state: "pending", create_indexes: indexPlan });
       await applyPricingSchema(source); expect((await planPricingSchema(source)).state).toBe("applied");
+    });
+
+    async function pending019() {
+      await applyPricingSchema(source);
+      await source.query(`DROP INDEX "${attemptIndexName}"`);
+      await source.query("DELETE FROM pricing_schema_versions WHERE id = 'pricing-engine-019'");
+    }
+
+    it("adds only the attempt reservation index/marker to an applied version018 installation", async () => {
+      await pending019();
+      const before = await markers();
+      expect(before).toHaveLength(18);
+      expect(await planPricingSchema(source)).toMatchObject({ state: "pending", create_tables: [], create_indexes: attemptIndexPlan });
+      await applyPricingSchema(source);
+      const after = await markers();
+      expect(after).toHaveLength(PRICING_MIGRATIONS.length);
+      expect(after.filter((row: { id: string }) => row.id !== "pricing-engine-019")).toEqual(before);
+      expect((await planPricingSchema(source)).state).toBe("applied");
+    });
+
+    it("installs the canonical attempt index beside an equivalent index under another name without adopting it", async () => {
+      await pending019();
+      const operatorIndex = "idx_pricing_attempt_reservation_operator";
+      await source.query(`CREATE INDEX "${operatorIndex}" ON pricing_attempts (workspace_id,reservation_id)`);
+      expect((await planPricingSchema(source)).create_indexes).toEqual(attemptIndexPlan);
+      await applyPricingSchema(source);
+      expect((await planPricingSchema(source)).state).toBe("applied");
+      const remaining = postgres
+        ? await source.query("SELECT indexname AS name FROM pg_indexes WHERE schemaname = current_schema() AND indexname = $1", [operatorIndex])
+        : await source.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?", [operatorIndex]);
+      expect(remaining).toHaveLength(1);
+    });
+
+    it("refuses an unmarked index that already uses the canonical attempt index name", async () => {
+      await pending019();
+      await source.query(`CREATE INDEX "${attemptIndexName}" ON pricing_attempts (workspace_id,reservation_id)`);
+      const before = await dump();
+      expect((await planPricingSchema(source)).state).toBe("conflict");
+      await expect(applyPricingSchema(source)).rejects.toThrow("conflict");
+      expect(await dump()).toEqual(before);
+    });
+
+    if (!postgres) it("lets recovery's reservation-to-attempt lookups seek both key columns", async () => {
+      await applyPricingSchema(source);
+      const plan = async (sql: string) => ((await source.query(`EXPLAIN QUERY PLAN ${sql}`)) as Array<{ detail: string }>).map(row => row.detail).join("\n");
+      const seek = new RegExp(`SEARCH a USING (COVERING )?INDEX ${attemptIndexName} \\(workspace_id=\\? AND reservation_id=\\?\\)`);
+      expect(await plan("SELECT r.id FROM pricing_reservations r WHERE NOT EXISTS (SELECT 1 FROM pricing_attempts a WHERE a.reservation_id = r.id AND a.workspace_id = r.workspace_id)")).toMatch(seek);
+      expect(await plan("SELECT a.* FROM pricing_attempts a WHERE a.reservation_id = 'reservation' AND a.workspace_id = 'workspace' ORDER BY a.id ASC")).toMatch(seek);
     });
   });
 }

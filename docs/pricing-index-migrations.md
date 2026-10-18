@@ -7,6 +7,21 @@ workspace-scoped reservation ownership lookup used before durable outcome
 retention. It does not change ownership rules, prices, receipts, budgets or
 retention policy. Historical migrations001–017 and their checksums are unchanged.
 
+Migration 019 adds the nonunique index `idx_pricing_attempt_reservation` on
+`pricing_attempts(workspace_id, reservation_id)`. The 30-second pricing
+recovery sweep selects expired holds by whether attempts exist for each
+reservation, then reads each candidate's attempts. The only earlier attempt
+index is `(workspace_id, request_id)`, which narrows nothing when an
+installation has a single workspace, so every hold scanned the attempt history
+synchronously on the event loop. On one installation with 73,825 attempts the
+two recovery selectors took 6.5 s and 7.8 s and each per-hold read about
+0.11 s; with an equivalent index they took 12 ms and 6.8 ms and 100 per-hold
+reads took 3.5 ms. Those are read-only timings on a live database, not a
+controlled benchmark. The integrity, conflict, maintenance and backup rules
+below apply to 019 exactly as to 018. An equivalent index created earlier under
+another name is not a conflict; it is left untouched and the canonical index is
+created beside it, after which the extra index may be dropped deliberately.
+
 ## Explicit planning and application
 
 The existing `siftgate pricing-migrate` command still requires one explicit

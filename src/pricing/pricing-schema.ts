@@ -11,7 +11,7 @@ import { PRICING_ORPHAN_DEFINITIONS } from "./pricing-orphan-schema";
 import { PRICING_TASK_DEFINITIONS } from "./pricing-task-schema";
 import { PRICING_ADJUSTMENT_DEFINITIONS } from "./pricing-adjustment-schema";
 import { DataSource, QueryRunner, Table, TableIndex, type TableOptions, type EntityManager } from "typeorm";
-import { PRICING_MEDIA_OWNERSHIP_INDEXES, inspectPricingIndexMigration, pricingIndexPlan, type PricingIndexAddition, type PricingIndexPlan } from "./pricing-index-migrations";
+import { PRICING_ATTEMPT_RESERVATION_INDEXES, PRICING_MEDIA_OWNERSHIP_INDEXES, inspectPricingIndexMigration, pricingIndexPlan, type PricingIndexAddition, type PricingIndexPlan } from "./pricing-index-migrations";
 import { pricingContentHash } from "./pricing-json";
 import { PRICING_LEDGER_DEFINITIONS } from "./pricing-ledger-schema";
 
@@ -19,7 +19,7 @@ import { PRICING_RECOVERY_DEFINITIONS } from "./pricing-recovery-schema";
 import { PRICING_OUTCOME_DEFINITIONS } from "./pricing-outcome-schema";
 import { PRICING_OUTCOME_DISPOSITION_DEFINITIONS } from "./pricing-outcome-disposition-schema";
 
-export const PRICING_SCHEMA_VERSION = "pricing-engine-018";
+export const PRICING_SCHEMA_VERSION = "pricing-engine-019";
 export const PRICING_LEDGER_SCHEMA_VERSION = "pricing-engine-002";
 export const PRICING_LEDGER_SCHEMA_CHECKSUM = pricingContentHash(
   PRICING_LEDGER_DEFINITIONS,
@@ -270,6 +270,7 @@ export const PRICING_MIGRATIONS: PricingMigration[] = [
   { version: "pricing-engine-016", definitions: ACTUAL_BUDGET_COHORT_DEFINITIONS, checksum: pricingContentHash(ACTUAL_BUDGET_COHORT_DEFINITIONS) },
   { version: "pricing-engine-017", definitions: PRICING_BOOK_MANAGEMENT_DEFINITIONS, checksum: pricingContentHash(PRICING_BOOK_MANAGEMENT_DEFINITIONS) },
   { version: "pricing-engine-018", definitions: [], indexes: PRICING_MEDIA_OWNERSHIP_INDEXES, checksum: pricingContentHash({ indexes: PRICING_MEDIA_OWNERSHIP_INDEXES }) },
+  { version: "pricing-engine-019", definitions: [], indexes: PRICING_ATTEMPT_RESERVATION_INDEXES, checksum: pricingContentHash({ indexes: PRICING_ATTEMPT_RESERVATION_INDEXES }) },
 ];
 export const PRICING_SCHEMA_CHECKSUM =
   PRICING_MIGRATIONS[PRICING_MIGRATIONS.length - 1].checksum;

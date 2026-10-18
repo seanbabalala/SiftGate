@@ -15,6 +15,12 @@ export const PRICING_MEDIA_OWNERSHIP_INDEXES: PricingIndexAddition[] = [{
   definition: { name: "idx_pricing_task_reservation_state", columnNames: ["workspace_id", "reservation_id", "state"] },
 }];
 
+/** Pricing recovery correlates every expired hold with its attempts each sweep; without this, each hold scans the workspace's whole attempt history on the event loop. */
+export const PRICING_ATTEMPT_RESERVATION_INDEXES: PricingIndexAddition[] = [{
+  table: "pricing_attempts",
+  definition: { name: "idx_pricing_attempt_reservation", columnNames: ["workspace_id", "reservation_id"] },
+}];
+
 export function pricingIndexPlan(index: PricingIndexAddition): PricingIndexPlan {
   if (!index.definition.name || !index.definition.columnNames?.length) throw new Error("A pricing index migration requires an explicit name and ordered columns");
   return { table: index.table, name: index.definition.name, column_names: [...index.definition.columnNames] };
