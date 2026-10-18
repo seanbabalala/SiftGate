@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 2.12.7 - 2026-10-18
+
+- Add pricing migration `pricing-engine-019`: an additive
+  `(workspace_id, reservation_id)` index on `pricing_attempts`. The 30-second
+  pricing recovery sweep correlates every expired hold with its attempts;
+  without this index each hold scanned the workspace's whole attempt history on
+  the event loop (the two recovery selectors took 6.5 s and 7.8 s against 74k
+  attempts), stalling `/live` until the Docker watchdog restarted the gateway.
+- Installations that have applied the pricing schema must run
+  `siftgate pricing-migrate --sqlite-path <db> --apply` (or
+  `--postgres-url-env <VAR> --apply`) during the upgrade, after a verified
+  backup: until the installed migration markers match the running release, the
+  pricing ledger refuses work with `pricing_schema_required` (HTTP 503).
+  Databases without pricing tables need no migration and keep their current
+  behavior. An existing equivalent index under another name is neither adopted
+  nor replaced; an unmarked index with the canonical name is a conflict.
+- Include the published v2.12.6 in native upgrade/Fleet/recovery acceptance.
+
 ## 2.12.6 - 2026-10-17
 
 - Add model- and upstream-aware Gemini reasoning controls. Level-based Gemini

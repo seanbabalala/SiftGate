@@ -1,7 +1,23 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-17
-Release: **v2.12.6** (availability requires the matching successful release workflow)
+Reviewed: 2026-10-18
+Release: **v2.12.7** (availability requires the matching successful release workflow)
+
+## v2.12.7 Release Scope
+
+Add the additive pricing migration `pricing-engine-019`, a nonunique
+`(workspace_id, reservation_id)` index on `pricing_attempts`. The 30-second
+pricing recovery sweep and its per-hold evidence reads correlate expired holds
+with attempts by reservation; without the index each hold scanned the
+workspace's attempt history on the event loop. On one installation with 73,825
+attempts in a single workspace the two recovery selectors took 6.5 s and 7.8 s,
+long enough for `/live` to fail and the container watchdog to restart the
+gateway. With the index they took 12 ms and 6.8 ms. Pricing rules, receipts,
+budgets, retention and ownership are unchanged; historical migrations and
+checksums are unchanged. Installations with the pricing schema must apply
+`siftgate pricing-migrate --apply` after a verified backup, or priced requests
+return `pricing_schema_required`. The published v2.12.6 joins native
+upgrade/Fleet/recovery acceptance. Publication never deploys a running instance.
 
 ## v2.12.5 Release Scope
 
