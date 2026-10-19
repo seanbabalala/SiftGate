@@ -1,7 +1,22 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-18
-Release: **v2.12.7** (availability requires the matching successful release workflow)
+Reviewed: 2026-10-19
+Release: **v2.12.8** (availability requires the matching successful release workflow)
+
+## v2.12.8 Release Scope
+
+Read runtime-outcome audit markers and the dashboard per-log request snapshots
+by primary key and check the workspace on the fetched rows. The gateway never
+collects SQLite planner statistics, so for `workspace_id = ? AND id IN (...)`
+the planner treated the workspace filter as selective and scanned the whole
+workspace through its time index. On one single-workspace installation with
+316,444 audit rows, each priced request's audit verification took 0.1 to 1.1 s
+on the event loop, 79% of main-thread SQL time; by key it takes 0.03 ms.
+Results, workspace isolation, schema and migration markers are unchanged, so no
+migration is required. Collecting statistics at startup was rejected because
+`PRAGMA optimize` took 23 s on the same data. The published v2.12.7 joins
+native upgrade/Fleet/recovery acceptance. Publication never deploys a running
+instance.
 
 ## v2.12.7 Release Scope
 

@@ -42,6 +42,12 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:e97bea2cb3f9cf22d063efb91bb4644df4c552df4eced884f85f5c3d7e04a6bf",
       "installer_sha256": "dd8569a58a784d03fb131138d82fbe9f6900efb7aca7d60fd160791729c1cbc9",
       "source_commit": "d33d53ffae9329c828c325fa417cec7c5ddcff28"
+    },
+    {
+      "version": "2.12.7",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:93a5c4242cd314b7a119bb1a04066d0a84ccda15a41bf5c892c26500ca207b86",
+      "installer_sha256": "0b1af5737ecf6eb411869b52870783c2e553138c29ca9d62fa822f783957e7a9",
+      "source_commit": "0d453267157a86228594409218110b346646b400"
     }
   ],
   "source_kit_protocols": [
@@ -92,6 +98,10 @@
     {
       "kind": "fix",
       "summary": "Additive pricing-engine-019 index lets the 30-second pricing recovery sweep find attempts by reservation instead of scanning the attempt history on the event loop; installations with the pricing schema apply it with pricing-migrate. Native upgrade acceptance includes the published v2.12.6 baseline."
+    },
+    {
+      "kind": "fix",
+      "summary": "Pricing audit-marker checks and dashboard log-summary snapshot reads use primary-key lookups instead of scanning the workspace history on the event loop; no schema change or migration. Native upgrade acceptance includes the published v2.12.7 baseline."
     }
   ]
 }

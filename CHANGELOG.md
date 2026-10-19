@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 2.12.8 - 2026-10-19
+
+- Read runtime-outcome audit markers and dashboard log-summary request
+  snapshots by primary key, checking the workspace on the fetched rows. SQLite
+  installations have no planner statistics for the pricing tables, so
+  `workspace_id = ? AND id IN (...)` was planned as a scan of the whole
+  workspace through its time index: on one single-workspace installation with
+  316k audit rows, every priced request's audit verification blocked the event
+  loop for 0.1 to 1.1 s (0.03 ms by key), stalling `/live` and in-flight
+  requests. Results and workspace isolation are unchanged; no schema change or
+  migration.
+- Include the published v2.12.7 in native upgrade/Fleet/recovery acceptance.
+
 ## 2.12.7 - 2026-10-18
 
 - Add pricing migration `pricing-engine-019`: an additive
