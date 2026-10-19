@@ -82,9 +82,10 @@ export class CostReportService {
     actorScope(actor); const ids = parseCostLogIds(value);
     return this.read(async (manager, available) => {
       const logs = await manager.getRepository(CallLog).find({ where: workspaceFindWhere(actor.workspace_id, { id: In(ids) }), select: logSelect });
+      // request_id is the primary key; filtering the workspace in SQL lets SQLite scan the whole workspace instead.
       const snapshots = available && logs.length ? await manager.createQueryBuilder().select('s.*').from('pricing_request_snapshots', 's')
-        .where('s.workspace_id = :workspace AND s.request_id IN (:...ids)', { workspace: actor.workspace_id, ids: logs.map(l => l.request_id) }).getRawMany<SnapshotRow>() : [];
-      const byRequest = new Map(snapshots.map(s => [s.request_id, s])), rows: CostReportRow[] = [];
+        .where('s.request_id IN (:...ids)', { ids: logs.map(l => l.request_id) }).getRawMany<SnapshotRow>() : [];
+      const byRequest = new Map(snapshots.filter(s => s.workspace_id === actor.workspace_id).map(s => [s.request_id, s])), rows: CostReportRow[] = [];
       for (const id of ids) {
         const log = logs.find(l => l.id === id); if (!log) continue;
         const snapshot = byRequest.get(log.request_id);

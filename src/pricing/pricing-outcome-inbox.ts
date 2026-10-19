@@ -224,12 +224,16 @@ async function acknowledgeVerifiedOutcomes(manager: EntityManager, rows: Runtime
   return acknowledged;
 }
 interface RuntimeOutcomeAudit { id: string; action: string; metadata_json: string; actor_id: string }
+/** Marker ids are primary keys. The workspace is checked on the fetched rows: in SQL,
+ * `workspace_id = ? AND id IN (...)` lets SQLite scan the whole workspace instead. */
 async function readOutcomeAudits(manager: EntityManager, workspace: string, ids: string[]): Promise<RuntimeOutcomeAudit[]> {
-  return manager.createQueryBuilder().select([
-    "a.id AS id", "a.action AS action", "a.metadata_json AS metadata_json", "a.actor_id AS actor_id",
-  ]).from("pricing_audit_events", "a").where("a.workspace_id = :workspace AND a.id IN (:...ids)", {
-    workspace, ids: ids.flatMap(id => [`${id}:retained`, `${id}:delivered`, `${id}:review_required`]),
-  }).limit(ids.length * 3).getRawMany<RuntimeOutcomeAudit>();
+  const rows = await manager.createQueryBuilder().select([
+    "a.id AS id", "a.workspace_id AS workspace_id", "a.action AS action", "a.metadata_json AS metadata_json", "a.actor_id AS actor_id",
+  ]).from("pricing_audit_events", "a").where("a.id IN (:...ids)", {
+    ids: ids.flatMap(id => [`${id}:retained`, `${id}:delivered`, `${id}:review_required`]),
+  }).limit(ids.length * 3).getRawMany<RuntimeOutcomeAudit & { workspace_id: string }>();
+  return rows.filter(row => row.workspace_id === workspace)
+    .map(row => ({ id: row.id, action: row.action, metadata_json: row.metadata_json, actor_id: row.actor_id }));
 }
 function verifyOutcomeAudits(row: RuntimeOutcomeRow, audits: RuntimeOutcomeAudit[]): PricingOutcome {
   const document = runtimeOutcomeDocument(

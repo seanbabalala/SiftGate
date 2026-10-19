@@ -373,6 +373,25 @@ function contract(
         expect(await verifyRuntimeOutcome(runner.manager, retained)).toEqual(attempt);
       } finally { spy.mockRestore(); await runner.rollbackTransaction(); await runner.release(); }
     });
+    it("reads retention markers through the audit primary key instead of scanning the workspace", async () => {
+      const { attempt } = await seed();
+      const runner = source.createQueryRunner(); await runner.connect(); await runner.startTransaction();
+      const query = runner.query.bind(runner); const audits: Array<[string, unknown[]]> = [];
+      const spy = jest.spyOn(runner, "query").mockImplementation(async (...args: Parameters<QueryRunner["query"]>) => {
+        if (/FROM "pricing_audit_events" "a" WHERE .*a\.id IN \(/.test(args[0])) audits.push([args[0], args[1] ?? []]);
+        return query(...args);
+      });
+      try {
+        const retained = await retainRuntimeOutcome(runner.manager, attempt);
+        audits.length = 0;
+        expect(await verifyRuntimeOutcome(runner.manager, retained)).toEqual(attempt);
+        expect(audits).toHaveLength(1);
+        if (source.options.type === "better-sqlite3") {
+          const plan = ((await query(`EXPLAIN QUERY PLAN ${audits[0][0]}`, audits[0][1])) as Array<{ detail: string }>).map(row => row.detail).join("\n");
+          expect(plan).toMatch(/USING (COVERING )?INDEX sqlite_autoindex_pricing_audit_events_1 \(id=\?\)/);
+        }
+      } finally { spy.mockRestore(); await runner.rollbackTransaction(); await runner.release(); }
+    });
     it("captures before a deferred transaction without retaining caller-owned objects or mutable returned rows", async () => {
       const { attempt } = await seed();
       if (attempt.type !== "attempt") throw new Error("Expected attempt fixture");
@@ -949,9 +968,9 @@ function contract(
               const selects = queries.mock.calls.filter(([sql]) => sql.startsWith("SELECT") && sql.includes('"pricing_audit_events"'));
               expect(selects).toHaveLength(1);
               expect(selects[0][0]).toContain("LIMIT 3");
-              expect(selects[0][1]).toEqual(expect.arrayContaining([
-                workspace, `${row.id}:retained`, `${row.id}:delivered`, `${row.id}:review_required`,
-              ]));
+              expect(selects[0][1]).toEqual([
+                `${row.id}:retained`, `${row.id}:delivered`, `${row.id}:review_required`,
+              ]);
             } finally { queries.mockRestore(); }
           } finally { await runner.rollbackTransaction(); await runner.release(); }
         }

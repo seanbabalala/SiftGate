@@ -52,6 +52,16 @@ function contract(name: string, connect: () => Promise<{ source: DataSource; cle
     it('returns complete same-page compact amounts from original receipts rather than numeric log projections',async()=>{
       await initialize();const a=await attempt('known');const out=await reports.logSummaries(actor,{ids:`${a.log!.id},999999`});expect(out.rows[0]).toMatchObject({basis:'immutable_ledger',status:'priced',amount_usd: (await ledger.summary('known',workspace))!.amount});expect(out.rows[0].legacy_estimate_usd).toBeNull();expect(out.unavailable_log_ids).toEqual([999999]);expect(out.rows[0].amount_usd).not.toBe('999.000000000000000000');
     });
+    it('loads log snapshots through the snapshot primary key instead of scanning the workspace',async()=>{
+      await initialize();const a=await attempt('keyed');const logged=jest.spyOn(source.logger,'logQuery');
+      await reports.logSummaries(actor,{ids:String(a.log!.id)});
+      const lookups=logged.mock.calls.filter(([sql])=>/FROM "pricing_request_snapshots" "s" WHERE .*request_id IN \(/.test(sql));expect(lookups).toHaveLength(1);expect(lookups[0][1]).toEqual(['keyed']);
+      if(source.options.type==='better-sqlite3'){const plan=((await source.query(`EXPLAIN QUERY PLAN ${lookups[0][0]}`,lookups[0][1])) as Array<{detail:string}>).map(row=>row.detail).join('\n');expect(plan).toMatch(/USING (COVERING )?INDEX sqlite_autoindex_pricing_request_snapshots_1 \(request_id=\?\)/)}
+    });
+    it('does not attach a snapshot captured in another workspace to a log',async()=>{
+      await initialize();await prices.capture({request_id:'shared',workspace_id:'other-workspace',report_currency:'USD'});const entry=await log('shared');
+      const [row]=(await reports.logSummaries(actor,{ids:String(entry.id)})).rows;expect(row.snapshot_hash).toBeNull();expect(row.basis).not.toBe('invalid_evidence');
+    });
     it('includes latest linked correction exactly once and does not use current price publications',async()=>{
       await initialize();const a=await attempt('corrected');const amended={...a.cost,amount:'9007199254740993.000000001',report_amount:'9007199254740993.000000001',known_subtotal:'9007199254740993.000000001',report_known_subtotal:'9007199254740993.000000001'};await ledger.adjustAttempt({id:'correction',attemptId:'a-corrected',workspace,expectedCostHash:pricingContentHash(a.cost),cost:amended,reason:'Synthetic correction',actorId:'a',source:'reconciliation'});
       const rows=await allRows();expect(rows[0].amount_usd).toBe('9007199254740993.000000001000000000');expect(costReportTotals(rows).calculated_usd).toBe('9007199254740993.000000001000000000');
