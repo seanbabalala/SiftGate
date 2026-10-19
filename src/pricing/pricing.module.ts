@@ -19,6 +19,7 @@ import { PricedEmbeddingBatchingService } from "./priced-embedding-batching.serv
 import { PricingCorrectionService } from "./pricing-correction.service";
 import { MediaTaskService } from "./media-task.service";
 import { PricingRecoveryService } from "./pricing-recovery.service";
+import { PricingEvidenceRetentionService } from "./pricing-evidence-retention.service";
 import { BudgetModule } from "../budget/budget.module";
 import { CostLedgerService } from "./cost-ledger.service";
 import { PricingRuntimeService } from "./pricing-runtime.service";
@@ -60,6 +61,7 @@ import { PricingExceptionFilter } from "./pricing-exception.filter";
     CostLedgerService,
     PricingRuntimeService,
     PricingRecoveryService,
+    PricingEvidenceRetentionService,
     PricedEmbeddingBatchingService,
     MediaTaskService,
   ],

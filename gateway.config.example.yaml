@@ -60,6 +60,10 @@ database:
   # log_retention_days: 30    # Default: 30; 0 explicitly keeps logs forever.
   # Cleanup starts after 60 seconds, then runs every 6 hours in 500-row batches.
   # Back up and confirm reporting retention before lowering this value.
+  # pricing_evidence_retention_days: 0  # Default 0 keeps pricing evidence forever. N > 0 deletes the
+  # complete evidence of fully settled requests admitted more than N days ago (holds committed or
+  # released, intents applied, outcomes delivered, nothing under review or corrected); it runs every
+  # 30 minutes, one request per transaction. Purged requests leave cost reports and request-ID lookups.
   # sqlite_synchronous: FULL  # FULL is durable by default; NORMAL trades some crash durability for throughput
   # route_trace_write_behind: true # Keep full trace writes out of the client response path
   # For PostgreSQL:

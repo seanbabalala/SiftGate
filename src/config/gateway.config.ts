@@ -516,6 +516,7 @@ export interface DatabaseConfig {
         servername?: string;
   };
   log_retention_days?: number; // Auto-delete logs older than N days (default: 30)
+  pricing_evidence_retention_days?: number; // Delete fully settled pricing evidence older than N days (default: 0 = keep forever)
   sqlite_synchronous?: 'OFF' | 'NORMAL' | 'FULL' | 'EXTRA'; // SQLite durability mode (default: FULL)
   route_trace_write_behind?: boolean; // Queue full route traces after the response path (default: false)
 }

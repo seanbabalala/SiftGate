@@ -16,7 +16,14 @@ const indexName = "idx_pricing_task_reservation_state", version = "pricing-engin
 const attemptIndexName = "idx_pricing_attempt_reservation";
 const actor = { id: "synthetic-admin", workspace_id: "default-workspace", role: "admin" as const, global_admin: true };
 const attemptIndexPlan = [{ table: "pricing_attempts", name: attemptIndexName, column_names: ["workspace_id", "reservation_id"] }];
-const indexPlan = [{ table: "pricing_media_tasks", name: indexName, column_names: ["workspace_id", "reservation_id", "state"] }, ...attemptIndexPlan];
+const referencePlan = [
+  { table: "pricing_attempts", name: "idx_pricing_attempt_reservation_ref", column_names: ["reservation_id"] },
+  { table: "pricing_attempts", name: "idx_pricing_attempt_request_ref", column_names: ["request_id"] },
+  { table: "pricing_budget_effects", name: "idx_pricing_effect_reservation_ref", column_names: ["reservation_id"] },
+  { table: "pricing_runtime_outcomes", name: "idx_pricing_runtime_outcome_reservation_ref", column_names: ["reservation_id"] },
+  { table: "pricing_reservations", name: "idx_pricing_reservation_request_ref", column_names: ["request_id"] },
+];
+const indexPlan = [{ table: "pricing_media_tasks", name: indexName, column_names: ["workspace_id", "reservation_id", "state"] }, ...attemptIndexPlan, ...referencePlan];
 function contract(label: string, connect: () => Promise<{ source: DataSource; cleanup(): Promise<void> }>, run = describe, postgres = false) {
   run(label, () => {
     let source: DataSource, cleanup: () => Promise<void>;
@@ -80,10 +87,11 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       await ledger.persistRuntimeOutcome({ type: "settlement", workspace: actor.workspace_id, reservationId: "reservation", payload: { kind: "commit", tokens: "1100", cost_usd: cost.report_amount!, budget_basis: "legacy_logical", receipt: { attemptId: "attempt", cost, errorCode: null } } });
       await ledger.applySettlement("reservation", actor.workspace_id);
       const summary = await ledger.summary("request", actor.workspace_id);
-      // Index018 and 019 add no data fields. Removing only their indexes/markers
+      // Index018-020 add no data fields. Removing only their indexes/markers
       // faithfully reconstructs the017 schema around real candidate-generated records.
       await dropIndex(); await source.query(`DROP INDEX "${attemptIndexName}"`);
-      await source.query("DELETE FROM pricing_schema_versions WHERE id IN ('pricing-engine-018', 'pricing-engine-019')");
+      for (const index of referencePlan) await source.query(`DROP INDEX "${index.name}"`);
+      await source.query("DELETE FROM pricing_schema_versions WHERE id IN ('pricing-engine-018', 'pricing-engine-019', 'pricing-engine-020')");
       const before = await dump(), oldMarkers = await markers();
       expect((await planPricingSchema(source)).create_indexes).toEqual(indexPlan);
       await applyPricingSchema(source);
@@ -174,29 +182,57 @@ function contract(label: string, connect: () => Promise<{ source: DataSource; cl
       await applyPricingSchema(source); expect((await planPricingSchema(source)).state).toBe("applied");
     }, postgres ? 30_000 : 5_000); // Two complete installs and one removal.
 
-    async function pending019() {
+    /** An applied version019 installation: 020 adds only its reference indexes and marker. */
+    async function pending020() {
       await applyPricingSchema(source);
+      for (const index of referencePlan) await source.query(`DROP INDEX "${index.name}"`);
+      await source.query("DELETE FROM pricing_schema_versions WHERE id = 'pricing-engine-020'");
+    }
+    async function pending019() {
+      await pending020();
       await source.query(`DROP INDEX "${attemptIndexName}"`);
       await source.query("DELETE FROM pricing_schema_versions WHERE id = 'pricing-engine-019'");
     }
 
-    it("adds only the attempt reservation index/marker to an applied version018 installation", async () => {
+    it("adds only the attempt reservation and reference indexes/markers to an applied version018 installation", async () => {
       await pending019();
       const before = await markers();
       expect(before).toHaveLength(18);
-      expect(await planPricingSchema(source)).toMatchObject({ state: "pending", create_tables: [], create_indexes: attemptIndexPlan });
+      expect(await planPricingSchema(source)).toMatchObject({ state: "pending", create_tables: [], create_indexes: [...attemptIndexPlan, ...referencePlan] });
       await applyPricingSchema(source);
       const after = await markers();
       expect(after).toHaveLength(PRICING_MIGRATIONS.length);
-      expect(after.filter((row: { id: string }) => row.id !== "pricing-engine-019")).toEqual(before);
+      expect(after.filter((row: { id: string }) => !["pricing-engine-019", "pricing-engine-020"].includes(row.id))).toEqual(before);
       expect((await planPricingSchema(source)).state).toBe("applied");
     }, postgres ? 30_000 : 5_000); // Complete install, teardown and upgrade.
+
+    it("adds only the five reference indexes and their marker to an applied version019 installation", async () => {
+      await pending020();
+      const before = await markers(), data = await dump();
+      expect(before).toHaveLength(19);
+      expect(await planPricingSchema(source)).toMatchObject({ state: "pending", create_tables: [], create_indexes: referencePlan });
+      await applyPricingSchema(source);
+      const after = await markers();
+      expect(after).toHaveLength(PRICING_MIGRATIONS.length);
+      expect(after.filter((row: { id: string }) => row.id !== "pricing-engine-020")).toEqual(before);
+      const afterData = await dump(); delete afterData.pricing_schema_versions; delete data.pricing_schema_versions;
+      expect(afterData).toEqual(data);
+      expect((await planPricingSchema(source)).state).toBe("applied");
+    }, postgres ? 30_000 : 5_000); // Complete install, teardown and upgrade.
+
+    if (!postgres) it("lets the database find rows still referencing a deleted hold or request without scanning the child table", async () => {
+      await applyPricingSchema(source);
+      const plan = async (sql: string) => ((await source.query(`EXPLAIN QUERY PLAN ${sql}`)) as Array<{ detail: string }>).map(row => row.detail).join("\n");
+      for (const index of referencePlan)
+        expect(await plan(`SELECT 1 FROM ${index.table} WHERE ${index.column_names[0]} = 'x'`))
+          .toMatch(new RegExp(`USING (COVERING )?INDEX ${index.name} \\(${index.column_names[0]}=\\?\\)`));
+    });
 
     it("installs the canonical attempt index beside an equivalent index under another name without adopting it", async () => {
       await pending019();
       const operatorIndex = "idx_pricing_attempt_reservation_operator";
       await source.query(`CREATE INDEX "${operatorIndex}" ON pricing_attempts (workspace_id,reservation_id)`);
-      expect((await planPricingSchema(source)).create_indexes).toEqual(attemptIndexPlan);
+      expect((await planPricingSchema(source)).create_indexes).toEqual([...attemptIndexPlan, ...referencePlan]);
       await applyPricingSchema(source);
       expect((await planPricingSchema(source)).state).toBe("applied");
       const remaining = postgres

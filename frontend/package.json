@@ -1,7 +1,7 @@
 {
   "name": "siftgate-dashboard",
   "private": true,
-  "version": "2.12.8",
+  "version": "2.12.9",
   "license": "MIT",
   "engines": {
     "node": ">=22.13.0 <23"

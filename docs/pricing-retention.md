@@ -9,20 +9,56 @@ records the current application contract, not permission to clean a live databas
 
 The existing Dashboard maintenance worker removes old `call_logs` and
 `route_decisions` in coordinated batches of up to500rows. Its configured
-`database.log_retention_days` does not currently purge `pricing_*` evidence.
+`database.log_retention_days` does not purge `pricing_*` evidence.
 No price-version deletion endpoint or automatic historical-price pruning is
 provided. Publishing a new price can compact the new active catalog manifest;
 it does not rewrite older catalog revisions or remove the versions they reference.
 
-As a result, the supported cleanup path retains pricing metadata longer than
+By default the supported cleanup path retains pricing metadata longer than
 ordinary logs. This deliberately keeps versions available for the costs that
 reference them. It is **not a bounded retention policy for all pricing tables**:
 request snapshots, receipts, exact balances, audits and recovery evidence still
 consume storage. Plan capacity and independent backups. Do not assume that a
 30-day request-log policy also removes30-day pricing records, or that moving to
-PostgreSQL eliminates storage growth. A future purge/archive policy must preserve
-reference closure, pending/review work and historical accounting semantics;
-this checkpoint does not introduce or authorize one.
+PostgreSQL eliminates storage growth.
+
+## Optional purge of settled request evidence
+
+`database.pricing_evidence_retention_days` (default `0`, keep forever) enables
+a background worker that deletes the per-request evidence of requests settled
+long enough ago. Ten minutes after startup and then every 30 minutes it
+examines at most 2,000 requests created before the cutoff, oldest first, and
+resumes where the previous run stopped. Each request is decided and deleted in
+its own short transaction, so live traffic interleaves with the work.
+
+A request is deleted only when all of the following hold:
+
+- its snapshot is older than the cutoff;
+- every hold is committed or released, every attempt is terminal, belongs to one
+  of those holds and is not part of a batch, every hold has an applied settlement
+  intent and every runtime outcome is delivered;
+- nothing references it from recovery cases or decisions, actual-budget
+  cohorts, media tasks, grouped outcomes, cost adjustments and their
+  applications, outcome dispositions, batch manifests or a bypass audit.
+
+Anything else is kept, untouched, and examined again on a later pass. A row the
+checks do not cover that still references the request makes the database
+refuse the delete; the transaction rolls back and the request counts as
+blocked. A request whose evidence changes while it is examined is kept.
+
+For a deleted request the worker removes its snapshot, holds, attempts, budget
+effects, settlement intent, runtime outcomes and their audit markers. Budget
+balances are stored totals and do not change; catalogs, price versions and
+every other audit event stay. Afterward a request-ID cost lookup no longer
+finds the request, the cost report no longer counts it, and its original price
+can no longer be replayed. Choose the period accordingly; it is normally no
+shorter than the request-log retention.
+
+The worker relies on migration `pricing-engine-020` (see
+[index migrations](pricing-index-migrations.md)). On a copy of one 2.7 GB SQLite
+installation it removed 1,988 settled requests at 2.9 ms each, and the longest
+event-loop block was 38 ms. Freed pages are reused by new writes; SQLite does
+not shrink the file without a separately planned `VACUUM`.
 
 ## What remains available without a call log
 
@@ -89,6 +125,12 @@ cleanup method and prove:
 4. A deliberately failed delete batch rolls back without changing the evidence.
 5. Empty-schema removal refuses live pricing evidence, and privileged deletion of
    a referenced version makes historical restore fail safely.
+6. With the evidence purge enabled, only an aged request settled through the
+   real ledger flow loses its rows. Recent, reserved, undelivered,
+   recovery-referenced, corrected and database-referenced requests keep every
+   row, the foreign-key check stays clean, a repeated run deletes nothing, a run
+   cut short by its limit resumes, and the worker does nothing unless the period
+   is positive.
 
 A separate real-Nest HTTP test verifies request-ID lookup, the old log-ID404,
 price-version lookup, report output and labeled replay after actual cleanup.

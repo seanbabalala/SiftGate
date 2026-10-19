@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 2.12.9 - 2026-10-19
+
+- Add the opt-in `database.pricing_evidence_retention_days` setting (default
+  `0`, keep forever). When positive, a background worker deletes the pricing
+  evidence of requests settled more than that many days ago, examining at most
+  2,000 requests every 30 minutes, one short transaction per request. It deletes
+  a request only when every hold is committed or released, every attempt is
+  terminal and unbatched, every settlement intent is applied, every runtime
+  outcome is delivered and no recovery, correction, batch, media or bypass
+  record references it; everything else is kept for a later pass. Budget
+  balances, catalogs and price versions are never deleted. Deleted requests no
+  longer appear in request-ID cost lookups or the cost report.
+- Add pricing migration `pricing-engine-020`: five additive indexes that lead
+  with the referencing column on `pricing_attempts`, `pricing_budget_effects`,
+  `pricing_runtime_outcomes` and `pricing_reservations`. Deleting a hold or
+  request snapshot makes SQLite look for rows that still reference it, and the
+  existing workspace-first indexes cannot serve that lookup, so each delete
+  scanned the child tables. On a copy of one 2.7 GB installation the purge took
+  2.9 ms per request with the indexes and had not finished 6,000 requests after
+  20 minutes without them; applying the migration took 9.8 s.
+- Installations that have applied the pricing schema must run
+  `siftgate pricing-migrate --sqlite-path <db> --apply` (or
+  `--postgres-url-env <VAR> --apply`) during the upgrade, after a verified
+  backup: until the installed migration markers match the running release, the
+  pricing ledger refuses work with `pricing_schema_required` (HTTP 503).
+  Databases without pricing tables need no migration.
+- Include the published v2.12.8 in native upgrade/Fleet/recovery acceptance.
+
 ## 2.12.8 - 2026-10-19
 
 - Read runtime-outcome audit markers and dashboard log-summary request
