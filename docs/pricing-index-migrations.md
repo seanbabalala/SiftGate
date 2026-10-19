@@ -22,6 +22,22 @@ below apply to 019 exactly as to 018. An equivalent index created earlier under
 another name is not a conflict; it is left untouched and the canonical index is
 created beside it, after which the extra index may be dropped deliberately.
 
+Migration 020 adds five nonunique indexes that each lead with a referencing
+column: `pricing_attempts(reservation_id)`, `pricing_attempts(request_id)`,
+`pricing_budget_effects(reservation_id)`,
+`pricing_runtime_outcomes(reservation_id)` and
+`pricing_reservations(request_id)`. Deleting a hold or request snapshot makes
+the database look for rows that still reference it, and SQLite can use only an
+index whose first column is the referencing column. The existing indexes all
+start with `workspace_id`, so without 020 every deleted parent scanned the whole
+child tables. In a synthetic fixture of 30,000 settled requests, deleting one
+request's evidence took 69 ms to 1.6 s without the indexes and 1.3 to 2.2 ms with
+them. On a copy of one 2.7 GB installation, applying 020 took 9.8 s, and the
+settled-evidence purge in [retention](pricing-retention.md) then removed each
+request in 2.9 ms; unindexed, 6,000 requests had not finished after 20 minutes.
+Those are timings on copies, not a controlled benchmark. The integrity,
+conflict, maintenance and backup rules below apply to 020 exactly as to 018.
+
 ## Explicit planning and application
 
 The existing `siftgate pricing-migrate` command still requires one explicit

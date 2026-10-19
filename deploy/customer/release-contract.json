@@ -48,6 +48,12 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:93a5c4242cd314b7a119bb1a04066d0a84ccda15a41bf5c892c26500ca207b86",
       "installer_sha256": "0b1af5737ecf6eb411869b52870783c2e553138c29ca9d62fa822f783957e7a9",
       "source_commit": "0d453267157a86228594409218110b346646b400"
+    },
+    {
+      "version": "2.12.8",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:1e7dce7dcf8aaaf6420863186739dbb17b6693c50cadd6b295a8bcc291e44feb",
+      "installer_sha256": "e180f935b6a979a27948e81f4df04fa64d098cf54092593a80db14766bc0a82f",
+      "source_commit": "82d27c7b10ce8d0d13e42bedb742f12b88d1e2f9"
     }
   ],
   "source_kit_protocols": [
@@ -102,6 +108,10 @@
     {
       "kind": "fix",
       "summary": "Pricing audit-marker checks and dashboard log-summary snapshot reads use primary-key lookups instead of scanning the workspace history on the event loop; no schema change or migration. Native upgrade acceptance includes the published v2.12.7 baseline."
+    },
+    {
+      "kind": "feature",
+      "summary": "Opt-in database.pricing_evidence_retention_days deletes the pricing evidence of fully settled, unreferenced requests older than the period in small background batches (default 0 keeps everything); additive pricing-engine-020 indexes let the deletes' foreign-key checks seek instead of scanning, and installations with the pricing schema apply them with pricing-migrate. Native upgrade acceptance includes the published v2.12.8 baseline."
     }
   ]
 }

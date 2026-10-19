@@ -4,16 +4,25 @@ import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 import { runCli } from '../../src/cli/siftgate';
 
+const referencePlan = [
+  { table: 'pricing_attempts', name: 'idx_pricing_attempt_reservation_ref', column_names: ['reservation_id'] },
+  { table: 'pricing_attempts', name: 'idx_pricing_attempt_request_ref', column_names: ['request_id'] },
+  { table: 'pricing_budget_effects', name: 'idx_pricing_effect_reservation_ref', column_names: ['reservation_id'] },
+  { table: 'pricing_runtime_outcomes', name: 'idx_pricing_runtime_outcome_reservation_ref', column_names: ['reservation_id'] },
+  { table: 'pricing_reservations', name: 'idx_pricing_reservation_request_ref', column_names: ['request_id'] },
+];
 const indexPlan = [
   { table: 'pricing_media_tasks', name: 'idx_pricing_task_reservation_state', column_names: ['workspace_id', 'reservation_id', 'state'] },
   { table: 'pricing_attempts', name: 'idx_pricing_attempt_reservation', column_names: ['workspace_id', 'reservation_id'] },
+  ...referencePlan,
 ];
 
-/** Reconstruct017 in a disposable, unused fixture:018 and 019 add only these indexes/markers. */
+/** Reconstruct017 in a disposable, unused fixture:018, 019 and 020 add only these indexes/markers. */
 async function pendingIndex(source: DataSource) {
   await source.query('DROP INDEX idx_pricing_task_reservation_state');
   await source.query('DROP INDEX idx_pricing_attempt_reservation');
-  await source.query("DELETE FROM pricing_schema_versions WHERE id IN ('pricing-engine-018', 'pricing-engine-019')");
+  for (const index of referencePlan) await source.query(`DROP INDEX ${index.name}`);
+  await source.query("DELETE FROM pricing_schema_versions WHERE id IN ('pricing-engine-018', 'pricing-engine-019', 'pricing-engine-020')");
   const markers = await source.query('SELECT * FROM pricing_schema_versions ORDER BY id');
   expect(markers).toHaveLength(17);
   return markers;
@@ -86,7 +95,7 @@ describe('explicit pricing migration CLI', () => {
     await source.initialize();
     try {
       const markers = await source.query('SELECT * FROM pricing_schema_versions ORDER BY id');
-      expect(markers).toHaveLength(19);
+      expect(markers).toHaveLength(20);
       expect(markers.slice(0, 17)).toEqual(beforeMarkers);
     } finally { await source.destroy(); }
     expect(await run(['--sqlite-path', 'pricing.db', '--dry-run'])).toBe(0);
@@ -119,7 +128,7 @@ describe('explicit pricing migration CLI', () => {
           expect(await source.query("SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_pricing_task_reservation_state'")).toEqual([]);
           expect(await pgRun(['--apply'])).toBe(0);
           const markers = await source.query('SELECT * FROM pricing_schema_versions ORDER BY id');
-          expect(markers).toHaveLength(19);
+          expect(markers).toHaveLength(20);
           expect(markers.slice(0, 17)).toEqual(before);
         } finally { await source.destroy(); }
         expect(await pgRun(['--dry-run'])).toBe(0);

@@ -1,7 +1,28 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-10-19
-Release: **v2.12.8** (availability requires the matching successful release workflow)
+Release: **v2.12.9** (availability requires the matching successful release workflow)
+
+## v2.12.9 Release Scope
+
+Add the opt-in `database.pricing_evidence_retention_days` setting, default `0`
+(keep forever). When positive, a background worker deletes the per-request
+pricing evidence of requests settled before the cutoff, at most 2,000 requests
+every 30 minutes and one short transaction per request. A request is kept unless
+every hold is committed or released, every attempt is terminal and unbatched,
+every settlement intent is applied, every runtime outcome is delivered and no
+recovery, correction, batch, media or bypass record references it. A reference
+the checks miss makes the database refuse the delete, which rolls back and
+counts the request as blocked. Budget balances, catalogs and price versions stay.
+
+Add migration `pricing-engine-020`: five indexes leading with each referencing
+column, so the RESTRICT foreign-key checks run when a hold or snapshot is
+deleted can seek instead of scanning the child tables. On a copy of one 2.7 GB
+installation applying it took 9.8 s, and the purge then took 2.9 ms per request
+with a longest event-loop block of 38 ms; without the indexes 6,000 requests had
+not finished after 20 minutes. Upgrades require `pricing-migrate --apply` after a
+verified backup. The published v2.12.8 joins native upgrade/Fleet/recovery
+acceptance. Publication never deploys a running instance or enables retention.
 
 ## v2.12.8 Release Scope
 

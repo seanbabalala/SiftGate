@@ -21,6 +21,17 @@ export const PRICING_ATTEMPT_RESERVATION_INDEXES: PricingIndexAddition[] = [{
   definition: { name: "idx_pricing_attempt_reservation", columnNames: ["workspace_id", "reservation_id"] },
 }];
 
+/** Deleting a reservation or request snapshot makes the database look up every row that still references it.
+ * Those lookups can only use an index that leads with the referencing column; workspace-first indexes force a
+ * scan of the whole child table per deleted parent. */
+export const PRICING_REFERENCE_INDEXES: PricingIndexAddition[] = [
+  { table: "pricing_attempts", definition: { name: "idx_pricing_attempt_reservation_ref", columnNames: ["reservation_id"] } },
+  { table: "pricing_attempts", definition: { name: "idx_pricing_attempt_request_ref", columnNames: ["request_id"] } },
+  { table: "pricing_budget_effects", definition: { name: "idx_pricing_effect_reservation_ref", columnNames: ["reservation_id"] } },
+  { table: "pricing_runtime_outcomes", definition: { name: "idx_pricing_runtime_outcome_reservation_ref", columnNames: ["reservation_id"] } },
+  { table: "pricing_reservations", definition: { name: "idx_pricing_reservation_request_ref", columnNames: ["request_id"] } },
+];
+
 export function pricingIndexPlan(index: PricingIndexAddition): PricingIndexPlan {
   if (!index.definition.name || !index.definition.columnNames?.length) throw new Error("A pricing index migration requires an explicit name and ordered columns");
   return { table: index.table, name: index.definition.name, column_names: [...index.definition.columnNames] };

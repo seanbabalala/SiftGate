@@ -681,6 +681,23 @@ function validateDatabase(
       ),
     );
   }
+  const evidenceRetention: unknown = database.pricing_evidence_retention_days;
+  if (
+    evidenceRetention !== undefined &&
+    (typeof evidenceRetention !== 'number' ||
+      !Number.isInteger(evidenceRetention) ||
+      evidenceRetention < 0 ||
+      evidenceRetention > 3650)
+  ) {
+    issues.push(
+      issue(
+        'error',
+        'invalid_pricing_evidence_retention_days',
+        'database.pricing_evidence_retention_days must be an integer from 0 (keep forever) to 3650 when set.',
+        'database.pricing_evidence_retention_days',
+      ),
+    );
+  }
   if (
     database.type === 'postgres' &&
     database.synchronize !== false
