@@ -54,6 +54,12 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:1e7dce7dcf8aaaf6420863186739dbb17b6693c50cadd6b295a8bcc291e44feb",
       "installer_sha256": "e180f935b6a979a27948e81f4df04fa64d098cf54092593a80db14766bc0a82f",
       "source_commit": "82d27c7b10ce8d0d13e42bedb742f12b88d1e2f9"
+    },
+    {
+      "version": "2.12.9",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:42defd028f0882cd394a9fa5c0924fad0255162b45ea8873535b59dba010ede4",
+      "installer_sha256": "a974cb213ee5c5787e0210e6217c80eab6dcb047535425442d6f973d54e71c16",
+      "source_commit": "5ad394a61644f89379ab459c01ce974e44ad4b95"
     }
   ],
   "source_kit_protocols": [
@@ -112,6 +118,10 @@
     {
       "kind": "feature",
       "summary": "Opt-in database.pricing_evidence_retention_days deletes the pricing evidence of fully settled, unreferenced requests older than the period in small background batches (default 0 keeps everything); additive pricing-engine-020 indexes let the deletes' foreign-key checks seek instead of scanning, and installations with the pricing schema apply them with pricing-migrate. Native upgrade acceptance includes the published v2.12.8 baseline."
+    },
+    {
+      "kind": "fix",
+      "summary": "Inline and data-URL images are estimated from the pixel size in their PNG, JPEG, GIF or WebP header (width × height / 750, 512 to 6,000 tokens; unreadable images count 6,000) instead of base64 length / 4, so screenshot requests are no longer rejected for an inflated context size and routing, cost and budget estimates stop treating them as huge."
     }
   ]
 }
