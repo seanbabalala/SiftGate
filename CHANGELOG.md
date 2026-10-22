@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.12.11 - 2026-10-22
+
+- Publish the v2.12.10 image token estimate fix. The v2.12.10 tag was not
+  released: with 2.12.9 added as a native upgrade source, amd64 release
+  verification exceeded the 45-minute job limit and publish was skipped.
+- Raise the release verification job limit from 45 to 60 minutes.
+
 ## 2.12.10 - 2026-10-22
 
 - Estimate inline base64 and data-URL images from the pixel size in their PNG,

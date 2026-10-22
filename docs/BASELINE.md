@@ -1,7 +1,16 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-10-22
-Release: **v2.12.10** (availability requires the matching successful release workflow)
+Release: **v2.12.11** (availability requires the matching successful release workflow)
+
+## v2.12.11 Release Scope
+
+Publish the v2.12.10 change (inline image token estimates from pixel size).
+The v2.12.10 tag was never released: adding 2.12.9 as a native upgrade source
+lengthened native lifecycle acceptance, arm64 verification took 42.6 minutes
+and amd64 was cancelled at the 45-minute job limit, so publish was skipped. The
+release verification job limit is now 60 minutes. The runtime matches the
+v2.12.10 tag apart from the version.
 
 ## v2.12.10 Release Scope
 
