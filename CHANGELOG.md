@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 2.12.10 - 2026-10-22
+
+- Estimate inline base64 and data-URL images from the pixel size in their PNG,
+  JPEG, GIF or WebP header (width × height / 750, between 512 and 6,000 tokens;
+  an unreadable image counts 6,000) instead of counting the base64 characters as
+  text. The old estimate put a typical screenshot above 100,000 tokens, so
+  requests that fit were rejected for exceeding `max_context_tokens`, and route
+  filtering, cost prediction, budget risk and context-optimizer evidence
+  treated every screenshot request as huge. Text estimates are unchanged.
+- Include the published v2.12.9 in native upgrade/Fleet/recovery acceptance.
+
 ## 2.12.9 - 2026-10-19
 
 - Add the opt-in `database.pricing_evidence_retention_days` setting (default

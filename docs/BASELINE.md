@@ -1,7 +1,21 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-19
-Release: **v2.12.9** (availability requires the matching successful release workflow)
+Reviewed: 2026-10-22
+Release: **v2.12.10** (availability requires the matching successful release workflow)
+
+## v2.12.10 Release Scope
+
+Estimate inline base64 and data-URL images for the context-window preflight and
+routing from the pixel size in the PNG, JPEG, GIF or WebP header: width × height
+/ 750 tokens, between 512 and 6,000, with 6,000 for an image whose header cannot
+be read. The old estimate counted base64 characters as text at four per token,
+so a 400 KB screenshot was estimated at about 130,000 tokens. Requests that fit
+were rejected as over `max_context_tokens`, and route filtering, cost
+prediction, budget risk, the cost optimizer and the context optimizer all treated
+screenshot requests as huge: a request with eight 1,600-pixel screenshots that
+used about 37,000 tokens was estimated at more than one million. Text and remote
+image URL estimates are unchanged. The published v2.12.9 joins native
+upgrade/Fleet/recovery acceptance.
 
 ## v2.12.9 Release Scope
 
