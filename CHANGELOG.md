@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 2.12.12 - 2026-11-09
+
+- Add opt-in API-key `model_routes` for exact chat-model round-robin and
+  weighted node pools, including Chat Completions, Responses and Messages
+  streaming. Effective Key/Team/Namespace permissions and existing capability,
+  circuit-breaker and context checks apply before selection; fallbacks stay
+  inside the pool. Explicit node selection and global `auto` remain unchanged.
+  Counters are bounded, process-local and reset on restart. Pooled requests
+  with `previous_response_id` require an explicit node or full conversation input.
+- Fail closed when configured permission restrictions have no intersection,
+  instead of interpreting the empty intersection as unrestricted access.
+- Add the nullable `gateway_api_keys.model_routes` column through the idempotent
+  SQLite/PostgreSQL startup patch, preserving old unbound keys and existing
+  bindings. SQLite-to-PostgreSQL migration preserves nested route definitions.
+- Show end-to-end output TPS in request logs (`output_tokens / total latency`),
+  not decode-only speed or TTFT. Local cache hits and unavailable measurements
+  do not display misleading throughput. Improve log-table badge wrapping.
+- Trim insignificant decimal padding in cost cells without rounding or
+  recalculating historical amounts; retain full precision in audit displays.
+- Edit cache-read/write prices with explicit zero versus inherit semantics,
+  preserve untouched overrides, and provide labels and validation in all seven
+  Dashboard locales.
+- Include the signed published v2.12.11 in native upgrade/Fleet/recovery acceptance.
+
 ## 2.12.11 - 2026-10-22
 
 - Publish the v2.12.10 image token estimate fix. The v2.12.10 tag was not

@@ -1,7 +1,30 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-10-22
-Release: **v2.12.11** (availability requires the matching successful release workflow)
+Reviewed: 2026-11-09
+Release: **v2.12.12** (availability requires the matching successful release workflow)
+
+## v2.12.12 Release Scope
+
+Combine request-log output TPS, exact compact cost rendering and cache-read/write
+pricing editing with opt-in per-key model routing. TPS uses total request latency,
+not decode-only duration, and excludes local cache hits. Decimal display changes
+never round or reprice historical ledger amounts. Cache-price edits distinguish
+explicit zero, inheritance and untouched values across all seven Dashboard locales.
+
+Exact chat-model pools use round robin or weighted selection after effective
+Key/Team/Namespace permissions and existing capability/context/circuit filters.
+Fallback remains inside the pool; explicit node selection and global `auto` are
+unchanged. A disjoint permission intersection now denies access. Process-local
+round-robin counters are bounded and reset on restart, not shared across replicas.
+Pooled `previous_response_id` requests require an explicit node or full input.
+See [per-key model routing](api-key-model-routing.md) for configuration and limits.
+
+The idempotent startup patch adds nullable `gateway_api_keys.model_routes` on
+SQLite/PostgreSQL without binding existing keys, including when schema sync is
+disabled. Existing bindings and SQLite-to-PostgreSQL migrations preserve routes.
+Back up config and database before deployment; an older binary cannot honor the
+new binding. Native upgrade/Fleet/recovery acceptance includes the signed
+published v2.12.11 baseline. Publication itself never switches a running instance.
 
 ## v2.12.11 Release Scope
 

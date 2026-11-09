@@ -1,3 +1,4 @@
+import { isExplicitNodeModel } from '../routing/api-key-model-route';
 import { nativeVideoRequestShape } from "../pricing/video-result-profile";
 import { PricedEmbeddingBatchingService } from "../pricing/priced-embedding-batching.service";
 import { PricingBatchClientError } from "../pricing/pricing-batch-runtime.types";
@@ -4006,19 +4007,110 @@ export class PipelineService implements BeforeApplicationShutdown {
 
   /**
    * Resolve routing with priority:
-   *   1. Direct model match — exact ID, alias, node ID shortcut, or "nodeId/model" prefix
-   *   2. Unknown model → fall through to auto routing (let the gateway decide)
-   *   3. "auto" / no model → scoring engine picks tier → routing
+   *   1. Opt-in key/model pool, except for explicit node selection
+   *   2. Direct model match — exact ID, alias, node ID shortcut, or "nodeId/model" prefix
+   *   3. Unknown model, "auto", or no model → scoring engine picks tier → routing
    *
-   * Philosophy: the gateway never rejects a model name. If it can figure out
-   * which node you mean, it routes directly. Otherwise it uses smart routing.
-   * The upstream API is the final authority on whether a model name is valid.
+   * Unbound models retain legacy lookup. Configured key pools fail closed rather
+   * than escaping to unrelated global targets when none of their nodes qualify.
    */
   private async resolveSmartRoute(
     canonical: CanonicalRequest,
     store?: Map<string, unknown>,
   ): Promise<SmartRouteResolution> {
     const requestedModel = await this.applyAgentProfileVirtualModel(canonical);
+
+    // Opt-in key/model bindings take precedence over ordinary model lookup, never
+    // over explicit node selection. Permissions are intersected before balancing.
+    const modelRoute =
+      requestedModel &&
+      requestedModel !== 'auto' &&
+      !isExplicitNodeModel(requestedModel, this.config.nodes)
+        ? canonical.metadata.api_key_model_routes?.find(
+            (rule) => rule.model === requestedModel,
+          )
+        : undefined;
+    if (
+      modelRoute &&
+      canonical.metadata.api_key_id &&
+      canonical.metadata.api_key_permissions
+    ) {
+      this.assertRouteModeAllowed(canonical, 'direct');
+      if (canonical.metadata.previous_response_id) {
+        throw new GatewayRequestRejectedError(
+          'Model-pool requests with previous_response_id must use an explicit node/model target or resend full conversation input.',
+          400,
+        );
+      }
+      const permitted = modelRoute.targets
+        .map((target) => ({ ...target, model: modelRoute.model }))
+        .filter((target) =>
+          this.isTargetAllowed(canonical, target.node, target.model),
+        );
+      if (!permitted.length)
+        throw new GatewayRequestRejectedError(
+          'This API key has no permitted target in its model pool.',
+          403,
+        );
+      const estimate = estimateCanonicalRequestTokens(canonical);
+      const scope = JSON.stringify([
+        'key-model',
+        this.workspaceIdForCanonical(canonical),
+        canonical.metadata.api_key_id,
+        modelRoute.model,
+        modelRoute.strategy,
+        permitted,
+      ]);
+      const route = this.routingService.resolveKeyModelPool(
+        scope,
+        modelRoute.strategy,
+        permitted,
+        {
+          ...this.routeSelectionHintsForTrace(canonical),
+          ...this.resolveReasoningSelectionFields(canonical),
+          workspace_id: this.workspaceIdForCanonical(canonical),
+          estimated_input_tokens: estimate.input_tokens,
+          estimated_output_tokens: estimate.output_tokens,
+          estimated_context_tokens: estimate.context_tokens,
+          requires_structured_output:
+            this.requestRequiresStructuredOutput(canonical),
+        },
+        Array.from(detectRequestModalities(canonical)),
+      );
+      this.assertTargetAllowed(
+        canonical,
+        route.primary.node,
+        route.primary.model,
+      );
+      this.assertContextWindow(
+        canonical,
+        route.primary.node,
+        route.primary.model,
+      );
+      const trace = this.buildPipelineRouteTrace({
+        mode: 'direct',
+        canonical,
+        tier: 'direct',
+        score: 0,
+        route,
+        reason: 'API key model pool: ' + modelRoute.strategy,
+      });
+      trace.load_balancing = {
+        ...trace.load_balancing,
+        strategy: modelRoute.strategy,
+        source: 'targets',
+        reason: 'API key model pool: ' + modelRoute.strategy,
+      };
+      return {
+        route,
+        tier: 'direct',
+        score: 0,
+        domainHint: null,
+        experimentGroup: null,
+        experimentGroupsByTarget: {},
+        routeTrace: trace,
+      };
+    }
 
     if (this.shouldPinMessagesRequestToClaude(canonical, requestedModel)) {
       const pinnedNode = this.findPinnedMessagesNode(requestedModel);

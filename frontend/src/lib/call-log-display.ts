@@ -22,6 +22,20 @@ export function isSemanticCacheLog(log: Pick<CallLog, 'node_id' | 'semantic_cach
   return log.node_id === SEMANTIC_CACHE_NODE || log.semantic_cache_hit === true
 }
 
+/** Historical logs retain total latency, not TTFT: use reproducible end-to-end output throughput. */
+export function logTokensPerSecond(log: Pick<CallLog, 'output_tokens' | 'latency_ms' | 'tier' | 'node_id' | 'semantic_cache_hit'>): number | null {
+  if (isPromptCacheLog(log) || isSemanticCacheLog(log)) return null
+  if (!Number.isFinite(log.output_tokens) || !Number.isFinite(log.latency_ms) || log.output_tokens <= 0 || log.latency_ms <= 0) return null
+  const rate = log.output_tokens / (log.latency_ms / 1000)
+  return Number.isFinite(rate) ? rate : null
+}
+
+export function formatLogThroughput(rate: number | null, locale: string): string {
+  if (rate === null || !Number.isFinite(rate) || rate <= 0) return '—'
+  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 })
+  return `${rate < 0.1 ? `<${formatter.format(0.1)}` : formatter.format(rate)} tok/s`
+}
+
 export function isProviderCacheLog(
   log: Pick<
     CallLog,

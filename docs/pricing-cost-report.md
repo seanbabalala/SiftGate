@@ -6,6 +6,13 @@ the same immutable ledger summary as request cost details; it does not reprice
 history using the current catalog. This is an internal cost report, not a
 supplier invoice or a promise that all network traffic was durably recorded.
 
+The Request Logs table also shows **TPS** as `X tok/s`: output tokens divided by
+the recorded total response time in seconds. It includes first-token wait and
+network/processing time; historical logs do not persist TTFT, so this is not a
+decode-only benchmark. Input and cache-read tokens are excluded from the
+numerator. Local cache hits, absent output tokens and invalid/zero durations show
+`—`; provider prompt-cache hits still report throughput for newly generated output.
+
 The [current output attachment](pricing-cost-output-delivery.md) provides fresh
 cost-detail/report/replay API examples, complete and partial summary exports,
 and an independent exact-arithmetic verifier. Its SQLite/AppModule execution
@@ -90,6 +97,15 @@ request, snapshot and operation; only then may its stored legacy estimate be
 shown. Reads never create markers or retroactively guess that a missing receipt
 meant bypass. A failed marker write preserves compatibility traffic but leaves
 report classification unknown.
+
+Dashboard amounts omit trailing decimal padding without rounding significant
+digits or converting ledger strings to JavaScript numbers. For example,
+`0.009074640000000000 USD` is displayed as `0.00907464 USD`; the original scaled
+amount remains available on hover and in API/export evidence. Unknown amounts
+display as `—`, not `0 USD`. Estimate badges are visually neutral, while missing
+prices and incomplete costs retain warning styling. `legacy_estimate` identifies
+the compatibility pricing source, not the age or precision of a price, and is
+not relabelled as a calculated charge by this display change.
 
 When every terminal receipt lacks usage and no known subtotal exists, the
 request summary retains `missing_usage`, matching the attempt and report. It is

@@ -442,5 +442,8 @@
   "timeRange.7d": "7 days",
   "timeRange.30d": "30 days",
   "timeRange.90d": "90 days",
-  "timeRange.today": "Today"
+  "timeRange.today": "Today",
+  "table.tps": "TPS",
+  "table.tpsHelp": "End-to-end output throughput: output tokens ÷ total response time in seconds, including first-token wait. Input/cache-read tokens are not output tokens.",
+  "table.tpsUnavailable": "Unavailable for local cache hits, missing output tokens, or invalid duration."
 }

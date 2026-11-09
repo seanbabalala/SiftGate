@@ -3913,3 +3913,109 @@ describe('PipelineService — cache-aware cost calculation', () => {
     );
   });
 });
+
+describe('PipelineService — API key model pool selection', () => {
+  const pool = [
+    {
+      model: 'gpt-4o',
+      strategy: 'round_robin' as const,
+      targets: [
+        { node: 'openai', weight: 1 },
+        { node: 'backup', weight: 1 },
+      ],
+    },
+  ];
+  function request(model = 'gpt-4o') {
+    const req = makeRequest('Hello', { originalModel: model });
+    Object.assign(req.metadata, {
+      workspace_id: 'workspace-a',
+      api_key_id: 'key-a',
+      api_key_model_routes: pool,
+      api_key_permissions: {
+        allow_direct: true,
+        allow_auto: false,
+        allowed_nodes: [],
+        allowed_models: ['gpt-4o'],
+        allowed_endpoints: [],
+        allowed_modalities: [],
+      },
+    });
+    return req;
+  }
+  function setup() {
+    return makePipeline({
+      routingService: {
+        resolveKeyModelPool: jest
+          .fn()
+          .mockImplementation((_scope, _strategy, targets) => ({
+            primary: targets[0],
+            fallbacks: targets.slice(1),
+          })),
+      },
+    });
+  }
+
+  it('filters effective grants before selection and scopes counters by workspace/key/model', async () => {
+    const { pipeline, mocks } = setup();
+    const req = request();
+    req.metadata.api_key_permissions!.allowed_nodes = ['backup'];
+    const route = await (pipeline as any).resolveSmartRoute(req);
+    const [scope, strategy, targets] =
+      mocks.routingService.resolveKeyModelPool.mock.calls[0];
+    expect(JSON.parse(scope).slice(0, 5)).toEqual([
+      'key-model',
+      'workspace-a',
+      'key-a',
+      'gpt-4o',
+      'round_robin',
+    ]);
+    expect(strategy).toBe('round_robin');
+    expect(targets).toEqual([{ node: 'backup', model: 'gpt-4o', weight: 1 }]);
+    expect(route.route.primary.node).toBe('backup');
+    expect(route.routeTrace.load_balancing.strategy).toBe('round_robin');
+    expect(mocks.config.resolveModel).not.toHaveBeenCalled();
+    expect(mocks.scoringService.score).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing direct permission or an entirely forbidden pool without using the default route', async () => {
+    const { pipeline, mocks } = setup();
+    const req = request();
+    req.metadata.api_key_permissions!.allow_direct = false;
+    await expect(
+      (pipeline as any).resolveSmartRoute(req),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    req.metadata.api_key_permissions!.allow_direct = true;
+    req.metadata.api_key_permissions!.allowed_nodes = ['forbidden'];
+    await expect(
+      (pipeline as any).resolveSmartRoute(req),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(mocks.routingService.resolveKeyModelPool).not.toHaveBeenCalled();
+    expect(mocks.config.resolveModel).not.toHaveBeenCalled();
+  });
+
+  it('rejects cross-node stateful continuation but keeps explicit pins working', async () => {
+    const { pipeline, mocks } = setup();
+    const req = request();
+    req.metadata.previous_response_id = 'resp-provider-owned';
+    await expect(
+      (pipeline as any).resolveSmartRoute(req),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    req.metadata.original_model = 'openai/gpt-4o';
+    const direct = await (pipeline as any).resolveSmartRoute(req);
+    expect(direct.route.primary).toEqual({ node: 'openai', model: 'gpt-4o' });
+    expect(mocks.routingService.resolveKeyModelPool).not.toHaveBeenCalled();
+  });
+
+  it('keeps non-opted-in keys and auto routing on the original path', async () => {
+    const { pipeline, mocks } = setup();
+    const req = request();
+    delete req.metadata.api_key_model_routes;
+    await (pipeline as any).resolveSmartRoute(req);
+    expect(mocks.config.resolveModel).toHaveBeenCalledWith('gpt-4o');
+    const auto = request('auto');
+    auto.metadata.api_key_permissions!.allow_auto = true;
+    await (pipeline as any).resolveSmartRoute(auto);
+    expect(mocks.routingService.resolve).toHaveBeenCalled();
+    expect(mocks.routingService.resolveKeyModelPool).not.toHaveBeenCalled();
+  });
+});

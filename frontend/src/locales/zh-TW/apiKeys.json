@@ -163,5 +163,20 @@
   "teams.form.namePlaceholder": "platform-team",
   "teams.limits.inherited": "继承 key、Policy Namespace 和全局限制",
   "teams.table.title": "本地團隊",
-  "permissions.policyNamespaceValue": "Policy Namespace：{{namespace}}"
+  "permissions.policyNamespaceValue": "Policy Namespace：{{namespace}}",
+  "modelRoutes.title": "按模型分流",
+  "modelRoutes.description": "將此 Key 對指定模型的請求分配至所選節點。不影響現有 auto 路由及其他 Key。",
+  "modelRoutes.directRequired": "請先啟用直接路由。",
+  "modelRoutes.strategy": "分流策略",
+  "modelRoutes.roundRobin": "輪詢 · 平均分配請求",
+  "modelRoutes.weighted": "加權 · 按比例分配請求",
+  "modelRoutes.remove": "刪除 {{model}} 的分流規則",
+  "modelRoutes.unavailable": "無法使用",
+  "modelRoutes.weight": "權重",
+  "modelRoutes.nodeWeight": "{{node}} 的權重",
+  "modelRoutes.invalid": "請選擇 2–16 個獲授權且提供此模型的節點，權重須為 1–100 的整數，並啟用直接路由。",
+  "modelRoutes.add": "新增模型分流",
+  "modelRoutes.chooseModel": "選擇多個節點共有的模型",
+  "modelRoutes.empty": "目前沒有至少兩個獲授權節點共同提供的模型。",
+  "modelRoutes.safety": "仍受 Key、團隊及命名空間權限限制。明確指定 node/model 的請求不參與分流。使用 previous_response_id 時須固定節點或傳送完整對話。"
 }

@@ -1,5 +1,5 @@
 import { VIDEO_RESULT_PROFILES, type VideoResultProfile } from "../../../../src/pricing/video-result-profile.types";
-import { collectLegacyPricingUpdates, legacyPriceNumber } from "@/lib/node-pricing-form";
+import { collectLegacyPricingUpdates, legacyCacheFields, legacyPricingFields, type LegacyPricingRow } from "@/lib/node-pricing-form";
 import { Link } from "react-router-dom";
 import {
   useState,
@@ -261,11 +261,7 @@ interface KeyValueRow {
   value: string;
 }
 
-interface PricingRow {
-  dirty?: boolean;
-  model: string;
-  input: string;
-  output: string;
+interface PricingRow extends LegacyPricingRow {
   source?: string;
   manual_review_required?: boolean;
   pricing_trust?: NonNullable<CatalogModel["pricing_trust"]>;
@@ -639,14 +635,7 @@ function defaultBucketsFromProvider(
 function pricingRowForModel(model: CatalogModel): PricingRow {
   return {
     model: model.id,
-    input:
-      model.pricing.input === null || model.pricing.input === undefined
-        ? ""
-        : String(model.pricing.input),
-    output:
-      model.pricing.output === null || model.pricing.output === undefined
-        ? ""
-        : String(model.pricing.output),
+    ...legacyPricingFields(model.pricing),
     source: model.pricing.source,
     manual_review_required: model.pricing.manual_review_required,
     pricing_trust: model.pricing_trust,
@@ -825,14 +814,7 @@ function pricingRowsFromCapabilities(
     .filter(([, capability]) => capability.pricing)
     .map(([model, capability]) => ({
       model,
-      input:
-        capability.pricing?.input === undefined
-          ? ""
-          : String(capability.pricing.input),
-      output:
-        capability.pricing?.output === undefined
-          ? ""
-          : String(capability.pricing.output),
+      ...legacyPricingFields(capability.pricing),
       source: "local",
       manual_review_required: false,
       pricing_trust: "reference_estimate",
@@ -1322,7 +1304,7 @@ export function NodeFormModal({
   const addPricing = () =>
     setField("pricing", [
       ...form.pricing,
-      { model: "", input: "", output: "" },
+      { model: "", ...legacyPricingFields() },
     ]);
   const removePricing = (index: number) => {
     const model = form.pricing[index].model;
@@ -1340,7 +1322,11 @@ export function NodeFormModal({
     setField(
       "pricing",
       form.pricing.map((row, idx) =>
-        idx === index ? { ...row, [field]: value, dirty: true } : row,
+        idx === index ? {
+          ...row, [field]: value, dirty: true,
+          ...((field === 'cache_read_input' || field === 'cache_creation_input')
+            ? { cache_dirty: { ...row.cache_dirty, [field]: true } } : {}),
+        } : row,
       ),
     );
 
@@ -1371,9 +1357,8 @@ export function NodeFormModal({
       }
     }
     if (targetStep === "settings" || targetStep === "test") {
-      const editedPrices = form.pricing.filter((row) => row.dirty && (row.input.trim() || row.output.trim()));
-      if (editedPrices.some((row) => !row.model.trim() || !row.input.trim() || !row.output.trim() || legacyPriceNumber(row.input) === undefined || legacyPriceNumber(row.output) === undefined)) errs.pricing = t('pricing:legacy.invalid');
-      if (new Set(editedPrices.map((row) => row.model.trim())).size !== editedPrices.length) errs.pricing = t('pricing:legacy.invalid');
+      try { collectLegacyPricingUpdates(form.pricing, removedPrices); }
+      catch { errs.pricing = t('pricing:legacy.invalid'); }
 
       const credentialRows = form.credentials.filter(
         (credential) => credential.id.trim() || credential.api_key.trim(),
@@ -1463,14 +1448,13 @@ export function NodeFormModal({
         compactModels(form[bucket] as string[]),
       ),
     );
-    for (const row of form.pricing) {
-      if (!row.dirty || !row.input.trim() || !row.output.trim()) continue;
-      const model = row.model.trim();
-      if (!model) continue;
+    for (const update of collectLegacyPricingUpdates(form.pricing, [])) {
+      if (update.action !== 'set') continue;
+      const { model, input, output } = update;
       if (!activeModels.has(model)) continue;
-      const input = Number(row.input);
-      const output = Number(row.output);
-      if (!Number.isFinite(input) || !Number.isFinite(output)) continue;
+      const cache = Object.fromEntries(legacyCacheFields.flatMap(field =>
+        update[field] === null || update[field] === undefined ? [] : [[field, update[field]]],
+      ));
       const bucket = MODEL_BUCKETS.find((candidate) =>
         compactModels(form[candidate.key] as string[]).includes(model),
       )?.key;
@@ -1478,7 +1462,7 @@ export function NodeFormModal({
         model,
         {
           ...(bucket ? { modalities: BUCKET_MODALITIES[bucket] } : {}),
-          pricing: { input, output },
+          pricing: { input, output, ...cache },
         },
       ]);
     }
@@ -3284,8 +3268,9 @@ function PricingEditor({
   showCatalogReferenceNote?: boolean;
   t: (key: string) => string;
 }) {
+  const { t: pricingT } = useTranslation('pricing');
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {showCatalogReferenceNote && (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--background-secondary)] px-3 py-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -3300,52 +3285,44 @@ function PricingEditor({
           </p>
         </div>
       )}
+      <p className="text-xs leading-5 text-[var(--foreground-muted)]">{pricingT('legacy.cacheHelp')}</p>
       {rows.map((row, index) => (
         <div
-          key={`${row.model}-${index}`}
-          className="grid gap-2 md:grid-cols-[minmax(180px,1fr)_120px_120px_36px]"
+          key={index}
+          className="grid gap-3 border-b border-[var(--border)] pb-4 last:border-b-0 sm:grid-cols-2"
         >
-          <Input
-            value={row.model}
-            onChange={(event) => onChange(index, "model", event.target.value)}
-            placeholder={t("form.placeholders.modelId")}
-            className="font-mono"
-          />
-          <Input
-            value={row.input}
-            onChange={(event) => onChange(index, "input", event.target.value)}
-            placeholder={t("form.placeholders.priceInput")}
-          />
-          <Input
-            value={row.output}
-            onChange={(event) => onChange(index, "output", event.target.value)}
-            placeholder={t("form.placeholders.priceOutput")}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            type="button"
-            onClick={() => onRemove(index)}
-          >
-            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-          </Button>
+          <div className="flex items-end gap-2 sm:col-span-2">
+            <label className="min-w-0 flex-1 space-y-1.5 text-[11px] text-[var(--foreground-muted)]">
+              <span>{t('form.placeholders.modelId')}</span>
+              <Input value={row.model} onChange={(event) => onChange(index, 'model', event.target.value)} placeholder={t('form.placeholders.modelId')} className="font-mono" />
+            </label>
+            <Button variant="ghost" size="icon" type="button" aria-label={pricingT('legacy.removeModel', { model: row.model })} onClick={() => onRemove(index)}>
+              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+            </Button>
+          </div>
+          {(['input', 'output', ...legacyCacheFields] as const).map(field => (
+            <label key={field} className="min-w-0 space-y-1.5 text-[11px] text-[var(--foreground-muted)]">
+              <span>{pricingT(`legacy.${field}`)} <span className="text-[var(--foreground-dim)]">· {pricingT('legacy.unit')}</span></span>
+              <Input inputMode="decimal" value={row[field] ?? ''} onChange={(event) => onChange(index, field, event.target.value)} placeholder={field === 'input' || field === 'output' ? pricingT('legacy.required') : pricingT('legacy.cacheDefault')} className="font-mono tabular-nums" />
+            </label>
+          ))}
           {row.pricing_trust === "aligned_estimate" && (
-            <div className="md:col-span-4 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+            <div className="sm:col-span-2 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
               {t("form.pricing.alignedEstimateRow")}
             </div>
           )}
           {row.pricing_trust === "reference_estimate" && (
-            <div className="md:col-span-4 text-[10px] font-semibold text-[var(--foreground-dim)]">
+            <div className="sm:col-span-2 text-[10px] font-semibold text-[var(--foreground-dim)]">
               {t("form.pricing.referenceRow")}
             </div>
           )}
           {row.pricing_trust === "review_required" && (
-            <div className="md:col-span-4 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+            <div className="sm:col-span-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
               {t("form.pricing.manualReview")}
             </div>
           )}
           {!row.pricing_trust && row.manual_review_required && (
-            <div className="md:col-span-4 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+            <div className="sm:col-span-2 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
               {t("form.pricing.manualReview")}
             </div>
           )}
@@ -3353,7 +3330,7 @@ function PricingEditor({
             !row.manual_review_required &&
             row.source &&
             row.source !== "local" && (
-              <div className="md:col-span-4 text-[10px] font-semibold text-[var(--foreground-dim)]">
+              <div className="sm:col-span-2 text-[10px] font-semibold text-[var(--foreground-dim)]">
                 {t("form.pricing.referenceRow")}
               </div>
             )}

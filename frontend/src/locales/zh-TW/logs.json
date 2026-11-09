@@ -442,5 +442,8 @@
   "timeRange.7d": "7 天",
   "timeRange.30d": "30 天",
   "timeRange.90d": "90 天",
-  "timeRange.today": "今天"
+  "timeRange.today": "今天",
+  "table.tps": "TPS",
+  "table.tpsHelp": "端到端輸出速率：輸出 tokens ÷ 整體回應時間（秒），包含首 token 等待時間。輸入及快取讀取 tokens 不計入輸出。",
+  "table.tpsUnavailable": "本機快取命中、無輸出 tokens 或耗時無效時不計算 TPS。"
 }

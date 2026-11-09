@@ -703,6 +703,7 @@ function normalizeRow(
       workspace_id: toDefaultWorkspaceId,
       allow_auto: toBoolean,
       allow_direct: toBoolean,
+      model_routes: toJsonObjectArrayOrNull,
       allowed_nodes: toJsonArrayOrNull,
       allowed_models: toJsonArrayOrNull,
       allowed_endpoints: toJsonArrayOrNull,
@@ -1053,6 +1054,21 @@ function toNullableDate(value: unknown): Date | null {
 function toNullableIsoString(value: unknown): string | null {
   const parsed = toNullableDate(value);
   return parsed ? parsed.toISOString() : null;
+}
+
+function toJsonObjectArrayOrNull(
+  value: unknown,
+): Record<string, unknown>[] | null {
+  if (value == null || value === '') return null;
+  const parsed: unknown = typeof value === 'string' ? JSON.parse(value) : value;
+  if (
+    !Array.isArray(parsed) ||
+    parsed.some(
+      (item) => !item || typeof item !== 'object' || Array.isArray(item),
+    )
+  )
+    throw new Error('Invalid stored model_routes');
+  return parsed as Record<string, unknown>[];
 }
 
 function toJsonArrayOrNull(value: unknown): string[] | null {

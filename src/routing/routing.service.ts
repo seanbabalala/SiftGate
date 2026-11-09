@@ -191,6 +191,7 @@ function fnv1a32(str: string): number {
 export class RoutingService {
   private readonly logger = new Logger(RoutingService.name);
   private readonly roundRobinCounters = new Map<string, number>();
+  private readonly keyModelRoundRobinCounters = new Map<string, number>();
   private readonly latencyWindows = new Map<string, number[]>();
   private readonly targetLastStatus = new Map<string, {
     latencyMs: number;
@@ -214,6 +215,55 @@ export class RoutingService {
     private readonly cacheAffinityService: CacheAffinityService,
     @Optional() private readonly pricingRuntime?: PricingRuntimeService,
   ) {}
+
+  /** Reuse the existing filters/selectors without reading or mutating global tiers. */
+  resolveKeyModelPool(
+    scope: string,
+    strategy: 'round_robin' | 'weighted',
+    targets: WeightedRouteTarget[],
+    hints: RouteSelectionHints,
+    modalityHints?: Modality[],
+  ): { primary: RouteTarget; fallbacks: RouteTarget[] } {
+    let available = targets.filter((target) => {
+      const node = this.config.getNode(target.node);
+      return (
+        node &&
+        !node.disabled &&
+        node.models.includes(target.model) &&
+        this.circuitBreaker.isAvailable(target.node, target.model)
+      );
+    });
+    if (!available.length)
+      throw new RoutingConstraintError(
+        'No healthy configured target in this API key model pool.',
+        503,
+      );
+    available = this.filterTargetsByModalities(
+      'direct',
+      available,
+      modalityHints,
+    );
+    available = this.filterTargetsByCompatibilityProfiles(
+      'direct',
+      available,
+      hints,
+    );
+    available = this.applyCapabilityConstraints('direct', available, hints);
+    const { target } = this.selectTargetByStrategy(
+      scope,
+      strategy,
+      available,
+      undefined,
+      hints,
+      'api_key',
+    );
+    return {
+      primary: this.toRouteTarget(target),
+      fallbacks: available
+        .filter((t) => t !== target)
+        .map((t) => this.toRouteTarget(t)),
+    };
+  }
 
   /**
    * Resolve a route for a given tier + score.
@@ -949,6 +999,7 @@ export class RoutingService {
     targets: WeightedRouteTarget[],
     sessionKey?: string,
     selectionHints: RouteSelectionHints = {},
+    selectionScope: 'global' | 'api_key' = 'global',
   ): SelectedRouteTarget {
     if (targets.length === 0) {
       throw new Error(`No route targets available for tier "${tier}"`);
@@ -965,7 +1016,7 @@ export class RoutingService {
       return { target: contextPreferred, strategy };
     }
 
-    const optimization = this.config.routing.optimization;
+    const optimization = selectionScope === 'global' ? this.config.routing.optimization : undefined;
     if (optimization) {
       const optimizedTarget = this.selectTargetByOptimization(
         optimization,
@@ -984,7 +1035,7 @@ export class RoutingService {
 
     switch (strategy) {
       case 'round_robin':
-        return { target: this.selectRoundRobin(tier, targets), strategy };
+        return { target: this.selectRoundRobin(tier, targets, selectionScope), strategy };
       case 'least_latency':
         return {
           target: this.selectLeastLatency(targets, sessionKey, selectionHints),
@@ -1573,10 +1624,15 @@ export class RoutingService {
   private selectRoundRobin(
     tier: string,
     targets: WeightedRouteTarget[],
+    selectionScope: 'global' | 'api_key' = 'global',
   ): WeightedRouteTarget {
-    const index = this.roundRobinCounters.get(tier) || 0;
+    const counters = selectionScope === 'api_key' ? this.keyModelRoundRobinCounters : this.roundRobinCounters;
+    if (selectionScope === 'api_key' && !counters.has(tier) && counters.size >= 10000) {
+      counters.delete(counters.keys().next().value!);
+    }
+    const index = counters.get(tier) || 0;
     const selected = targets[index % targets.length];
-    this.roundRobinCounters.set(tier, index + 1);
+    counters.set(tier, selectionScope === 'api_key' ? (index + 1) % targets.length : index + 1);
     return selected;
   }
 

@@ -7,6 +7,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
+import type { ApiKeyModelRoute } from '../../routing/api-key-model-route';
+
 export type GatewayApiKeyStatus = 'active' | 'disabled';
 
 @Entity('gateway_api_keys')
@@ -43,6 +45,9 @@ export class GatewayApiKey {
 
   @Column({ type: 'boolean', default: false })
   allow_direct!: boolean;
+
+  @Column({ type: 'simple-json', nullable: true })
+  model_routes!: ApiKeyModelRoute[] | null;
 
   @Column({ type: 'simple-json', nullable: true })
   allowed_nodes!: string[] | null;

@@ -151,3 +151,56 @@ describe('Workspace schema patch', () => {
     }
   });
 });
+
+describe('Additive API key model route schema patch', () => {
+  it('preserves existing keys on an old SQLite schema and is idempotent', async () => {
+    const { addApiKeyModelRoutesColumn } =
+      await import('../../src/database/workspace-schema-patch.service');
+    const db = new DataSource({
+      type: 'better-sqlite3',
+      database: ':memory:',
+      entities: [],
+      synchronize: false,
+    });
+    await db.initialize();
+    try {
+      expect(await addApiKeyModelRoutesColumn(db)).toBe(false);
+      await db.query(
+        'CREATE TABLE gateway_api_keys (id text PRIMARY KEY, key_hash text)',
+      );
+      await db.query(
+        "INSERT INTO gateway_api_keys VALUES ('old-key', 'unchanged-hash')",
+      );
+      expect(await addApiKeyModelRoutesColumn(db)).toBe(true);
+      expect(await addApiKeyModelRoutesColumn(db)).toBe(false);
+      expect(await db.query('SELECT * FROM gateway_api_keys')).toEqual([
+        { id: 'old-key', key_hash: 'unchanged-hash', model_routes: null },
+      ]);
+    } finally {
+      await db.destroy();
+    }
+  });
+
+  it('uses additive idempotent PostgreSQL DDL without rewriting key rows', async () => {
+    const { addApiKeyModelRoutesColumn } =
+      await import('../../src/database/workspace-schema-patch.service');
+    const query = jest.fn(async (sql: string) =>
+      sql.includes('information_schema.tables')
+        ? [{ table_name: 'gateway_api_keys' }]
+        : [],
+    );
+    const db = {
+      options: { type: 'postgres' },
+      query,
+    } as unknown as DataSource;
+    expect(await addApiKeyModelRoutesColumn(db)).toBe(true);
+    expect(query).toHaveBeenCalledWith(
+      'ALTER TABLE gateway_api_keys ADD COLUMN IF NOT EXISTS model_routes text NULL',
+    );
+    expect(
+      query.mock.calls.every(
+        ([sql]) => !sql.includes('UPDATE') && !sql.includes('DROP'),
+      ),
+    ).toBe(true);
+  });
+});

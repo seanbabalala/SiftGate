@@ -1,4 +1,5 @@
 import { checkCalculationPolicy } from './check-calculation-policy.mjs'
+import { checkCachePricingUpgrade } from './check-cache-pricing-upgrade.mjs'
 import { checkMediaSpecification } from './check-media-specification.mjs'
 import { checkCalendarWeek } from './check-calendar-week.mjs'
 import { checkPublicationFxReview } from './check-publication-fx-review.mjs'
@@ -35,6 +36,7 @@ function moduleFrom(file, dependencies = {}, globals = {}) {
   vm.runInNewContext(code, { exports, require: (name) => { assert.ok(dependencies[name], `Unexpected dependency: ${name}`); return dependencies[name] }, crypto: webcrypto, structuredClone, URL, console, ...globals }, { filename: file })
   return exports
 }
+checkCachePricingUpgrade({root,moduleFrom})
 checkContextRangeTable({root,moduleFrom})
 checkPublicationFxReview({root,moduleFrom})
 checkTimeBasisReview({root,moduleFrom})
@@ -678,6 +680,20 @@ assert.equal(cacheDisplay.cacheComparisonAmount({...referenceMetrics,comparison_
 assert.equal(cacheDisplay.cacheComparisonAmount(undefined, 'actual'), null)
 
 const logCacheDisplay = moduleFrom(path.join(root, 'src/lib/call-log-display.ts'), { '../../../src/pricing/cost-report-money': moduleFrom(path.join(root, '../src/pricing/cost-report-money.ts')) })
+const throughputLog = { output_tokens: 400, latency_ms: 4400, tier: 'direct', node_id: 'provider', input_tokens: 100000, cache_read_input_tokens: 99000 }
+assert.equal(logCacheDisplay.logTokensPerSecond(throughputLog), 400 / 4.4)
+assert.equal(logCacheDisplay.formatLogThroughput(logCacheDisplay.logTokensPerSecond(throughputLog), 'en'), '90.9 tok/s')
+assert.equal(logCacheDisplay.formatLogThroughput(12.34, 'es'), '12,3 tok/s')
+assert.equal(logCacheDisplay.formatLogThroughput(0.001, 'en'), '<0.1 tok/s')
+for (const patch of [{ output_tokens: 0 }, { output_tokens: -1 }, { output_tokens: NaN }, { latency_ms: 0 }, { latency_ms: Infinity }, { latency_ms: -1 }, { node_id: 'cache' }, { semantic_cache_hit: true }]) assert.equal(logCacheDisplay.logTokensPerSecond({ ...throughputLog, ...patch }), null)
+for (const rate of [null, NaN, Infinity, 0, -1]) assert.equal(logCacheDisplay.formatLogThroughput(rate, 'zh'), '—')
+const logsPage = fs.readFileSync(path.join(root, 'src/pages/LogsPage.tsx'), 'utf8')
+assert.ok(logsPage.includes('const TABLE_COLUMNS = 14') && logsPage.includes('<ThroughputCell log={log} />'))
+for (const locale of ['en', 'zh', 'zh-TW', 'ja', 'ko', 'th', 'es']) {
+ const strings = JSON.parse(fs.readFileSync(path.join(root, `src/locales/${locale}/logs.json`), 'utf8'))
+ for (const key of ['table.tps', 'table.tpsHelp', 'table.tpsUnavailable']) assert.ok(strings[key], `${locale}: ${key}`)
+}
+console.log('Log TPS passed: output-only end-to-end rate, zero/invalid/cache handling, exact tok/s unit and seven locales.')
 assert.equal(logCacheDisplay.providerCacheCostBreakdown({cost_usd:1,cost_without_cache_usd:null}).savedCostUsd, null)
 assert.equal(logCacheDisplay.providerCacheCostBreakdown({cost_usd:0,cost_without_cache_usd:0}).hasNoCacheEstimate, true)
 assert.equal(logCacheDisplay.providerCacheCostBreakdown({cost_usd:2,cost_without_cache_usd:1}).savedCostUsd, -1)

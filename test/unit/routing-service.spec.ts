@@ -1207,3 +1207,163 @@ describe('RoutingService — images and audio', () => {
     });
   });
 });
+
+describe('RoutingService — API key model pools', () => {
+  const nodes = ['n1', 'n2'].map((id) => ({
+    id,
+    models: ['shared-model'],
+    protocol: 'chat_completions',
+  }));
+  const targets = nodes.map((node) => ({
+    node: node.id,
+    model: 'shared-model',
+    weight: 1,
+  }));
+
+  it('balances concurrent selection and isolates each key/workspace scope', async () => {
+    const service = makeRoutingService({ nodes });
+    const selected = await Promise.all(
+      Array.from(
+        { length: 20 },
+        async () =>
+          service.resolveKeyModelPool(
+            'workspace-a/key-a',
+            'round_robin',
+            targets,
+            {},
+          ).primary.node,
+      ),
+    );
+    expect(selected.filter((n) => n === 'n1')).toHaveLength(10);
+    expect(selected.filter((n) => n === 'n2')).toHaveLength(10);
+    service.resolveKeyModelPool(
+      'workspace-a/key-a',
+      'round_robin',
+      targets,
+      {},
+    );
+    expect(
+      service.resolveKeyModelPool(
+        'workspace-a/key-b',
+        'round_robin',
+        targets,
+        {},
+      ).primary.node,
+    ).toBe('n1');
+    expect(
+      service.resolveKeyModelPool(
+        'workspace-b/key-a',
+        'round_robin',
+        targets,
+        {},
+      ).primary.node,
+    ).toBe('n1');
+    expect(
+      service.resolveKeyModelPool(
+        'workspace-a/key-a',
+        'round_robin',
+        targets,
+        {},
+      ).primary.node,
+    ).toBe('n2');
+  });
+
+  it('respects weights and ignores global optimizations', () => {
+    const service = makeRoutingService({ nodes, optimization: 'lowest_cost' });
+    const optimize = jest.spyOn(service as any, 'selectTargetByOptimization');
+    const random = jest.spyOn(Math, 'random');
+    try {
+      const weighted = [{ ...targets[0], weight: 3 }, targets[1]];
+      random.mockReturnValue(0.7);
+      expect(
+        service.resolveKeyModelPool('key', 'weighted', weighted, {}).primary
+          .node,
+      ).toBe('n1');
+      random.mockReturnValue(0.9);
+      const route = service.resolveKeyModelPool(
+        'key',
+        'weighted',
+        weighted,
+        {},
+      );
+      expect(route.primary.node).toBe('n2');
+      expect(route.fallbacks).toEqual([{ node: 'n1', model: 'shared-model' }]);
+      expect(optimize).not.toHaveBeenCalled();
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('filters missing, disabled, changed-model and circuit-open nodes, failing closed when empty', () => {
+    const circuitBreaker = {
+      isAvailable: jest.fn((node: string) => node !== 'n1'),
+    };
+    const service = makeRoutingService({ nodes, circuitBreaker });
+    expect(
+      service.resolveKeyModelPool(
+        'key',
+        'round_robin',
+        [...targets, { node: 'missing', model: 'shared-model', weight: 1 }],
+        {},
+      ).primary.node,
+    ).toBe('n2');
+    circuitBreaker.isAvailable.mockReturnValue(false);
+    expect(() =>
+      service.resolveKeyModelPool('key', 'round_robin', targets, {}),
+    ).toThrow('No healthy');
+    for (const unavailable of [
+      { ...nodes[1], disabled: true },
+      { ...nodes[1], models: ['different'] },
+    ]) {
+      const svc = makeRoutingService({ nodes: [nodes[0], unavailable] });
+      expect(
+        svc.resolveKeyModelPool('key', 'round_robin', targets, {}),
+      ).toEqual({
+        primary: { node: 'n1', model: 'shared-model' },
+        fallbacks: [],
+      });
+    }
+  });
+
+  it('reuses modality, context and structured-output constraints for primary and fallbacks', () => {
+    const capabilities = {
+      resolveModelModalities: jest.fn((node: string) =>
+        node === 'n1' ? ['text'] : ['text', 'vision'],
+      ),
+      resolveModelRoutingCapabilities: jest.fn((node: string) => ({
+        max_context_tokens: node === 'n1' ? 100 : 1000,
+        structured_output: node === 'n2',
+      })),
+    };
+    const service = makeRoutingService({
+      nodes,
+      capabilityService: capabilities,
+    });
+    expect(
+      service.resolveKeyModelPool('key', 'round_robin', targets, {}, ['vision'])
+        .primary.node,
+    ).toBe('n2');
+    const route = service.resolveKeyModelPool('key', 'round_robin', targets, {
+      estimated_context_tokens: 200,
+      requires_structured_output: true,
+    });
+    expect(route).toEqual({
+      primary: { node: 'n2', model: 'shared-model' },
+      fallbacks: [],
+    });
+    expect(() =>
+      service.resolveKeyModelPool('key', 'round_robin', targets, {
+        estimated_context_tokens: 2000,
+      }),
+    ).toThrow('context tokens');
+  });
+
+  it('bounds per-key counters without evicting global routing counters', () => {
+    const service = makeRoutingService({ nodes });
+    (service as any).roundRobinCounters.set('standard', 1);
+    for (let i = 0; i < 10001; i++)
+      service.resolveKeyModelPool(`key-${i}`, 'round_robin', targets, {});
+    expect((service as any).keyModelRoundRobinCounters.size).toBe(10000);
+    expect((service as any).roundRobinCounters.get('standard')).toBe(1);
+  });
+});

@@ -442,5 +442,8 @@
   "timeRange.7d": "7 días",
   "timeRange.30d": "30 días",
   "timeRange.90d": "90 días",
-  "timeRange.today": "Hoy"
+  "timeRange.today": "Hoy",
+  "table.tps": "TPS",
+  "table.tpsHelp": "Rendimiento de salida: tokens de salida ÷ tiempo total de respuesta en segundos, incluida la espera inicial. No incluye tokens de entrada ni lecturas de caché.",
+  "table.tpsUnavailable": "No disponible para caché local, ausencia de tokens de salida o duración inválida."
 }

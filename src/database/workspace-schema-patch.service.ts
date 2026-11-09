@@ -106,9 +106,30 @@ export async function applyWorkspaceSchemaPatches(
       result.backfilledTables.push(table);
     }
   }
+  if (await addApiKeyModelRoutesColumn(dataSource)) {
+    result.addedColumns.push('gateway_api_keys.model_routes');
+  }
   await ensureCallLogPerformanceIndexes(dataSource);
 
   return result;
+}
+
+/** Nullable/additive: old rows and old binaries retain their prior behavior. */
+export async function addApiKeyModelRoutesColumn(
+  dataSource: DataSource,
+): Promise<boolean> {
+  if (
+    !supportsSchemaPatch(dataSource) ||
+    !(await hasTable(dataSource, 'gateway_api_keys')) ||
+    (await hasColumn(dataSource, 'gateway_api_keys', 'model_routes'))
+  )
+    return false;
+  await dataSource.query(
+    dataSource.options.type === 'postgres'
+      ? 'ALTER TABLE gateway_api_keys ADD COLUMN IF NOT EXISTS model_routes text NULL'
+      : 'ALTER TABLE gateway_api_keys ADD COLUMN model_routes text',
+  );
+  return true;
 }
 
 export async function createWorkspaceCoreTables(

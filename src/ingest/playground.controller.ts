@@ -1,3 +1,4 @@
+import { intersectPermissionScopes } from '../auth/permission-scopes';
 import {
   BadRequestException,
   Body,
@@ -339,11 +340,11 @@ export class PlaygroundController {
     if (!namespace) return context;
     return {
       ...context,
-      allowed_nodes: this.combineRestrictions(
+      allowed_nodes: intersectPermissionScopes(
         context.allowed_nodes,
         namespace.allowed_nodes || [],
       ),
-      allowed_models: this.combineRestrictions(
+      allowed_models: intersectPermissionScopes(
         context.allowed_models,
         namespace.allowed_models || [],
       ),
@@ -354,13 +355,6 @@ export class PlaygroundController {
         namespace.rate_limit?.requests_per_minute,
       ),
     };
-  }
-
-  private combineRestrictions(left: string[], right: string[]): string[] {
-    if (left.length === 0) return [...right];
-    if (right.length === 0) return [...left];
-    const rightSet = new Set(right);
-    return left.filter((value) => rightSet.has(value));
   }
 
   private combineRateLimit(
