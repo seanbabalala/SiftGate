@@ -10,6 +10,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
+import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +32,32 @@ def git(repo, *args):
     return subprocess.check_output(["git", "-C", str(repo), *args], stderr=subprocess.PIPE)
 
 
+def download_scanner_archive(directory, name, url):
+    limit = 32 * 1024 * 1024
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            return response.read(limit + 1)
+    except (urllib.error.URLError, TimeoutError) as error:
+        if isinstance(error, urllib.error.HTTPError):
+            error.close()
+        # GitHub's browser-download route can return 504 while its release API
+        # still works. gh handles authentication/redirects without forwarding a
+        # token to an arbitrary URL. Only this fixed public repository is read;
+        # the same pinned SHA-256 is still required before extraction/execution.
+        result = subprocess.run(
+            ["gh", "release", "download", "v" + VERSION, "--repo", "gitleaks/gitleaks",
+             "--pattern", name, "--dir", str(directory)],
+            capture_output=True, timeout=180,
+            env={**os.environ, "GH_PROMPT_DISABLED": "1"},
+        )
+        archive = directory / name
+        require(result.returncode == 0 and archive.is_file() and not archive.is_symlink(),
+                "scanner_archive_download_failed")
+        require(archive.stat().st_size <= limit, "scanner_archive_size_limit")
+        with archive.open("rb") as stream:
+            return stream.read(limit + 1)
+
+
 def scanner(directory):
     """Fetch only the public scanner binary, verify before executing; no repo data sent."""
     target = ARCHIVES.get((platform.system(), platform.machine()))
@@ -44,8 +71,7 @@ def scanner(directory):
     if local:
         data = Path(local).read_bytes()
     else:
-        with urllib.request.urlopen(url, timeout=60) as response:
-            data = response.read(32 * 1024 * 1024 + 1)
+        data = download_scanner_archive(directory, name, url)
     require(len(data) <= 32 * 1024 * 1024 and hashlib.sha256(data).hexdigest() == expected,
             "scanner_archive_digest_mismatch")
     archive.write_bytes(data)

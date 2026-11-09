@@ -4,6 +4,9 @@
 
 ## 2.12.13 - 2026-11-09
 
+- Fall back to GitHub CLI release-asset retrieval when the public scanner download
+  endpoint is unavailable. Keep the exact scanner archive SHA-256, size limit and
+  fail-closed publication checks; no scan or signature gate is skipped.
 - Publish the v2.12.12 log, cache-price editor and API-key routing changes after
   correcting cross-version upgrade acceptance. The v2.12.12 tag was not released:
   native verification rejected the expected nullable `model_routes` addition

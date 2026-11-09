@@ -1,6 +1,7 @@
 """Security gates use real synthetic Git/scanner/Docker-policy inputs, never a live gateway."""
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,8 @@ import subprocess
 import tempfile
 import unittest
 import uuid
+import urllib.error
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +26,49 @@ def module(name, path):
 
 scan = module("secret_scan", ROOT / "scripts/scan-secrets.py")
 boundary = module("publication_boundary", ROOT / "scripts/check-publication-boundary.py")
+
+
+class ScannerDownloadTests(unittest.TestCase):
+    def test_normal_download_remains_bounded_and_needs_no_cli(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(scan.urllib.request, "urlopen", return_value=io.BytesIO(b"archive")), patch.object(scan.subprocess, "run") as run:
+            self.assertEqual(scan.download_scanner_archive(Path(folder), "archive.tar.gz", "https://github.com/public-fixture"), b"archive")
+            run.assert_not_called()
+
+    def test_504_fallback_reads_only_the_fixed_public_release(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            def download(args, **kwargs):
+                self.assertEqual(args[:7], ["gh", "release", "download", "v8.30.1", "--repo", "gitleaks/gitleaks", "--pattern"])
+                self.assertEqual(kwargs["timeout"], 180)
+                self.assertEqual(kwargs["env"]["GH_PROMPT_DISABLED"], "1")
+                (directory / "archive.tar.gz").write_bytes(b"pinned-candidate-bytes")
+                return SimpleNamespace(returncode=0)
+            error = urllib.error.HTTPError("https://github.com/public-fixture", 504, "unavailable", {}, None)
+            with patch.object(scan.urllib.request, "urlopen", side_effect=error), patch.object(scan.subprocess, "run", side_effect=download):
+                self.assertEqual(scan.download_scanner_archive(directory, "archive.tar.gz", "https://github.com/public-fixture"), b"pinned-candidate-bytes")
+
+    def test_fallback_cannot_execute_an_archive_with_a_wrong_digest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            def download(args, **kwargs):
+                (directory / args[args.index("--pattern") + 1]).write_bytes(b"not-the-pinned-executable")
+                return SimpleNamespace(returncode=0)
+            with patch.dict(os.environ, {"SIFTGATE_GITLEAKS_ARCHIVE": ""}), patch.object(scan.urllib.request, "urlopen", side_effect=TimeoutError), patch.object(scan.subprocess, "run", side_effect=download), patch.object(scan.subprocess, "check_output") as execute:
+                with self.assertRaisesRegex(RuntimeError, "scanner_archive_digest_mismatch"):
+                    scan.scanner(directory)
+                execute.assert_not_called()
+
+    def test_failed_or_oversized_cli_download_still_fails_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            with patch.object(scan.urllib.request, "urlopen", side_effect=TimeoutError), patch.object(scan.subprocess, "run", return_value=SimpleNamespace(returncode=1)):
+                with self.assertRaisesRegex(RuntimeError, "scanner_archive_download_failed"):
+                    scan.download_scanner_archive(directory, "archive.tar.gz", "https://github.com/public-fixture")
+            with (directory / "archive.tar.gz").open("wb") as output:
+                output.truncate(32 * 1024 * 1024 + 1)
+            with patch.object(scan.urllib.request, "urlopen", side_effect=TimeoutError), patch.object(scan.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                with self.assertRaisesRegex(RuntimeError, "scanner_archive_size_limit"):
+                    scan.download_scanner_archive(directory, "archive.tar.gz", "https://github.com/public-fixture")
 
 
 class ScannerTests(unittest.TestCase):

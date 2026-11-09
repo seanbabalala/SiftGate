@@ -16,6 +16,10 @@ same-version Vault verification are never altered or excluded. Negative tests
 reject missing migration, binding changes, unrelated schema changes and changed
 keys, logs or pricing data. All existing native release gates still apply.
 
+If GitHub's browser download route is unavailable, scanner bootstrap may retrieve
+the same public release asset through GitHub CLI. The pinned archive checksum,
+size limit and all content/history scans remain mandatory.
+
 ## v2.12.12 Release Scope
 
 Combine request-log output TPS, exact compact cost rendering and cache-read/write
