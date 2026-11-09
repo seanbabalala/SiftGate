@@ -19,6 +19,8 @@ keys, logs or pricing data. All existing native release gates still apply.
 If GitHub's browser download route is unavailable, scanner bootstrap may retrieve
 the same public release asset through GitHub CLI. The pinned archive checksum,
 size limit and all content/history scans remain mandatory.
+Docker builds compile locked native modules against their own Node headers;
+the runtime layer removes temporary compiler packages and verifies SQLite loads.
 
 ## v2.12.12 Release Scope
 
