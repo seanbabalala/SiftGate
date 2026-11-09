@@ -1,7 +1,20 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-11-09
-Release: **v2.12.12** (availability requires the matching successful release workflow)
+Release: **v2.12.13** (availability requires the matching successful release workflow)
+
+## v2.12.13 Release Scope
+
+Publish the v2.12.12 feature set after fixing its cross-version acceptance
+comparison. The v2.12.12 tag did not publish: the new nullable route column changed
+Vault's full-column business fingerprint, so both native upgrade checks stopped.
+
+Upgrade acceptance now verifies the exact nullable text column addition and SQL
+NULL for every old key, then compares all remaining business data on a disposable
+projection of the checkpointed snapshot. Existing bindings, original backups and
+same-version Vault verification are never altered or excluded. Negative tests
+reject missing migration, binding changes, unrelated schema changes and changed
+keys, logs or pricing data. All existing native release gates still apply.
 
 ## v2.12.12 Release Scope
 
