@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 2.12.14 - 2026-11-09
+
+- Publish the log, cache-pricing and per-key model-routing changes after hardening
+  historical installer retrieval. The v2.12.13 tag did not publish: both native
+  acceptance runners timed out fetching a pinned legacy installer.
+- Allow the native acceptance harness to retrieve the same historical asset via
+  GitHub CLI when the browser download route fails. Keep the archive checksum,
+  size, safe extraction, nested source commit and image pins unchanged.
+- Retry anonymous publication verification on bounded timeouts and HTTP 504,
+  still without authenticated download fallback. Changed bytes, bad signatures,
+  permanent access failures and exhausted retries continue to block publication.
+
 ## 2.12.13 - 2026-11-09
 
 - Fall back to GitHub CLI release-asset retrieval when the public scanner download
