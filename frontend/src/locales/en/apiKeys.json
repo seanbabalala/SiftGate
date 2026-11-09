@@ -163,5 +163,20 @@
   "teams.form.namePlaceholder": "platform-team",
   "teams.limits.inherited": "inherits key, Policy Namespace, and global limits",
   "teams.table.title": "Local Teams",
-  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}"
+  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}",
+  "modelRoutes.title": "Per-model routing",
+  "modelRoutes.description": "Split this key’s requests for an exact model across selected nodes. Existing auto routing and other keys stay unchanged.",
+  "modelRoutes.directRequired": "Enable direct routing to use model pools.",
+  "modelRoutes.strategy": "Strategy",
+  "modelRoutes.roundRobin": "Round robin · equal requests",
+  "modelRoutes.weighted": "Weighted · proportional requests",
+  "modelRoutes.remove": "Remove routing for {{model}}",
+  "modelRoutes.unavailable": "Unavailable",
+  "modelRoutes.weight": "Weight",
+  "modelRoutes.nodeWeight": "{{node}} weight",
+  "modelRoutes.invalid": "Select 2–16 permitted nodes exposing this model, with integer weights from 1 to 100. Direct routing must be enabled.",
+  "modelRoutes.add": "Add model route",
+  "modelRoutes.chooseModel": "Choose a shared model",
+  "modelRoutes.empty": "No model is currently available on two permitted nodes.",
+  "modelRoutes.safety": "Key, Team and Namespace permissions still apply. Explicit node/model requests bypass this pool. Requests using previous_response_id must pin a node or resend full conversation input."
 }

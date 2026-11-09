@@ -1959,6 +1959,8 @@ export interface ModelPricing {
   output: number;
   cache_creation_input?: number;
   cache_read_input?: number;
+  cache_read_per_1m_tokens?: number;
+  cache_write_per_1m_tokens?: number;
 }
 
 export interface ConfigResponse {
@@ -2818,7 +2820,7 @@ export interface UpdateNodeRequest {
   model_prefixes?: string[];
   headers?: Record<string, string>;
   model_capabilities?: Record<string, Partial<ModelCapabilityInfo>>;
-  model_pricing_updates?: Array<{ model: string; action: 'set' | 'inherit'; input?: number; output?: number }>;
+  model_pricing_updates?: Array<{ model: string; action: 'set' | 'inherit'; input?: number; output?: number; cache_read_input?: number | null; cache_creation_input?: number | null }>;
   auth_type?: "bearer" | "x-api-key" | "custom-header";
   auth_header_name?: string;
   auth_header_prefix?: string;
@@ -3651,6 +3653,12 @@ export interface TeamMutationResponse extends ActionResponse {
 
 // ── Gateway API Keys ──
 
+export interface ApiKeyModelRoute {
+  model: string;
+  strategy: 'round_robin' | 'weighted';
+  targets: { node: string; weight?: number }[];
+}
+
 export interface GatewayApiKey {
   id: string;
   name: string;
@@ -3659,6 +3667,7 @@ export interface GatewayApiKey {
   status: "active" | "disabled";
   allow_auto: boolean;
   allow_direct: boolean;
+  model_routes?: ApiKeyModelRoute[];
   allowed_nodes: string[];
   allowed_models: string[];
   allowed_endpoints: string[];
@@ -3689,6 +3698,7 @@ export interface CreateGatewayApiKeyRequest {
   description?: string | null;
   allow_auto: boolean;
   allow_direct: boolean;
+  model_routes?: ApiKeyModelRoute[] | null;
   allowed_nodes: string[];
   allowed_models: string[];
   allowed_endpoints: string[];

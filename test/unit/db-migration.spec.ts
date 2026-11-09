@@ -1199,3 +1199,39 @@ describe("SQLite to PostgreSQL migration", () => {
     );
   });
 });
+
+describe('API key model route database portability', () => {
+  it('preserves nested route objects during SQLite to PostgreSQL import', async () => {
+    const dir = makeTempDir();
+    const dbPath = createSqliteFixture(dir);
+    const routes = [
+      {
+        model: 'shared-model',
+        strategy: 'weighted',
+        targets: [
+          { node: 'a', weight: 3 },
+          { node: 'b', weight: 1 },
+        ],
+      },
+    ];
+    const db = new Database(dbPath);
+    db.exec('ALTER TABLE gateway_api_keys ADD COLUMN model_routes text');
+    db.prepare('UPDATE gateway_api_keys SET model_routes = ?').run(
+      JSON.stringify(routes),
+    );
+    db.close();
+    try {
+      const target = new MemoryPostgresTarget();
+      await migrateSqliteToPostgres({
+        sqlitePath: dbPath,
+        postgresUrl: 'postgresql://localhost/test',
+        target,
+      });
+      expect(target.rows.get('gateway_api_keys')?.[0].model_routes).toEqual(
+        routes,
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

@@ -163,5 +163,20 @@
   "teams.form.namePlaceholder": "platform-team",
   "teams.limits.inherited": "hereda límites de key, Policy Namespace y globales",
   "teams.table.title": "Equipos locales",
-  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}"
+  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}",
+  "modelRoutes.title": "Rutas por modelo",
+  "modelRoutes.description": "Distribuye las solicitudes de este modelo y clave entre los nodos seleccionados. No cambia auto ni otras claves.",
+  "modelRoutes.directRequired": "Activa el enrutamiento directo para usar grupos de modelos.",
+  "modelRoutes.strategy": "Estrategia",
+  "modelRoutes.roundRobin": "Por turnos · solicitudes iguales",
+  "modelRoutes.weighted": "Ponderada · solicitudes proporcionales",
+  "modelRoutes.remove": "Eliminar ruta de {{model}}",
+  "modelRoutes.unavailable": "No disponible",
+  "modelRoutes.weight": "Peso",
+  "modelRoutes.nodeWeight": "Peso de {{node}}",
+  "modelRoutes.invalid": "Selecciona entre 2 y 16 nodos permitidos que ofrezcan este modelo, con pesos enteros de 1 a 100, y activa el enrutamiento directo.",
+  "modelRoutes.add": "Añadir ruta de modelo",
+  "modelRoutes.chooseModel": "Elige un modelo compartido",
+  "modelRoutes.empty": "No hay modelos disponibles en al menos dos nodos permitidos.",
+  "modelRoutes.safety": "Se mantienen los permisos de clave, equipo y espacio de nombres. Las solicitudes node/model explícitas omiten el grupo. Con previous_response_id, fija un nodo o reenvía la conversación completa."
 }

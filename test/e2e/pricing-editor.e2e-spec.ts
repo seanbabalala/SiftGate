@@ -36,9 +36,28 @@ describe('pricing editor contracts on isolated HTTP', () => {
     expect(result.status).toBe(200); expect(current()?.['gpt-4o'].pricing).toBeUndefined(); expect(current()?.['gpt-4o'].max_context_tokens).toBe(300000); expect(current()?.inactive).toEqual(capabilities.inactive);
   });
 
+  it('round-trips cache prices through the DTO, config persistence, and node response, with zero distinct from reset', async () => {
+    const update = { model: 'gpt-4o', action: 'set', input: 1, output: 2, cache_read_input: 0, cache_creation_input: 2.5 };
+    expect((await harness.agent.put('/api/dashboard/nodes/mock-openai').send({ model_pricing_updates: [update] })).status).toBe(200);
+    expect(current()?.['gpt-4o']).toEqual({ ...capabilities['gpt-4o'], pricing: { ...capabilities['gpt-4o'].pricing, cache_read_input: 0, cache_creation_input: 2.5 } });
+    const nodes = (await harness.agent.get('/api/dashboard/nodes')).body.nodes;
+    expect(nodes.find((node: { id: string }) => node.id === 'mock-openai').model_capabilities['gpt-4o'].pricing).toMatchObject({ cache_read_input: 0, cache_creation_input: 2.5 });
+    const persisted = yaml.load(readFileSync(join(directory, 'config.yaml'), 'utf8')) as { nodes: Array<{ model_capabilities: typeof capabilities }> };
+    expect(persisted.nodes[0].model_capabilities['gpt-4o'].pricing).toMatchObject({ cache_read_input: 0, cache_creation_input: 2.5 });
+    expect((await harness.agent.put('/api/dashboard/nodes/mock-openai').send({ model_pricing_updates: [{ ...update, cache_read_input: null, cache_creation_input: null }] })).status).toBe(200);
+    expect(current()?.['gpt-4o'].pricing?.cache_read_input).toBeUndefined();
+    expect(current()?.['gpt-4o'].pricing?.cache_creation_input).toBeUndefined();
+    expect(current()?.['gpt-4o'].pricing?.video_per_second).toBe(0.15);
+    expect(current()?.inactive).toEqual(capabilities.inactive);
+  });
+
   it.each([
     { model_pricing_updates: [{ model: 'gpt-4o', action: 'set', input: '', output: 2 }] },
     { model_pricing_updates: [{ model: 'gpt-4o', action: 'set', input: 1 }] },
+    { model_pricing_updates: [{ model: 'gpt-4o', action: 'set', input: 1, output: 2, cache_read_input: -1 }] },
+    { model_pricing_updates: [{ model: 'gpt-4o', action: 'set', input: 1, output: 2, cache_creation_input: '0.5' }] },
+    { model_pricing_updates: [{ model: 'gpt-4o', action: 'set', input: 1, output: 2, cache_creation_input: false }] },
+    { model_pricing_updates: [{ model: 'gpt-4o', action: 'inherit', cache_read_input: null }] },
     { model_pricing_updates: [{ model: 'gpt-4o', action: 'inherit', input: 0 }] },
     { model_pricing_updates: [{ model: 'gpt-4o', action: 'inherit' }, { model: 'gpt-4o', action: 'inherit' }] },
     { model_pricing_updates: [{ model: 'gpt-4o', action: 'inherit' }], model_capabilities: {} },

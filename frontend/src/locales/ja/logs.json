@@ -442,5 +442,8 @@
   "timeRange.7d": "7 日",
   "timeRange.30d": "30 日",
   "timeRange.90d": "90 日",
-  "timeRange.today": "今日"
+  "timeRange.today": "今日",
+  "table.tps": "TPS",
+  "table.tpsHelp": "出力トークン数 ÷ 応答全体の秒数（最初のトークンまでの待機を含む）。入力とキャッシュ読み取りトークンは含みません。",
+  "table.tpsUnavailable": "ローカルキャッシュ、出力トークンなし、無効な所要時間ではTPSを計算しません。"
 }

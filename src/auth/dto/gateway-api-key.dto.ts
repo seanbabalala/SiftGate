@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { ApiKeyModelRoute } from '../../routing/api-key-model-route';
 import { GatewayApiKeyStatus } from '../../database/entities/gateway-api-key.entity';
 
 export class CreateGatewayApiKeyDto {
@@ -38,6 +39,11 @@ export class CreateGatewayApiKeyDto {
   @IsArray()
   @IsString({ each: true })
   allowed_nodes?: string[];
+
+  @ApiPropertyOptional({ description: 'Opt-in exact-model node pools; does not expand effective permissions.', type: 'array', items: { type: 'object' } })
+  @IsOptional()
+  @IsArray()
+  model_routes?: ApiKeyModelRoute[] | null;
 
   @ApiPropertyOptional({ type: [String], example: ['gpt-4o', 'claude-sonnet-4-20250514'] })
   @IsOptional()
@@ -121,6 +127,11 @@ export class UpdateGatewayApiKeyDto {
   @IsArray()
   @IsString({ each: true })
   allowed_nodes?: string[];
+
+  @ApiPropertyOptional({ description: 'Opt-in exact-model node pools; does not expand effective permissions.', type: 'array', items: { type: 'object' } })
+  @IsOptional()
+  @IsArray()
+  model_routes?: ApiKeyModelRoute[] | null;
 
   @ApiPropertyOptional({ type: [String], example: ['gpt-4o'] })
   @IsOptional()

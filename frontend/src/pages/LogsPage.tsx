@@ -38,12 +38,22 @@ import {
   isProviderCacheLog,
   isSemanticCacheLog,
   sourceFormatLabel,
+  logTokensPerSecond,
+  formatLogThroughput,
 } from '@/lib/call-log-display'
 import { getAuthToken } from '@/contexts/AuthContext'
 import type { CallLog, LogsSummaryResponse } from '@/types/api'
 
 const LIMIT = 20
-const TABLE_COLUMNS = 13
+const TABLE_COLUMNS = 14
+
+function ThroughputCell({ log }: { log: CallLog }) {
+  const { t, i18n } = useTranslation('logs')
+  const rate = logTokensPerSecond(log)
+  return <span className="whitespace-nowrap" title={t(rate === null ? 'table.tpsUnavailable' : 'table.tpsHelp')}>
+    {formatLogThroughput(rate, i18n.resolvedLanguage ?? i18n.language)}
+  </span>
+}
 
 function SummaryMetric({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Activity }) {
   return (
@@ -215,7 +225,7 @@ function ProviderCacheBadge({ log }: { log: CallLog }) {
             })
       }
     >
-      <Badge variant="emerald" className="gap-1">
+      <Badge variant="emerald" className="gap-1 whitespace-nowrap">
         <Database className="h-3 w-3" />
         {t('cache.providerBadge')}
       </Badge>
@@ -937,9 +947,10 @@ export function LogsPage() {
                   <TableHead>{t('table.model')}</TableHead>
                   <TableHead>{t('table.deliveryMode')}</TableHead>
                   <TableHead className="text-right">{t('table.tokens')}</TableHead>
+                  <TableHead className="text-right"><span title={t('table.tpsHelp')}>{t('table.tps')}</span></TableHead>
                   <TableHead className="text-right">{t('table.cost')}</TableHead>
-                  <TableHead className="text-right">{t('table.latency')}</TableHead>
-                  <TableHead className="text-right">{t('table.status')}</TableHead>
+                  <TableHead className="whitespace-nowrap text-right">{t('table.latency')}</TableHead>
+                  <TableHead className="whitespace-nowrap text-right">{t('table.status')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -992,6 +1003,9 @@ export function LogsPage() {
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] text-[var(--foreground-muted)]">
                         {formatTokens(log.input_tokens + log.output_tokens)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-[11px] tabular-nums text-[var(--foreground-muted)]">
+                        <ThroughputCell log={log} />
                       </TableCell>
                       <TableCell className="text-right font-mono text-[11px] text-[var(--foreground-muted)]">
                         <ReportCostCell row={costById.get(log.id)} failed={costs.isError} />

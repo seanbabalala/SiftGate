@@ -442,5 +442,8 @@
   "timeRange.7d": "7일",
   "timeRange.30d": "30일",
   "timeRange.90d": "90일",
-  "timeRange.today": "오늘"
+  "timeRange.today": "오늘",
+  "table.tps": "TPS",
+  "table.tpsHelp": "전체 출력 속도: 출력 토큰 ÷ 전체 응답 시간(초). 첫 토큰 대기 시간을 포함하며 입력 및 캐시 읽기 토큰은 제외합니다.",
+  "table.tpsUnavailable": "로컬 캐시 적중, 출력 토큰 없음 또는 유효하지 않은 시간에는 TPS를 계산하지 않습니다."
 }

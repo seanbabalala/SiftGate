@@ -60,6 +60,10 @@ an upstream provider credential.
 
 All proxy endpoints require a Dashboard-generated Gateway API key. Use `model: "auto"` for smart routing, a real model id for direct routing, a configured alias, a node id, or a `node/model` prefix route when that key allows direct access. Dashboard-managed keys can also restrict endpoint families (`chat_completions`, `responses`, `messages`, `embeddings`, `rerank`, `images`, `audio`, `video`, `realtime`, `batch`, `models`) and modalities (`text`, `vision`, `embedding`, `rerank`, `image`, `audio`, `video`, `realtime`) before routing reaches an upstream provider.
 
+For chat model IDs, optional API key `model_routes` bindings enable
+[per-key round-robin or weighted node pools](api-key-model-routing.md). Explicit
+node routes and global `auto` tiers retain their existing behavior.
+
 In v2.1, Coding Agent Gateway profiles can expose profile-scoped virtual smart
 models to `/v1/models`. `coding-auto`, `coding-fast`, `coding-deep`, and
 `coding-security` are visible only when an active coding-agent profile is bound

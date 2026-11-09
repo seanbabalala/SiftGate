@@ -1,11 +1,15 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { exactDisplay } from '@/lib/pricing-evidence-form'
+import { compactExactDisplay, exactDisplay } from '@/lib/pricing-evidence-form'
 import type { CostComputation, NormalizedUsage } from '@/types/pricing'
 
 export function CostValue({ value, currency }: { value: string | null | undefined; currency?: string }) {
   const { i18n } = useTranslation('pricing')
-  return <span className="break-all font-mono tabular-nums">{exactDisplay(value, i18n.resolvedLanguage ?? i18n.language)}{currency ? ` ${currency}` : ''}</span>
+  const locale = i18n.resolvedLanguage ?? i18n.language
+  const unit = value != null && currency ? currency : undefined
+  return <span className="break-all font-mono tabular-nums" title={value == null ? undefined : `${exactDisplay(value, locale)}${unit ? ` ${unit}` : ''}`}>
+    {compactExactDisplay(value, locale)}{unit && <span className="text-[0.85em] font-normal text-[var(--foreground-dim)]"> {unit}</span>}
+  </span>
 }
 export function CostFacts({ items }: { items: Array<[string, ReactNode]> }) {
   const { i18n } = useTranslation('pricing')

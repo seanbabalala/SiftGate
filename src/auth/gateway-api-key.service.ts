@@ -30,6 +30,9 @@ import {
   UpdateGatewayApiKeyDto,
 } from './dto/gateway-api-key.dto';
 
+import { normalizeApiKeyModelRoutes, validateApiKeyModelRouteTargets, type ApiKeyModelRoute } from '../routing/api-key-model-route';
+import { intersectPermissionScopes } from './permission-scopes';
+
 export interface GatewayApiKeyContext {
   id: string;
   name: string;
@@ -38,6 +41,7 @@ export interface GatewayApiKeyContext {
   allow_auto: boolean;
   allow_direct: boolean;
   allowed_nodes: string[];
+  model_routes?: ApiKeyModelRoute[];
   allowed_models: string[];
   allowed_endpoints: string[];
   allowed_modalities: string[];
@@ -58,6 +62,7 @@ export interface GatewayApiKeySummary {
   allow_auto: boolean;
   allow_direct: boolean;
   allowed_nodes: string[];
+  model_routes?: ApiKeyModelRoute[];
   allowed_models: string[];
   allowed_endpoints: string[];
   allowed_modalities: string[];
@@ -149,6 +154,7 @@ export class GatewayApiKeyService {
       status: 'active',
     });
 
+    await this.validateModelRoutes(entity);
     const saved = await this.apiKeyRepo.save(entity);
     await this.syncBudgetRules(saved);
 
@@ -278,6 +284,8 @@ export class GatewayApiKeyService {
       await this.assertTeamAvailable(normalized.team_id, this.entityWorkspaceId(entity));
     }
 
+    const candidate = { ...entity, ...normalized };
+    await this.validateModelRoutes(candidate);
     Object.assign(entity, normalized);
     const saved = await this.apiKeyRepo.save(entity);
     await this.syncBudgetRules(saved);
@@ -331,21 +339,22 @@ export class GatewayApiKeyService {
       workspace_id: this.entityWorkspaceId(entity),
       allow_auto: entity.allow_auto,
       allow_direct: entity.allow_direct,
-      allowed_nodes: this.combineRestrictions(
+      model_routes: entity.model_routes || [],
+      allowed_nodes: intersectPermissionScopes(
         entity.allowed_nodes || [],
         team?.allowed_nodes || [],
         namespace?.allowed_nodes || [],
       ),
-      allowed_models: this.combineRestrictions(
+      allowed_models: intersectPermissionScopes(
         entity.allowed_models || [],
         team?.allowed_models || [],
         namespace?.allowed_models || [],
       ),
-      allowed_endpoints: this.combineRestrictions(
+      allowed_endpoints: intersectPermissionScopes(
         entity.allowed_endpoints || [],
         team?.allowed_endpoints || [],
       ),
-      allowed_modalities: this.combineRestrictions(
+      allowed_modalities: intersectPermissionScopes(
         entity.allowed_modalities || [],
         team?.allowed_modalities || [],
       ),
@@ -392,6 +401,7 @@ export class GatewayApiKeyService {
       allow_auto: entity.allow_auto,
       allow_direct: entity.allow_direct,
       allowed_nodes: entity.allowed_nodes || [],
+      model_routes: entity.model_routes || [],
       allowed_models: entity.allowed_models || [],
       allowed_endpoints: entity.allowed_endpoints || [],
       allowed_modalities: entity.allowed_modalities || [],
@@ -417,6 +427,31 @@ export class GatewayApiKeyService {
     };
   }
 
+  private normalizeModelRoutes(value: unknown): ApiKeyModelRoute[] {
+    try {
+      return normalizeApiKeyModelRoutes(value);
+    } catch (error) {
+      throw new BadRequestException((error as Error).message);
+    }
+  }
+
+  private async validateModelRoutes(entity: GatewayApiKey): Promise<void> {
+    if (!entity.model_routes?.length) return;
+    const team = await this.resolveTeam(
+      entity.team_id,
+      this.entityWorkspaceId(entity),
+    );
+    try {
+      validateApiKeyModelRouteTargets(
+        entity.model_routes,
+        this.config.nodes,
+        this.toContext(entity, team),
+      );
+    } catch (error) {
+      throw new BadRequestException((error as Error).message);
+    }
+  }
+
   private normalizeCreateDto(dto: CreateGatewayApiKeyDto): Partial<GatewayApiKey> {
     const name = this.normalizeName(dto.name);
     return {
@@ -425,6 +460,7 @@ export class GatewayApiKeyService {
       allow_auto: dto.allow_auto ?? true,
       allow_direct: dto.allow_direct ?? false,
       allowed_nodes: this.normalizeStringArray(dto.allowed_nodes),
+      model_routes: this.normalizeModelRoutes(dto.model_routes),
       allowed_models: this.normalizeStringArray(dto.allowed_models),
       allowed_endpoints: this.normalizeStringArray(dto.allowed_endpoints),
       allowed_modalities: this.normalizeStringArray(dto.allowed_modalities),
@@ -448,6 +484,7 @@ export class GatewayApiKeyService {
     }
     if (dto.allow_auto !== undefined) normalized.allow_auto = Boolean(dto.allow_auto);
     if (dto.allow_direct !== undefined) normalized.allow_direct = Boolean(dto.allow_direct);
+    if (dto.model_routes !== undefined) normalized.model_routes = this.normalizeModelRoutes(dto.model_routes);
     if (dto.allowed_nodes !== undefined) normalized.allowed_nodes = this.normalizeStringArray(dto.allowed_nodes);
     if (dto.allowed_models !== undefined) normalized.allowed_models = this.normalizeStringArray(dto.allowed_models);
     if (dto.allowed_endpoints !== undefined) normalized.allowed_endpoints = this.normalizeStringArray(dto.allowed_endpoints);
@@ -493,17 +530,6 @@ export class GatewayApiKeyService {
   private normalizeNullableId(value: string | null | undefined): string | null {
     const normalized = (value || '').trim();
     return normalized || null;
-  }
-
-  private combineRestrictions(...scopes: string[][]): string[] {
-    const constrained = scopes
-      .map((scope) => [...new Set(scope.filter(Boolean))])
-      .filter((scope) => scope.length > 0);
-    if (constrained.length === 0) return [];
-    return constrained.reduce((current, scope) => {
-      const allowed = new Set(scope);
-      return current.filter((value) => allowed.has(value));
-    });
   }
 
   private combineRateLimit(

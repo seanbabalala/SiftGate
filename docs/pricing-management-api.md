@@ -442,6 +442,13 @@ all displayed reference rates into node overrides.
 - `{ "model": "example-model", "action": "set", "input": 0, "output": 2 }` patches
   only the two legacy base rates in the current stored model capabilities. Hidden
   cache/media prices and other capabilities survive. Explicit zero is supported.
+- A `set` patch can also include `cache_read_input` and/or
+  `cache_creation_input` (USD per million tokens). Each omitted cache field is
+  preserved. A nonnegative number sets that rate, including explicit zero;
+  `null` removes that override and restores compatibility fallback behavior.
+  Updating either field removes its corresponding `cache_read_per_1m_tokens`
+  or `cache_write_per_1m_tokens` alias to prevent conflicting values. Other prices
+  and model capabilities are unchanged. `inherit` cannot include any rate fields.
 - `{ "model": "example-model", "action": "inherit" }` explicitly removes that
   model's entire legacy price override, including hidden rates, but not capabilities.
 - Omitted/empty updates do not change pricing. Blank, incomplete, duplicate, unsafe,

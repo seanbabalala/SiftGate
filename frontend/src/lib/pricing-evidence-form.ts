@@ -21,12 +21,26 @@ export function makeCorrectionProposal(hash: string, reason: string, fields: Evi
 }
 export type CorrectionProposal = ReturnType<typeof makeCorrectionProposal>
 
+const displayFormats = new Map<string, { integer: Intl.NumberFormat; decimal: string }>()
+
 export function exactDisplay(value: string | null | undefined, locale: string): string {
   if (value === null || value === undefined) return '—'
   if (!/^-?\d+(?:\.\d+)?$/.test(value)) return value
   const [whole, fraction] = value.split('.')
-  const decimal = new Intl.NumberFormat(locale).formatToParts(1.1).find((part) => part.type === 'decimal')?.value ?? '.'
-  const grouped = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(BigInt(whole))
+  let formats = displayFormats.get(locale)
+  if (!formats) {
+    const integer = new Intl.NumberFormat(locale)
+    formats = { integer, decimal: integer.formatToParts(1.1).find((part) => part.type === 'decimal')?.value ?? '.' }
+    displayFormats.set(locale, formats)
+  }
+  const grouped = formats.integer.format(BigInt(whole))
   const negativeZero = whole.startsWith('-') && BigInt(whole) === 0n ? '-' : ''
-  return `${negativeZero}${grouped}${fraction === undefined ? '' : decimal + fraction}`
+  return `${negativeZero}${grouped}${fraction === undefined ? '' : formats.decimal + fraction}`
+}
+
+/** Remove scale padding, not significant digits. Never coerce ledger decimals to Number. */
+export function compactExactDisplay(value: string | null | undefined, locale: string): string {
+  if (typeof value !== 'string' || !/^-?\d+(?:\.\d+)?$/.test(value)) return exactDisplay(value, locale)
+  const trimmed = value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value
+  return exactDisplay(/^-?0+$/.test(trimmed) ? '0' : trimmed, locale)
 }

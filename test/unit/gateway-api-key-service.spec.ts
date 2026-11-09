@@ -451,3 +451,104 @@ describe('GatewayApiKeyService', () => {
     await expect(service.update('missing', { name: 'Nope' })).rejects.toThrow(NotFoundException);
   });
 });
+
+describe('GatewayApiKeyService — model route bindings', () => {
+  const nodes = ['a', 'b'].map((id) => ({ id, models: ['shared-model'] }));
+  const routes = [
+    {
+      model: 'shared-model',
+      strategy: 'round_robin' as const,
+      targets: [
+        { node: 'a', weight: 1 },
+        { node: 'b', weight: 1 },
+      ],
+    },
+  ];
+
+  it('persists routes, omits without replacing, clears with null/[], and exposes them only through the key context', async () => {
+    const { service, apiKeyRepo } = makeService([], { nodes });
+    const created = await service.create({
+      name: 'pool',
+      allow_direct: true,
+      allow_auto: false,
+      model_routes: routes,
+    });
+    expect(created.item.model_routes).toEqual(routes);
+    expect(
+      (await service.findContextByPlainKey(created.key))?.model_routes,
+    ).toEqual(routes);
+    expect(
+      (await service.update(created.item.id, { description: 'updated' }))
+        .model_routes,
+    ).toEqual(routes);
+    await expect(
+      service.update(created.item.id, { allowed_nodes: ['a'] }),
+    ).rejects.toThrow(BadRequestException);
+    expect((apiKeyRepo._store[0] as any).allowed_nodes).toEqual([]);
+    await expect(
+      service.update(created.item.id, { allow_direct: false }),
+    ).rejects.toThrow(BadRequestException);
+    expect(
+      (await service.update(created.item.id, { model_routes: null }))
+        .model_routes,
+    ).toEqual([]);
+    await service.update(created.item.id, { model_routes: routes });
+    expect(
+      (await service.update(created.item.id, { model_routes: [] }))
+        .model_routes,
+    ).toEqual([]);
+  });
+
+  it('does not expand key, team or namespace permissions', async () => {
+    const { service, teamRepo, apiKeyRepo } = makeService([], {
+      nodes,
+      namespaces: [{ id: 'restricted', allowed_nodes: ['a'] }],
+    });
+    teamRepo._store.push({
+      id: 'team',
+      workspace_id: 'default-workspace',
+      name: 'team',
+      status: 'active',
+      allowed_nodes: ['a'],
+    });
+    for (const fields of [
+      { allowed_nodes: ['a'] },
+      { allowed_models: ['other'] },
+      { team_id: 'team' },
+      { namespace_id: 'restricted' },
+      { allow_direct: false },
+    ]) {
+      await expect(
+        service.create({
+          name: 'pool',
+          allow_direct: true,
+          model_routes: routes,
+          ...fields,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    }
+    expect(apiKeyRepo._store).toHaveLength(0);
+  });
+
+  it('re-evaluates changed team grants at authentication without altering the pool', async () => {
+    const { service, teamRepo } = makeService([], { nodes });
+    teamRepo._store.push({
+      id: 'team',
+      workspace_id: 'default-workspace',
+      name: 'team',
+      status: 'active',
+      allowed_nodes: ['a', 'b'],
+    });
+    const created = await service.create({
+      name: 'pool',
+      allow_direct: true,
+      model_routes: routes,
+      team_id: 'team',
+    });
+    teamRepo._store[0].allowed_nodes = ['b'];
+    expect(await service.findContextByPlainKey(created.key)).toMatchObject({
+      allowed_nodes: ['b'],
+      model_routes: routes,
+    });
+  });
+});

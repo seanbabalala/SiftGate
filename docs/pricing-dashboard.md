@@ -107,10 +107,19 @@ leave cross-currency totals unknown rather than relabelling or zeroing them.
 
 ## Legacy node editing
 
-The node wizard keeps compact base input/output editing. Only dirty rows send
-explicit base-rate patches. Editing a name or unrelated field does not promote
-resolved catalog prices into node overrides. Cache/media prices and capabilities
-not shown by the wizard survive a base-rate edit.
+The node wizard exposes input, output, cache-read and cache-write prices in
+USD per million tokens. Only dirty rows send base-rate patches, and cache fields
+are patched only when individually edited. Unrelated node edits do not promote
+resolved catalog prices into node overrides. Media prices and other capabilities
+survive these edits. Separate 5-minute and 1-hour cache-write rates remain in the
+advanced price-book editor.
+
+Omitted cache fields preserve the stored override, including legacy aliases.
+Explicit `0` means a free cache rate. Clearing a cache field sends `null`, removes
+both its canonical override and alias, and restores the legacy compatibility
+fallback; this is not a promise of free usage. Setting a cache field also removes
+its stale alias so both spellings cannot disagree. These node prices still feed
+the compatibility estimator, not a published price-book binding.
 
 Blank/negative/invalid/underflow prices are rejected; zero is intentional. Removing
 an actual override asks for confirmation and removes **all** that model's legacy

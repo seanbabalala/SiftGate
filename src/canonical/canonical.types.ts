@@ -254,6 +254,7 @@ export interface CanonicalRequestMetadata {
   provider_credential_id?: string;
   provider_credential_strategy?: string;
   provider_credential_retry_count?: number;
+  api_key_model_routes?: import('../routing/api-key-model-route').ApiKeyModelRoute[];
   api_key_permissions?: {
     allow_auto: boolean;
     allow_direct: boolean;

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ModelRoutesEditor } from '@/components/api-keys/model-routes-editor'
+import { modelRoutesAreValid, type ModelRouteNode } from '@/components/api-keys/model-routes'
 import { useTranslation } from 'react-i18next'
 import {
   Activity,
@@ -61,6 +63,7 @@ import {
 } from '@/hooks/use-mutations'
 import { cn, formatCost, formatDate, formatNumber } from '@/lib/utils'
 import type {
+  ApiKeyModelRoute,
   CreateGatewayApiKeyRequest,
   CreateTeamRequest,
   GatewayApiKey,
@@ -73,6 +76,7 @@ interface KeyFormState {
   description: string
   allow_auto: boolean
   allow_direct: boolean
+  model_routes: ApiKeyModelRoute[]
   allowed_nodes: string[]
   allowed_models: string[]
   allowed_endpoints: string[]
@@ -198,6 +202,7 @@ const emptyForm: KeyFormState = {
   description: '',
   allow_auto: true,
   allow_direct: false,
+  model_routes: [],
   allowed_nodes: [],
   allowed_models: [],
   allowed_endpoints: [],
@@ -258,6 +263,7 @@ function buildPayload(form: KeyFormState): CreateGatewayApiKeyRequest {
     description: form.description.trim() || null,
     allow_auto: form.allow_auto,
     allow_direct: form.allow_direct,
+    model_routes: form.model_routes,
     allowed_nodes: form.allowed_nodes,
     allowed_models: form.allowed_models,
     allowed_endpoints: form.allowed_endpoints,
@@ -276,6 +282,7 @@ function formFromKey(key: GatewayApiKey): KeyFormState {
     description: key.description || '',
     allow_auto: key.allow_auto,
     allow_direct: key.allow_direct,
+    model_routes: (key.model_routes || []).map(route => ({ ...route, targets: route.targets.map(target => ({ ...target })) })),
     allowed_nodes: key.allowed_nodes,
     allowed_models: key.allowed_models,
     allowed_endpoints: key.allowed_endpoints,
@@ -639,12 +646,12 @@ function KeyFormDialog({
   open: boolean
   mode: 'create' | 'edit'
   initial: KeyFormState
-  nodes: {
+  nodes: (ModelRouteNode & {
     id: string
     name: string
     protocol: string
     models: string[]
-  }[]
+  })[]
   namespaces: { id: string; name?: string }[]
   teams: { id: string; name: string; status: 'active' | 'disabled' }[]
   onClose: () => void
@@ -739,7 +746,7 @@ function KeyFormDialog({
     })
   }, [visibleModelValues])
 
-  const canSubmit = form.name.trim().length > 0
+  const canSubmit = form.name.trim().length > 0 && modelRoutesAreValid(form.model_routes, nodes, form)
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -868,6 +875,9 @@ function KeyFormDialog({
               onChange={(allowed_models) => setForm((prev) => ({ ...prev, allowed_models }))}
             />
           </div>
+
+          <ModelRoutesEditor value={form.model_routes} nodes={nodes} permissions={form}
+            onChange={(model_routes) => setForm((prev) => ({ ...prev, model_routes }))} />
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <MultiResourcePicker
@@ -1206,6 +1216,8 @@ export function ApiKeysPage() {
   const canAdmin = hasWorkspaceRole(workspaceState?.access, 'admin')
   const [createOpen, setCreateOpen] = useState(false)
   const [editing, setEditing] = useState<GatewayApiKey | null>(null)
+  // Node polling must not replace the initial form and erase in-progress route edits.
+  const editingInitial = useMemo(() => editing ? formFromKey(editing) : emptyForm, [editing])
   const [teamCreateOpen, setTeamCreateOpen] = useState(false)
   const [editingTeam, setEditingTeam] = useState<LocalTeam | null>(null)
   const [created, setCreated] = useState<GatewayApiKeyMutationResponse | null>(null)
@@ -1215,6 +1227,7 @@ export function ApiKeysPage() {
   const nodes = useMemo(
     () => (nodesData?.nodes || []).map((node) => ({
       ...node,
+      chat_models: node.models || [],
       models: nodeModelBuckets(node),
     })),
     [nodesData?.nodes],
@@ -1651,7 +1664,7 @@ export function ApiKeysPage() {
       <KeyFormDialog
         open={!!editing}
         mode="edit"
-        initial={editing ? formFromKey(editing) : emptyForm}
+        initial={editingInitial}
         nodes={nodes}
         namespaces={namespaces}
         teams={teams}

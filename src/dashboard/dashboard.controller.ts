@@ -5555,6 +5555,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     allow_auto: boolean;
     allow_direct: boolean;
     allowed_nodes: string[];
+    model_routes?: import("../routing/api-key-model-route").ApiKeyModelRoute[];
     allowed_models: string[];
     allowed_endpoints: string[];
     allowed_modalities: string[];
@@ -5575,6 +5576,7 @@ export class DashboardController implements BeforeApplicationShutdown {
       allow_auto: key.allow_auto,
       allow_direct: key.allow_direct,
       allowed_nodes: key.allowed_nodes,
+      model_routes: key.model_routes || [],
       allowed_models: key.allowed_models,
       allowed_endpoints: key.allowed_endpoints,
       allowed_modalities: key.allowed_modalities,

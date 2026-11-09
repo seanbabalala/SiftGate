@@ -163,5 +163,20 @@
   "teams.form.namePlaceholder": "platform-team",
   "teams.limits.inherited": "สืบทอด key, Policy Namespace และ global limits",
   "teams.table.title": "ทีม Local",
-  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}"
+  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}",
+  "modelRoutes.title": "กำหนดเส้นทางตามโมเดล",
+  "modelRoutes.description": "กระจายคำขอโมเดลที่ระบุของคีย์นี้ไปยังโหนดที่เลือก โดยไม่เปลี่ยนเส้นทาง auto หรือคีย์อื่น",
+  "modelRoutes.directRequired": "เปิดใช้เส้นทางตรงก่อนใช้กลุ่มโมเดล",
+  "modelRoutes.strategy": "วิธีกระจาย",
+  "modelRoutes.roundRobin": "วนรอบ · จำนวนคำขอเท่ากัน",
+  "modelRoutes.weighted": "ถ่วงน้ำหนัก · ตามสัดส่วน",
+  "modelRoutes.remove": "ลบเส้นทางของ {{model}}",
+  "modelRoutes.unavailable": "ไม่พร้อมใช้งาน",
+  "modelRoutes.weight": "น้ำหนัก",
+  "modelRoutes.nodeWeight": "น้ำหนักของ {{node}}",
+  "modelRoutes.invalid": "เลือกโหนดที่ได้รับอนุญาตและมีโมเดลนี้ 2–16 โหนด กำหนดน้ำหนักเป็นจำนวนเต็ม 1–100 และเปิดใช้เส้นทางตรง",
+  "modelRoutes.add": "เพิ่มเส้นทางโมเดล",
+  "modelRoutes.chooseModel": "เลือกโมเดลที่ใช้ร่วมกัน",
+  "modelRoutes.empty": "ยังไม่มีโมเดลที่พร้อมใช้บนโหนดที่ได้รับอนุญาตอย่างน้อยสองโหนด",
+  "modelRoutes.safety": "สิทธิ์ของคีย์ ทีม และเนมสเปซยังคงมีผล คำขอที่ระบุ node/model จะไม่ผ่านกลุ่มนี้ หากใช้ previous_response_id ต้องระบุโหนดตายตัวหรือส่งบทสนทนาทั้งหมดอีกครั้ง"
 }

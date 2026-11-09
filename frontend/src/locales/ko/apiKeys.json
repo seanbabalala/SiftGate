@@ -163,5 +163,20 @@
   "teams.form.namePlaceholder": "platform-team",
   "teams.limits.inherited": "key, Policy Namespace, global limits 상속",
   "teams.table.title": "로컬 팀",
-  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}"
+  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}",
+  "modelRoutes.title": "모델별 라우팅",
+  "modelRoutes.description": "이 키의 특정 모델 요청을 선택한 노드로 분산합니다. 기존 auto 라우팅과 다른 키는 변경되지 않습니다.",
+  "modelRoutes.directRequired": "직접 라우팅을 먼저 활성화하세요.",
+  "modelRoutes.strategy": "분산 방식",
+  "modelRoutes.roundRobin": "라운드 로빈 · 균등 분배",
+  "modelRoutes.weighted": "가중치 · 비례 분배",
+  "modelRoutes.remove": "{{model}} 라우팅 삭제",
+  "modelRoutes.unavailable": "사용 불가",
+  "modelRoutes.weight": "가중치",
+  "modelRoutes.nodeWeight": "{{node}} 가중치",
+  "modelRoutes.invalid": "이 모델을 제공하는 허용된 노드 2–16개를 선택하고 가중치를 1–100의 정수로 설정한 후 직접 라우팅을 활성화하세요.",
+  "modelRoutes.add": "모델 라우트 추가",
+  "modelRoutes.chooseModel": "공통 모델 선택",
+  "modelRoutes.empty": "허용된 노드 두 개 이상에서 제공하는 모델이 없습니다.",
+  "modelRoutes.safety": "키, 팀 및 네임스페이스 권한이 계속 적용됩니다. 명시적 node/model 요청은 분산하지 않습니다. previous_response_id 사용 시 노드를 고정하거나 전체 대화를 다시 보내세요."
 }

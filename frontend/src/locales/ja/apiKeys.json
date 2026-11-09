@@ -163,5 +163,20 @@
   "teams.form.namePlaceholder": "platform-team",
   "teams.limits.inherited": "key、Policy Namespace、global limits を継承",
   "teams.table.title": "ローカルチーム",
-  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}"
+  "permissions.policyNamespaceValue": "Policy Namespace: {{namespace}}",
+  "modelRoutes.title": "モデル別ルーティング",
+  "modelRoutes.description": "このキーの指定モデルへのリクエストを選択したノードに分散します。既存の auto ルーティングと他のキーは変更しません。",
+  "modelRoutes.directRequired": "直接ルーティングを有効にしてください。",
+  "modelRoutes.strategy": "分散方式",
+  "modelRoutes.roundRobin": "ラウンドロビン · 均等配分",
+  "modelRoutes.weighted": "重み付き · 比例配分",
+  "modelRoutes.remove": "{{model}} のルールを削除",
+  "modelRoutes.unavailable": "利用不可",
+  "modelRoutes.weight": "重み",
+  "modelRoutes.nodeWeight": "{{node}} の重み",
+  "modelRoutes.invalid": "同じモデルを提供する許可済みノードを2～16個選び、重みを1～100の整数に設定して、直接ルーティングを有効にしてください。",
+  "modelRoutes.add": "モデルルートを追加",
+  "modelRoutes.chooseModel": "共通モデルを選択",
+  "modelRoutes.empty": "2つ以上の許可済みノードで利用できるモデルがありません。",
+  "modelRoutes.safety": "キー・チーム・名前空間の権限は引き続き適用されます。明示的な node/model は分散対象外です。previous_response_id を使う場合はノードを固定するか、会話全体を再送してください。"
 }
