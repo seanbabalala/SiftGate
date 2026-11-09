@@ -10,6 +10,8 @@ import sys
 import tarfile
 import tempfile
 import unittest
+import urllib.error
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -110,6 +112,29 @@ class SignedReleaseTests(unittest.TestCase):
             public.verify(self.tag,self.root)
         verifier.assert_not_called()
 
+    def test_anonymous_timeout_and_504_retry_preserve_byte_checks(self):
+        attempts=[]
+        def fetch(url,path,limit):
+            attempts.append(url)
+            self.assertFalse(path.exists(),"Partial downloads must be removed before retry")
+            if len(attempts)<=2:
+                path.write_bytes(b"partial")
+                if len(attempts)==1: raise TimeoutError()
+                raise urllib.error.HTTPError(url,504,"unavailable",{},None)
+            path.write_bytes((self.root/url.rsplit("/",1)[1]).read_bytes())
+        with patch.object(public,"download",side_effect=fetch),patch.object(public.time,"sleep") as sleep:
+            self.assertTrue(public.verify(self.tag,self.root)["anonymous_assets_verified"])
+        self.assertEqual(len(attempts),6); self.assertEqual(sleep.call_count,2)
+
+    def test_anonymous_retry_is_bounded_and_does_not_relax_permanent_failures(self):
+        with patch.object(public,"download",side_effect=TimeoutError()) as fetch,patch.object(public.time,"sleep") as sleep:
+            with self.assertRaises(TimeoutError): public.verify(self.tag,self.root)
+            self.assertEqual(fetch.call_count,6); self.assertEqual(sleep.call_count,5)
+        for error in (urllib.error.HTTPError("https://github.com/fixture",403,"denied",{},None),release.ReleaseError("untrusted_download_redirect")):
+            with patch.object(public,"download",side_effect=error) as fetch,patch.object(public.time,"sleep") as sleep:
+                with self.assertRaises(type(error)): public.verify(self.tag,self.root)
+                self.assertEqual(fetch.call_count,1); sleep.assert_not_called()
+
 
 class BaselinePinTests(unittest.TestCase):
     def test_pinned_archive_and_nested_release_identity_are_both_required(self):
@@ -124,6 +149,29 @@ class BaselinePinTests(unittest.TestCase):
             self.assertEqual(json.loads((extracted/"release.json").read_text()),nested)
             for changed in ({**record,"installer_sha256":"0"*64},{**record,"source_commit":"c"*40}):
                 with self.assertRaises(release.ReleaseError): baseline.fetch(changed,root/("bad-"+changed["installer_sha256"][:3]+changed["source_commit"][:3]),fetcher)
+
+    def test_cli_fallback_keeps_archive_and_nested_identity_pins(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve(); source=root/"source.tar.gz"
+            nested={"format":"siftgate-customer-release-v1","version":"v2.11.7","commit":"a"*40,"image":release.REGISTRY+"@sha256:"+"b"*64}
+            with tarfile.open(source,"w:gz") as tar:
+                data=release.canonical(nested); member=tarfile.TarInfo("siftgate-v2.11.7/release.json"); member.size=len(data); tar.addfile(member,io.BytesIO(data))
+            record={"version":"2.11.7","source_commit":"a"*40,"image":nested["image"],"installer_sha256":release.sha256(source)}
+            def unavailable(url,destination,limit):
+                destination.write_bytes(b"partial-download"); raise TimeoutError()
+            def download(args,**kwargs):
+                self.assertEqual(args[:6],["gh","release","download","v2.11.7","--repo",release.REPOSITORY])
+                self.assertEqual(kwargs["timeout"],180); self.assertEqual(kwargs["env"]["GH_PROMPT_DISABLED"],"1")
+                destination=Path(args[args.index("--dir")+1])/args[args.index("--pattern")+1]
+                self.assertFalse(destination.exists()); destination.write_bytes(source.read_bytes())
+                return SimpleNamespace(returncode=0)
+            with patch.object(baseline.subprocess,"run",side_effect=download):
+                self.assertEqual(json.loads((baseline.fetch(record,root/"valid",unavailable)/"release.json").read_text()),nested)
+                for index,changed in enumerate(({**record,"installer_sha256":"0"*64},{**record,"source_commit":"c"*40})):
+                    with self.assertRaises(release.ReleaseError): baseline.fetch(changed,root/f"bad-{index}",unavailable)
+            with patch.object(baseline.subprocess,"run",return_value=SimpleNamespace(returncode=1)):
+                with self.assertRaisesRegex(release.ReleaseError,"baseline_download_unavailable"):
+                    baseline.fetch(record,root/"unavailable",unavailable)
 
 
 if __name__=="__main__": unittest.main()

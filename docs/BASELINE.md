@@ -1,7 +1,19 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-11-09
-Release: **v2.12.13** (availability requires the matching successful release workflow)
+Release: **v2.12.14** (availability requires the matching successful release workflow)
+
+## v2.12.14 Release Scope
+
+Retain the log/pricing and per-key routing feature set. The v2.12.13 tag remains
+unpublished after both native runners timed out retrieving a historical installer.
+CI may now use GitHub CLI to retrieve that exact pinned historical fixture, with
+unchanged size, archive hash, extraction, source commit and image checks.
+
+Anonymous public release verification remains separate: bounded timeout/504
+retries never use authenticated asset fallback, and every downloaded byte plus
+publisher signature is still verified. No release gate or source version is
+removed. Application behavior and database changes are unchanged from v2.12.13.
 
 ## v2.12.13 Release Scope
 

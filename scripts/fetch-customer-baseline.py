@@ -2,10 +2,13 @@
 """Fetch a contract-pinned legacy installer for isolated native CI acceptance."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tarfile
+import urllib.error
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"deploy/customer"))
@@ -20,7 +23,20 @@ def fetch(record,destination,fetcher=download):
     release.require(not destination.exists(),"baseline_destination_exists")
     private_directory(destination,create=True)
     tag="v"+record["version"]; filename="siftgate-"+tag+"-install.tar.gz"; archive=destination/filename
-    fetcher("https://github.com/"+release.REPOSITORY+"/releases/download/"+tag+"/"+filename,archive,release.MAX_INSTALLER)
+    try:
+        fetcher("https://github.com/"+release.REPOSITORY+"/releases/download/"+tag+"/"+filename,archive,release.MAX_INSTALLER)
+    except (urllib.error.URLError, TimeoutError) as error:
+        if isinstance(error, urllib.error.HTTPError): error.close()
+        # This is CI's pinned historical fixture retrieval, not anonymous public
+        # release verification. Never weaken the archive or image/commit pins.
+        if archive.exists():
+            release.require(archive.is_file() and not archive.is_symlink(),"unsafe_partial_baseline")
+            archive.unlink()
+        result=subprocess.run(["gh","release","download",tag,"--repo",release.REPOSITORY,
+            "--pattern",filename,"--dir",str(destination)],capture_output=True,timeout=180,
+            env={**os.environ,"GH_PROMPT_DISABLED":"1"})
+        release.require(result.returncode==0,"baseline_download_unavailable")
+        release.require(archive.is_file() and not archive.is_symlink() and archive.stat().st_size<=release.MAX_INSTALLER,"invalid_baseline_download")
     release.require(release.sha256(archive)==record["installer_sha256"],"baseline_archive_identity_mismatch")
     extracted=destination/"kit"; private_directory(extracted,create=True)
     with tarfile.open(archive,"r:gz") as source:

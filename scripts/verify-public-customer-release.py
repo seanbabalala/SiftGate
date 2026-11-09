@@ -28,9 +28,12 @@ def verify(tag,directory):
                 try:
                     download("https://github.com/"+release.REPOSITORY+"/releases/download/"+tag+"/"+name,target,limit)
                     break
-                except urllib.error.HTTPError as error:
+                except (urllib.error.HTTPError, TimeoutError) as error:
                     if target.exists(): target.unlink()
-                    if error.code not in (404,429,502,503) or attempt==5: raise
+                    if isinstance(error,urllib.error.HTTPError):
+                        error.close()
+                        if error.code not in (404,429,502,503,504): raise
+                    if attempt==5: raise
                     time.sleep(10)
             release.require(release.sha256(target)==release.sha256(directory/name),"anonymous_asset_bytes_changed")
         environment=dict(os.environ)
