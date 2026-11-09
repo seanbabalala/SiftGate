@@ -144,6 +144,10 @@
     {
       "kind": "fix",
       "summary": "Native upgrade, Fleet and recovery acceptance includes the signed published v2.12.11 baseline."
+    },
+    {
+      "kind": "fix",
+      "summary": "Cross-version upgrade acceptance explicitly verifies the additive nullable model_routes column with every old key unbound, while still hashing all prior business data and preserving strict existing-route and same-version recovery checks."
     }
   ]
 }

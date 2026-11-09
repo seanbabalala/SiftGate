@@ -33,7 +33,7 @@ function checkNodeContract(root, version = process.versions.node) {
     'Dockerfile default NODE_IMAGE must use Node 22 Alpine');
   for (const stage of dockerfile.split(/^FROM /m).slice(1)) {
     expect(stage.startsWith('${NODE_IMAGE} '), 'All Docker stages must inherit NODE_IMAGE');
-    const install = stage.indexOf('RUN npm ci');
+    const install = stage.search(/\bnpm\s+ci\b/);
     if (install !== -1) {
       expect(/^COPY (?:frontend\/)?\.npmrc \.\/$/m.test(stage.slice(0, install)),
         'Each Docker npm ci stage must copy its credential-free .npmrc first');

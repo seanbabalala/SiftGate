@@ -17,6 +17,8 @@ concurrency:
 jobs:
   verify:
     timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
     strategy:
       fail-fast: false
       matrix:

@@ -46,6 +46,7 @@ for (const [file, change, expected] of [
   ['.npmrc', () => 'engine-strict=false\n', '.npmrc'],
   ['Dockerfile', text => text.replace('ARG NODE_IMAGE=node:22-alpine', 'ARG NODE_IMAGE=node:20-alpine'), 'NODE_IMAGE'],
   ['Dockerfile', text => text.replace('COPY frontend/.npmrc ./\n', ''), 'npm ci stage'],
+  ['Dockerfile', text => text.replace('COPY .npmrc ./\n', ''), 'npm ci stage'],
   ['.github/workflows/ci.yml', text => text.replace('node-version-file: .nvmrc', 'node-version: 20'), 'hardcoding'],
 ]) {
   test(`reject runtime drift in ${file}: ${expected}`, () => {

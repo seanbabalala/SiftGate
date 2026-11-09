@@ -11,7 +11,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import shutil
+import sqlite3
 import subprocess
 import sys
 import tarfile
@@ -89,6 +92,49 @@ def assert_release_discovery_disabled(install,token):
     return notice
 
 
+def assert_business_database_preserved(before_path, after_path, source_version, target_version):
+    """Compare checkpointed snapshots; admit only the reviewed null route-column addition.
+
+    Keep Vault's same-version evidence strict, including existing model routes.
+    A disposable copy of the target is projected back to the source schema only
+    after proving the new nullable column is present and every value is NULL.
+    Neither original snapshot is modified and all other business cells still hash.
+    """
+    before_path, after_path = Path(before_path), Path(after_path)
+    before, after = vault.database_evidence(before_path), vault.database_evidence(after_path)
+    def columns(path):
+        connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
+        try:
+            return connection.execute('PRAGMA table_info("gateway_api_keys")').fetchall()
+        finally:
+            connection.close()
+    old_columns, new_columns = columns(before_path), columns(after_path)
+    needs_addition = release.version(source_version) < (2, 12, 12) <= release.version(target_version) and "model_routes" not in {row[1] for row in old_columns}
+    if not needs_addition:
+        assert before == after, "unreviewed_business_database_change"
+        return []
+    added = [row for row in new_columns if row[1] == "model_routes"]
+    assert len(added) == 1 and added[0][2].lower() == "text" and added[0][3:] == (0, None, 0), "unexpected_model_routes_schema"
+    assert [row[1:] for row in new_columns if row[1] != "model_routes"] == [row[1:] for row in old_columns], "other_api_key_schema_changed"
+    connection = sqlite3.connect(after_path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
+    try:
+        assert connection.execute('SELECT 1 FROM gateway_api_keys WHERE model_routes IS NOT NULL LIMIT 1').fetchone() is None, "legacy_keys_were_bound_during_upgrade"
+    finally:
+        connection.close()
+    with tempfile.TemporaryDirectory(prefix="siftgate-upgrade-evidence-") as directory:
+        projected = Path(directory).resolve() / "gateway.db"
+        shutil.copyfile(after_path, projected)
+        os.chmod(projected, 0o600)
+        connection = sqlite3.connect(projected)
+        try:
+            connection.execute('ALTER TABLE gateway_api_keys DROP COLUMN model_routes')
+            connection.commit()
+        finally:
+            connection.close()
+        assert before == vault.database_evidence(projected), "business_data_changed_beyond_null_route_column"
+    return ["nullable_api_key_model_routes_added"]
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-image",required=True); parser.add_argument("--image",required=True)
@@ -149,12 +195,11 @@ def main():
         assert (directory/"provider.env").read_bytes()==environment
         notice=assert_release_discovery_disabled(install,token)
         assert notice["current_version"]==target_version and notice["automatic_install"] is False and notice["publisher_verified"] is False
-        before_db=vault.database_evidence(directory/"backups"/result["checkpoint"]["id"]/"data/gateway.db")
+        before_database=directory/"backups"/result["checkpoint"]["id"]/"data/gateway.db"
         # Snapshot the candidate to compare checkpointed databases, never pretend
         # immutable SQLite reads of a live WAL file are safe evidence.
         after_backup=cli(current,"backup","--accept-downtime")
-        after_db=vault.database_evidence(Path(after_backup["backup"])/"data/gateway.db")
-        assert before_db==after_db
+        schema_changes=assert_business_database_preserved(before_database,Path(after_backup["backup"])/"data/gateway.db",source_version,target_version)
         assert key["item"]["id"] in json.dumps(smoke.request(install,"/api/dashboard/api-keys",token=token))
         assert smoke.request(install,"/v1/chat/completions",body,key["key"])["choices"][0]["message"]["content"]=="upgrade-ok"
         receipt={"format":"siftgate-cross-version-smoke-v1","platform":"linux/"+target["architecture"],
@@ -164,6 +209,7 @@ def main():
             "harness_manifest_not_publishable":True,"checks":["actual_cross_version_upgrade","actual_config_digest_compatibility",
                 "paired_image_and_host_kit","old_kit_and_checkpoint_retained","business_database_unchanged","configuration_preserved",
                 "existing_management_session_preserved","business_key_and_mock_traffic_preserved","release_notice_api_available","background_release_checks_disabled","http_ready_after_upgrade"]}
+        receipt["reviewed_schema_changes"]=schema_changes
         kit.write_json(folder/"result.json",receipt); print(json.dumps(receipt,indent=2))
     finally:
         if install:

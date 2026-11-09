@@ -28,7 +28,10 @@ FROM ${NODE_IMAGE} AS backend-build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY .npmrc ./
-RUN npm ci
+# Compile locked native modules against this image's own Node headers instead
+# of depending on availability of GitHub-hosted prebuilt SQLite binaries.
+RUN apk add --no-cache python3 make g++ \
+    && npm_config_build_from_source=true npm_config_nodedir=/usr/local npm ci
 COPY tsconfig.json nest-cli.json ./
 COPY src/ ./src/
 COPY plugins/ ./plugins/
@@ -43,7 +46,11 @@ WORKDIR /app
 # Install production dependencies only
 COPY package.json package-lock.json ./
 COPY .npmrc ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN apk add --no-cache --virtual .native-build-deps python3 make g++ \
+    && npm_config_build_from_source=true npm_config_nodedir=/usr/local npm ci --omit=dev \
+    && npm cache clean --force \
+    && apk del .native-build-deps \
+    && node -e 'const Database=require("better-sqlite3"); const db=new Database(":memory:"); if(db.prepare("SELECT 1 AS ok").get().ok!==1)process.exit(1); db.close()'
 
 # Copy built backend
 COPY --from=backend-build /app/dist ./dist

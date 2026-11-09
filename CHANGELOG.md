@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 2.12.13 - 2026-11-09
+
+- Fall back to GitHub CLI release-asset retrieval when the public scanner download
+  endpoint is unavailable. Keep the exact scanner archive SHA-256, size limit and
+  fail-closed publication checks; no scan or signature gate is skipped.
+- Build locked native SQLite dependencies from source using the Docker base
+  image's Node headers rather than relying on downloadable prebuilt binaries.
+  Remove the compiler toolchain from the runtime layer and check SQLite loads.
+- Publish the v2.12.12 log, cache-price editor and API-key routing changes after
+  correcting cross-version upgrade acceptance. The v2.12.12 tag was not released:
+  native verification rejected the expected nullable `model_routes` addition
+  because its pre/post database fingerprint included every column.
+- Verify that the route column is added as nullable text, every legacy key remains
+  SQL NULL/unbound, and all other schema fields and business cells are preserved.
+  Compare a disposable projection of the checkpointed snapshot; never modify
+  either backup or ignore existing route bindings. Vault's same-version recovery
+  verification remains unchanged and strict. Missing columns, new bindings,
+  altered keys, rows, logs or prices still fail acceptance.
+
 ## 2.12.12 - 2026-11-09
 
 - Add opt-in API-key `model_routes` for exact chat-model round-robin and

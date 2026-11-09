@@ -1,7 +1,26 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-11-09
-Release: **v2.12.12** (availability requires the matching successful release workflow)
+Release: **v2.12.13** (availability requires the matching successful release workflow)
+
+## v2.12.13 Release Scope
+
+Publish the v2.12.12 feature set after fixing its cross-version acceptance
+comparison. The v2.12.12 tag did not publish: the new nullable route column changed
+Vault's full-column business fingerprint, so both native upgrade checks stopped.
+
+Upgrade acceptance now verifies the exact nullable text column addition and SQL
+NULL for every old key, then compares all remaining business data on a disposable
+projection of the checkpointed snapshot. Existing bindings, original backups and
+same-version Vault verification are never altered or excluded. Negative tests
+reject missing migration, binding changes, unrelated schema changes and changed
+keys, logs or pricing data. All existing native release gates still apply.
+
+If GitHub's browser download route is unavailable, scanner bootstrap may retrieve
+the same public release asset through GitHub CLI. The pinned archive checksum,
+size limit and all content/history scans remain mandatory.
+Docker builds compile locked native modules against their own Node headers;
+the runtime layer removes temporary compiler packages and verifies SQLite loads.
 
 ## v2.12.12 Release Scope
 
