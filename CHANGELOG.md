@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 2.12.15 - 2026-11-11
+
+- Preserve declared chat image input when saving nodes, honor operator-selected
+  vision capabilities, and stop generating text-only model overrides from chat
+  prices. Existing explicit model overrides remain authoritative; verify upstream
+  image support before correcting older text-only declarations.
+- Apply Key/Team/Namespace restrictions in the per-model pool editor, including
+  inherited team namespaces, unavailable scopes and disjoint permission lists.
+  Show create/edit save failures inside the open dialog in all seven locales.
+  Backend authorization and strict image/capability filters are unchanged.
+- Include the signed published v2.12.14 in native upgrade/Fleet/recovery acceptance.
+  No new database schema or migration is required.
+
 ## 2.12.14 - 2026-11-09
 
 - Publish the log, cache-pricing and per-key model-routing changes after hardening

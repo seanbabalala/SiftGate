@@ -1,7 +1,24 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-11-09
-Release: **v2.12.14** (availability requires the matching successful release workflow)
+Reviewed: 2026-11-11
+Release: **v2.12.15** (availability requires the matching successful release workflow)
+
+## v2.12.15 Release Scope
+
+Node saves preserve declared chat image input and operator-selected vision
+capabilities. Chat pricing no longer creates a model-level text-only override.
+Existing explicit model declarations remain authoritative: verify upstream image
+support before correcting older declarations; routing never removes request images
+or bypasses modality checks to make a pool eligible.
+
+The per-key model-pool editor follows effective Key/Team/Namespace restrictions,
+including a team's inherited namespace and fail-closed disjoint lists. API save
+failures remain visible inside create/edit dialogs in all seven Dashboard locales.
+Backend authorization and pool selection behavior are unchanged.
+
+Native upgrade/Fleet/recovery includes the signed published v2.12.14 baseline.
+No new database schema or migration is introduced. Publication does not switch a
+running gateway or change operator permissions/configuration.
 
 ## v2.12.14 Release Scope
 

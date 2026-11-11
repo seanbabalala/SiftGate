@@ -1,7 +1,7 @@
 {
   "name": "siftgate-dashboard",
   "private": true,
-  "version": "2.12.14",
+  "version": "2.12.15",
   "license": "MIT",
   "engines": {
     "node": ">=22.13.0 <23"
@@ -25,6 +25,7 @@
     "provider-catalog:check": "node scripts/check-provider-catalog.mjs",
     "provider-logos:check": "node scripts/check-provider-logos.mjs",
     "api-keys:check": "node scripts/check-api-keys.mjs",
+    "node-modalities:check": "node scripts/check-node-modalities.mjs",
     "playground:check": "node scripts/check-playground.mjs",
     "sessions:check": "node scripts/check-sessions.mjs",
     "mcp:check": "node scripts/check-mcp-gateway.mjs",
@@ -37,7 +38,7 @@
     "budget-scopes:check": "node scripts/check-budget-scopes.mjs",
     "onboarding:check": "node scripts/check-onboarding.mjs",
     "sidebar:check": "node scripts/check-sidebar-scroll.mjs",
-    "test": "npm run i18n:check && npm run routing:check && npm run auth:check && npm run identity:check && npm run launchpad:check && npm run control-room:check && npm run release-updates:check && npm run sse:check && npm run fcp:check && npm run a11y:check && npm run route-explanation:check && npm run traffic-experiments:check && npm run shadow-report:check && npm run benchmark:check && npm run guardrails:check && npm run provider-catalog:check && npm run provider-logos:check && npm run api-keys:check && npm run playground:check && npm run sessions:check && npm run mcp:check && npm run agent-profiles:check && npm run agent-platform:check && npm run cost-platform:check && npm run semantic-platform:check && npm run batches:check && npm run evals:check && npm run namespaces:check && npm run budget-scopes:check && npm run onboarding:check && npm run sidebar:check && npm run pricing:check",
+    "test": "npm run i18n:check && npm run routing:check && npm run auth:check && npm run identity:check && npm run launchpad:check && npm run control-room:check && npm run release-updates:check && npm run sse:check && npm run fcp:check && npm run a11y:check && npm run route-explanation:check && npm run traffic-experiments:check && npm run shadow-report:check && npm run benchmark:check && npm run guardrails:check && npm run provider-catalog:check && npm run provider-logos:check && npm run api-keys:check && npm run playground:check && npm run sessions:check && npm run mcp:check && npm run agent-profiles:check && npm run agent-platform:check && npm run cost-platform:check && npm run semantic-platform:check && npm run batches:check && npm run evals:check && npm run namespaces:check && npm run budget-scopes:check && npm run onboarding:check && npm run sidebar:check && npm run pricing:check && npm run node-modalities:check",
     "preview": "vite preview",
     "batches:check": "node scripts/check-batches.mjs",
     "pricing:check": "node scripts/check-pricing.mjs",

@@ -1,4 +1,6 @@
 {
+  "form.saveFailed": "保存失败：{{message}}",
+  "modelRoutes.inheritedRestriction": "分流还受所属团队和命名空间限制。请先在对应权限中放行节点和模型，再配置分流。",
   "actions.cancel": "取消",
   "actions.clear": "清空",
   "actions.createKey": "创建网关密钥",

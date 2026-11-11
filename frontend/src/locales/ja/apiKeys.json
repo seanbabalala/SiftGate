@@ -1,4 +1,6 @@
 {
+  "form.saveFailed": "保存できませんでした：{{message}}",
+  "modelRoutes.inheritedRestriction": "候補は選択したチームと名前空間の権限にも従います。プールの設定前に、必要なノードとモデルを許可してください。",
   "actions.cancel": "キャンセル",
   "actions.clear": "クリア",
   "actions.createKey": "ゲートウェイキーを作成",

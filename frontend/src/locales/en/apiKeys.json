@@ -1,4 +1,6 @@
 {
+  "form.saveFailed": "Could not save: {{message}}",
+  "modelRoutes.inheritedRestriction": "Route choices also follow the selected team and namespace. Grant the required node and model permissions there before configuring a pool.",
   "actions.cancel": "Cancel",
   "actions.clear": "Clear",
   "actions.createKey": "Create gateway key",

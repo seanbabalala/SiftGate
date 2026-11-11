@@ -1,4 +1,6 @@
 {
+  "form.saveFailed": "No se pudo guardar: {{message}}",
+  "modelRoutes.inheritedRestriction": "Las opciones también respetan los permisos del equipo y del espacio de nombres. Autoriza los nodos y modelos necesarios antes de configurar el grupo.",
   "actions.cancel": "Cancelar",
   "actions.clear": "Limpiar",
   "actions.createKey": "Crear clave de gateway",

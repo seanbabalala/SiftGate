@@ -1,5 +1,6 @@
 import { VIDEO_RESULT_PROFILES, type VideoResultProfile } from "../../../../src/pricing/video-result-profile.types";
 import { collectLegacyPricingUpdates, legacyCacheFields, legacyPricingFields, type LegacyPricingRow } from "@/lib/node-pricing-form";
+import { chatModelCapabilities, deriveModalities, modelBucketModalities } from "@/lib/node-modalities-form";
 import { Link } from "react-router-dom";
 import {
   useState,
@@ -202,16 +203,6 @@ const MODEL_BUCKETS: Array<{
     capabilities: ["realtime"],
   },
 ];
-
-const BUCKET_MODALITIES: Record<ModelBucketKey, string[]> = {
-  models: ["text"],
-  embedding_models: ["text", "embedding"],
-  rerank_models: ["rerank"],
-  image_models: ["image"],
-  audio_models: ["audio"],
-  video_models: ["video"],
-  realtime_models: ["text", "audio", "realtime"],
-};
 
 const PROVIDER_FAMILY_FILTERS: CatalogProviderFamily[] = [
   "foundation",
@@ -748,27 +739,6 @@ function activeBucketKeys(
       selectedCapabilities.includes(capability),
     ),
   ).map((bucket) => bucket.key);
-}
-
-function deriveModalities(selectedCapabilities: WizardCapability[]): string[] {
-  const modalities = new Set<string>();
-  if (
-    selectedCapabilities.some((capability) =>
-      ["chat", "responses", "messages", "gemini"].includes(capability),
-    )
-  ) {
-    modalities.add("text");
-  }
-  if (selectedCapabilities.includes("embeddings")) {
-    modalities.add("text");
-    modalities.add("embedding");
-  }
-  if (selectedCapabilities.includes("rerank")) modalities.add("rerank");
-  if (selectedCapabilities.includes("images")) modalities.add("image");
-  if (selectedCapabilities.includes("audio")) modalities.add("audio");
-  if (selectedCapabilities.includes("video")) modalities.add("video");
-  if (selectedCapabilities.includes("realtime")) modalities.add("realtime");
-  return Array.from(modalities);
 }
 
 function endpointForCapability(
@@ -1442,12 +1412,15 @@ export function NodeFormModal({
   const buildModelCapabilities = ():
     | Record<string, Partial<ModelCapabilityInfo>>
     | undefined => {
-    const entries: Array<[string, Partial<ModelCapabilityInfo>]> = [];
+    const activeBuckets = activeBucketKeys(form.selectedCapabilities);
     const activeModels = new Set(
-      activeBucketKeys(form.selectedCapabilities).flatMap((bucket) =>
-        compactModels(form[bucket] as string[]),
-      ),
+      activeBuckets.flatMap((bucket) => compactModels(form[bucket] as string[])),
     );
+    const declaredChatCapabilities = chatModelCapabilities(
+      activeBuckets.includes("models") ? compactModels(form.models) : [],
+      presetInfo?.catalog.models || [],
+    );
+    const entries: Array<[string, Partial<ModelCapabilityInfo>]> = Object.entries(declaredChatCapabilities);
     for (const update of collectLegacyPricingUpdates(form.pricing, [])) {
       if (update.action !== 'set') continue;
       const { model, input, output } = update;
@@ -1458,10 +1431,12 @@ export function NodeFormModal({
       const bucket = MODEL_BUCKETS.find((candidate) =>
         compactModels(form[candidate.key] as string[]).includes(model),
       )?.key;
+      const modalities = bucket ? modelBucketModalities(bucket) : undefined;
       entries.push([
         model,
         {
-          ...(bucket ? { modalities: BUCKET_MODALITIES[bucket] } : {}),
+          ...declaredChatCapabilities[model],
+          ...(modalities ? { modalities } : {}),
           pricing: { input, output, ...cache },
         },
       ]);
@@ -1572,7 +1547,7 @@ export function NodeFormModal({
           : undefined,
       capabilities:
         form.capabilities.length > 0 ? form.capabilities : undefined,
-      modalities: deriveModalities(form.selectedCapabilities),
+      modalities: deriveModalities(form.selectedCapabilities, form.capabilities, editNode?.modalities),
       tags: tags.length > 0 ? tags : undefined,
       model_aliases: aliases,
       model_prefixes: modelPrefixes.length > 0 ? modelPrefixes : undefined,
