@@ -30,6 +30,10 @@ REGISTRY = "ghcr.io/seanbabalala/ai-gateway"
 ACTIVE = ("queued", "running", "needs_attention")
 TERMINAL = ("succeeded", "rejected", "cancelled", "resolved")
 STAGES = ("planned", "queued", "preflight", "candidate_check", "maintenance", "stopping", "snapshot", "switching", "starting", "verifying", "complete", "interrupted")
+# An executor refreshes its lease every heartbeat (5s). Observation may seal a
+# running job only after this window, so one transient observation can never
+# turn a job whose executor is still alive into needs_attention.
+EXECUTOR_LEASE_SECONDS = 30
 PRIVATE_FILES = kit.KIT_FILES
 IMAGE_ID = re.compile(r"sha256:[a-f0-9]{64}\Z")
 JOB_ID = re.compile(r"op-[a-f0-9]{32}\Z")
@@ -620,9 +624,51 @@ class Operator:
     def reconcile_interrupted(self):
         # Called only after acquiring the exclusive worker lock. Never replay an
         # uncertain operation just because a lease/PID timestamp is old.
+        #
+        # The worker lock alone is not sufficient evidence: an executor still owns
+        # its job while its lease stays fresh. Sealing a live job makes an ordinary
+        # backup or upgrade permanently needs_attention, so observation waits for
+        # the lease to expire instead. A crashed executor leaves its last lease and
+        # becomes reconcilable within one lease window.
+        age = self.executor_lease_age()
+        if age is not None and -5 <= age <= EXECUTOR_LEASE_SECONDS:
+            return
         for job in self.store.jobs(active=True):
             if job["status"] == "running":
                 self.store.change(job["id"], ("running",), stage="interrupted", status="needs_attention", error_code="operator_interrupted", event="manual_reconciliation_required")
+
+    def write_executor_lease(self, job_id):
+        # Private evidence that an executor is still working. It never authorizes a
+        # restart, replay or approval; it only postpones observation-based sealing.
+        kit.write_json(self.home / "executor.json", {"job": job_id, "pid": os.getpid(), "at": timestamp(self.now())})
+
+    def clear_executor_lease(self):
+        try:
+            (self.home / "executor.json").unlink()
+        except FileNotFoundError:
+            pass
+
+    def executor_lease_age(self):
+        try:
+            value = json.loads(read_file(self.home / "executor.json", limit=4096, private=True))
+            return self.now() - parse_time(value["at"])
+        except (OSError, ValueError, KeyError, TypeError, OperatorFailure):
+            return None
+
+    def record_executor_failure(self, job_id, failure):
+        # Bounded, secret-free evidence for a job an executor failed to finish.
+        # Exception messages can contain provider text or paths, so only fixed
+        # operator codes and the exception type name are ever stored.
+        code = "unclassified"
+        if isinstance(failure, OperatorFailure) and re.fullmatch(r"[a-z_]{1,64}", str(failure)):
+            code = str(failure)
+        elif isinstance(failure, sqlite3.Error):
+            code = "ledger_" + type(failure).__name__.lower()
+        value = {"at": timestamp(self.now()), "job": job_id, "type": type(failure).__name__[:64], "code": code}
+        try:
+            kit.write_json(self.home / "executor-error.json", value)
+        except Exception:
+            pass
 
     def cancel(self, job_id):
         result = self.store.change(job_id, ("planned", "queued"), status="cancelled", event="cancelled_before_execution")
@@ -670,6 +716,8 @@ class Operator:
         while not stop.is_set():
             try:
                 self.store.heartbeat(); self.publish()
+                if getattr(self, "active_job", None) is not None:
+                    self.write_executor_lease(self.active_job)
             except Exception:
                 stop.set()
             stop.wait(5)
@@ -681,13 +729,24 @@ class Operator:
             stop = threading.Event()
             reporter = threading.Thread(target=self.heartbeat_loop, args=(stop,), daemon=True)
             reporter.start()
+            self.active_job = None
             try:
                 for job in self.store.jobs(active=True):
                     if job["status"] == "queued" and (job_id is None or job["id"]==job_id):
+                        self.active_job = job["id"]
+                        self.write_executor_lease(job["id"])
                         return self.execute(job["id"])
                 return None
+            except BaseException as failure:
+                # An error had already escaped the executor's own handler. Record a
+                # bounded reason before the process dies, so the job is never sealed
+                # as an unexplained "operator_interrupted".
+                self.record_executor_failure(getattr(self, "active_job", None) or job_id, failure)
+                raise
             finally:
                 stop.set(); reporter.join(timeout=6)
+                self.active_job = None
+                self.clear_executor_lease()
                 self.store.offline(); self.publish()
 
     def bridge(self, enabled):
@@ -718,14 +777,26 @@ class Operator:
             thread.start()
             reporter = threading.Thread(target=self.heartbeat_loop, args=(stop,), daemon=True)
             reporter.start()
+            self.active_job = None
             try:
                 while not stop.is_set():
                     for job in self.store.jobs(active=True):
                         if job["status"] == "queued" and self.now() >= parse_time(job["approval"]["not_before"]):
-                            self.execute(job["id"])
+                            self.active_job = job["id"]
+                            self.write_executor_lease(job["id"])
+                            try:
+                                self.execute(job["id"])
+                            finally:
+                                self.active_job = None
+                                self.clear_executor_lease()
                     stop.wait(1)
+            except BaseException as failure:
+                self.record_executor_failure(getattr(self, "active_job", None), failure)
+                raise
             finally:
                 stop.set(); reporter.join(timeout=6)
+                self.active_job = None
+                self.clear_executor_lease()
                 server.shutdown(); server.server_close(); thread.join(timeout=3)
                 self.store.offline(); self.publish()
                 if address.exists() and stat.S_ISSOCK(address.lstat().st_mode):

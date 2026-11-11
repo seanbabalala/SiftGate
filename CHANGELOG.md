@@ -2,7 +2,21 @@
 
 ## Unreleased
 
-## 2.12.15 - 2026-11-11
+## 2.12.16 - 2026-11-11
+
+- Publish the 2.12.15 fixes, whose tag did not publish because the amd64 native
+  Fleet acceptance repeatedly reported a backup/upgrade control operation as
+  interrupted seconds after it started (arm64 passed).
+- Host executors hold a private lease refreshed by the heartbeat; observation seals
+  a `running` job as interrupted only after the lease expires, so a job whose
+  executor is still working can no longer be turned into `needs_attention` by a
+  single observation. A crashed executor is still reconcilable within one lease
+  window and nothing is replayed, restarted or restored.
+- An executor failure that escapes its own handler now records a bounded
+  `operator/executor-error.json` (job ID, exception type, fixed operator code only)
+  instead of leaving an unexplained interruption.
+
+## 2.12.15 - 2026-11-11 (tag unpublished)
 
 - Preserve declared chat image input when saving nodes, honor operator-selected
   vision capabilities, and stop generating text-only model overrides from chat

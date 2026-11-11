@@ -162,6 +162,10 @@
     {
       "kind": "fix",
       "summary": "Node saves preserve declared chat image input and operator-selected vision capabilities; chat prices no longer manufacture text-only model overrides. The per-key pool editor follows inherited Team/Namespace permissions and shows rejected saves inside the dialog in seven locales, without weakening backend authorization or capability filters. Native upgrade acceptance includes published v2.12.14; no new schema change."
+    },
+    {
+      "kind": "fix",
+      "summary": "The host operator refreshes a private executor lease with its heartbeat; observation seals a running backup or upgrade as interrupted only after the lease expires, so a job whose executor still works is never turned into needs_attention by one observation. A crashed executor stays reconcilable within one lease window and is never replayed or auto-restarted, and an escaping executor error records a bounded reason. No schema or configuration change."
     }
   ]
 }
