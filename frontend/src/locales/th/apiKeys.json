@@ -1,4 +1,6 @@
 {
+  "form.saveFailed": "บันทึกไม่สำเร็จ: {{message}}",
+  "modelRoutes.inheritedRestriction": "ตัวเลือกเส้นทางขึ้นอยู่กับสิทธิ์ของทีมและเนมสเปซที่เลือกด้วย โปรดอนุญาตโหนดและโมเดลที่จำเป็นก่อนตั้งค่าการกระจายคำขอ",
   "actions.cancel": "ยกเลิก",
   "actions.clear": "ล้าง",
   "actions.createKey": "สร้างคีย์เกตเวย์",

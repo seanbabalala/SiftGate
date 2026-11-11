@@ -31,6 +31,8 @@ const requiredLocaleKeys = [
   'teams.table.title',
   'teams.actions.createTeam',
   'teams.form.createTitle',
+  'form.saveFailed',
+  'modelRoutes.inheritedRestriction',
 ]
 
 for (const snippet of [
@@ -97,6 +99,12 @@ const grants = { allow_direct: true, allowed_nodes: [], allowed_models: [] }
 const rules = [{ model: 'shared', strategy: 'round_robin', targets: [{ node: 'a', weight: 1 }, { node: 'b', weight: 1 }] }]
 assert(modelRouteCandidates(routeNodes, grants).join() === 'shared', 'Model choices must include shared canonical models.')
 assert(modelRoutesAreValid(rules, routeNodes, grants), 'Valid pool should be saveable.')
+assert(!modelRoutesAreValid(rules, routeNodes, { ...grants, inherited_permissions: [{ allowed_nodes: ['a'], allowed_models: [] }] }), 'The editor must reject a target excluded by the selected team before submitting.')
+assert(modelRouteCandidates(routeNodes, { ...grants, inherited_permissions: [{ allowed_nodes: ['a'], allowed_models: [] }] }).length === 0, 'Do not offer a model pool whose second node is excluded by inherited permissions.')
+assert(!modelRoutesAreValid(rules, routeNodes, { ...grants, allowed_nodes: ['a'], inherited_permissions: [{ allowed_nodes: ['b'], allowed_models: [] }] }), 'A disjoint node intersection must deny access, never become unrestricted.')
+assert(!modelRoutesAreValid(rules, routeNodes, { ...grants, allowed_models: ['shared'], inherited_permissions: [{ allowed_nodes: [], allowed_models: ['other'] }] }), 'A disjoint model intersection must deny access.')
+assert(modelRoutesAreValid(rules, routeNodes, { ...grants, inherited_permissions: [{ allowed_nodes: [], allowed_models: [] }] }), 'Empty inherited lists must retain their unrestricted semantics.')
+assert(!modelRoutesAreValid(rules, routeNodes, { ...grants, scope_available: false }), 'An unavailable team or namespace must not appear to grant a pool.')
 assert(modelRoutesAreValid([], routeNodes, { ...grants, allow_direct: false }), 'Empty pools must preserve legacy keys.')
 assert(!modelRoutesAreValid(rules, routeNodes, { ...grants, allow_direct: false }), 'Pools require direct permission.')
 assert(!modelRoutesAreValid(rules, routeNodes, { ...grants, allowed_nodes: ['a'] }), 'Do not silently erase stale targets after permission edits.')
@@ -112,7 +120,12 @@ for (const locale of locales) {
     assert(value[`modelRoutes.${key}`], `${locale} missing modelRoutes.${key}`)
   }
 }
-console.log('Model route editor policy checks passed.')
+assert(source.includes('permissions={routePermissions}') && source.includes('selectedTeam?.namespace_id'), 'Resolve the selected team and its inherited namespace before rendering and validating pool choices.')
+assert(source.includes('error={createKey.error?.message}') && source.includes('error={updateKey.error?.message}') && source.includes("t('form.saveFailed', { message: error })"), 'Both create/edit failures must remain visible inside the open dialog.')
+assert(source.includes('createKey.reset(); setCreateOpen(true)') && source.includes('updateKey.reset(); setEditing(key)'), 'Opening a fresh dialog must not display an unrelated previous mutation error.')
+const aliasedRouteNodes = routeNodes.map(node => ({ ...node, upstream_model_aliases: { shared: 'wire-model' } }))
+assert(!modelRoutesAreValid(rules, aliasedRouteNodes, { ...grants, allowed_models: ['shared'], inherited_permissions: [{ allowed_nodes: [], allowed_models: ['wire-model'] }] }), 'Match the server literal permission intersection even when different scopes allow different aliases of the same model.')
+console.log('Model route editor policy checks passed, including inherited restrictions and visible save failures.')
 
 // Match the app's flat-key i18next setup so nested locale objects cannot pass QA.
 const { createInstance } = await import('i18next')

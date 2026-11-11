@@ -82,6 +82,29 @@ Automatic response-ID affinity is not implemented. Explicit pins keep their
 existing direct-routing behavior; this feature does not add affinity guarantees
 to existing direct fallback policies.
 
+## Troubleshooting image requests and saves
+
+A request containing an image, including an image resent in conversation history,
+requires image input support from an eligible pool target. A `vision` capability
+label is not enough when `model_capabilities[model].modalities` explicitly says
+`[text]`: model-level declarations take precedence over node defaults and labels.
+Verify the upstream can interpret an image, then declare `[text, image]` (or the
+legacy `[text, vision]`) for that model on the verified targets. Do not remove
+images or weaken the pool's capability filter. Node saves preserve existing image
+input declarations; adding a chat price no longer creates a text-only override.
+Known catalog model declarations remain model-specific, so a mixed node's
+text-only model does not inherit another model's image support. Unknown custom
+models retain the operator's node defaults without inventing a price-based limit.
+Older explicit text-only model entries are not automatically rewritten.
+
+Pool choices in the key editor follow the selected team's restrictions and its
+inherited namespace, as well as the key's own lists. Grant required node/model
+permissions in those scopes first. An empty configured list means unrestricted;
+a disjoint intersection means denied. Missing or disabled scopes do not grant
+access. Server create/edit failures appear inside the open dialog so rejected
+changes cannot look like a successful save. Saving a key never expands its team
+or namespace permissions automatically.
+
 ## Storage and rollout
 
 API key bindings use a nullable `gateway_api_keys.model_routes` JSON/text column.

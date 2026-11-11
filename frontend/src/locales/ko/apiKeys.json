@@ -1,4 +1,6 @@
 {
+  "form.saveFailed": "저장하지 못했습니다: {{message}}",
+  "modelRoutes.inheritedRestriction": "선택한 팀과 네임스페이스 권한도 적용됩니다. 분산 설정 전에 필요한 노드와 모델을 허용하세요.",
   "actions.cancel": "취소",
   "actions.clear": "비우기",
   "actions.createKey": "게이트웨이 키 생성",

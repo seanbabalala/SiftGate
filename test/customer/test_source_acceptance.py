@@ -38,7 +38,10 @@ class SourceAcceptanceTests(unittest.TestCase):
     def test_current_and_legacy_public_images_are_both_in_the_release_contract(self):
         contract=json.loads((ROOT/"deploy/customer/release-contract.json").read_text())
         records={r["version"]:r for r in contract["source_releases"]}
-        self.assertEqual(set(records),{"2.11.7","2.12.0","2.12.1","2.12.3","2.12.4","2.12.5","2.12.6","2.12.7","2.12.8","2.12.9","2.12.11"})
+        self.assertEqual(set(records),{"2.11.7","2.12.0","2.12.1","2.12.3","2.12.4","2.12.5","2.12.6","2.12.7","2.12.8","2.12.9","2.12.11","2.12.14"})
+        self.assertEqual(records["2.12.14"]["image"],"ghcr.io/seanbabalala/ai-gateway@sha256:0240a6ad5b40e766798c9936633402d89170902318a966cc1ca71a3a02bf9e60")
+        self.assertEqual(records["2.12.14"]["installer_sha256"],"7306e0eb95b92037422b5f9f49be5c2b04670dd1dc222cddf85d4963ec8f59b2")
+        self.assertEqual(records["2.12.14"]["source_commit"],"811f1abb9845edbe345f9fc5c8055f206842c88f")
         self.assertEqual(records["2.12.11"]["image"],"ghcr.io/seanbabalala/ai-gateway@sha256:2a1979295fd037d24eb34627a6ede17bcd48a53ae7f2f5f1507ca89729945adf")
         self.assertEqual(records["2.12.11"]["installer_sha256"],"20e8be9802f844ff0f66da38e0bb918711126ac93ddb551eed47c8b4c27e0346")
         self.assertEqual(records["2.12.11"]["source_commit"],"0bc85a9875fed5e517c61bbdcfb16ec725357db0")

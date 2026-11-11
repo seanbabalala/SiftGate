@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ModelRoutesEditor } from '@/components/api-keys/model-routes-editor'
-import { modelRoutesAreValid, type ModelRouteNode } from '@/components/api-keys/model-routes'
+import { modelRoutesAreValid, type ModelRouteNode, type ModelRoutePermissionScope } from '@/components/api-keys/model-routes'
 import { useTranslation } from 'react-i18next'
 import {
   Activity,
@@ -642,6 +642,7 @@ function KeyFormDialog({
   onClose,
   onSubmit,
   pending,
+  error,
 }: {
   open: boolean
   mode: 'create' | 'edit'
@@ -652,11 +653,12 @@ function KeyFormDialog({
     protocol: string
     models: string[]
   })[]
-  namespaces: { id: string; name?: string }[]
-  teams: { id: string; name: string; status: 'active' | 'disabled' }[]
+  namespaces: (ModelRoutePermissionScope & { id: string; name?: string })[]
+  teams: (ModelRoutePermissionScope & { id: string; name: string; status: 'active' | 'disabled'; namespace_id: string | null })[]
   onClose: () => void
   onSubmit: (form: KeyFormState) => void
   pending: boolean
+  error?: string
 }) {
   const { t } = useTranslation('apiKeys')
   const [form, setForm] = useState<KeyFormState>(initial)
@@ -746,7 +748,20 @@ function KeyFormDialog({
     })
   }, [visibleModelValues])
 
-  const canSubmit = form.name.trim().length > 0 && modelRoutesAreValid(form.model_routes, nodes, form)
+  const selectedTeam = teams.find(team => team.id === form.team_id)
+  const namespaceId = form.namespace_id || selectedTeam?.namespace_id || ''
+  const selectedNamespace = namespaces.find(namespace => namespace.id === namespaceId)
+  const routePermissions = {
+    ...form,
+    inherited_permissions: [
+      ...(selectedTeam ? [selectedTeam] : []),
+      ...(selectedNamespace ? [selectedNamespace] : []),
+    ],
+    scope_available: (!form.team_id || selectedTeam?.status === 'active')
+      && (!namespaceId || !!selectedNamespace)
+      && (!form.namespace_id || !selectedTeam?.namespace_id || form.namespace_id === selectedTeam.namespace_id),
+  }
+  const canSubmit = form.name.trim().length > 0 && modelRoutesAreValid(form.model_routes, nodes, routePermissions)
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -876,8 +891,13 @@ function KeyFormDialog({
             />
           </div>
 
-          <ModelRoutesEditor value={form.model_routes} nodes={nodes} permissions={form}
-            onChange={(model_routes) => setForm((prev) => ({ ...prev, model_routes }))} />
+          <div className="grid gap-2">
+            {routePermissions.inherited_permissions.length > 0 && (
+              <p className="text-[12px] leading-5 text-[var(--foreground-dim)]">{t('modelRoutes.inheritedRestriction')}</p>
+            )}
+            <ModelRoutesEditor value={form.model_routes} nodes={nodes} permissions={routePermissions}
+              onChange={(model_routes) => setForm((prev) => ({ ...prev, model_routes }))} />
+          </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <MultiResourcePicker
@@ -940,6 +960,8 @@ function KeyFormDialog({
             </div>
           </div>
         </div>
+
+        {error && <p role="alert" className="text-[12px] leading-5 text-red-600">{t('form.saveFailed', { message: error })}</p>}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t('actions.cancel')}</Button>
@@ -1269,7 +1291,7 @@ export function ApiKeysPage() {
             </Button>
           </PermissionTooltip>
           <PermissionTooltip allowed={canAdmin} requiredRole="admin">
-            <Button onClick={() => setCreateOpen(true)} disabled={!canAdmin}>
+            <Button onClick={() => { createKey.reset(); setCreateOpen(true) }} disabled={!canAdmin}>
               <Plus className="h-4 w-4" />
               {t('actions.newKey')}
             </Button>
@@ -1499,7 +1521,7 @@ export function ApiKeysPage() {
               description={t('empty.description')}
               action={
                 <PermissionTooltip allowed={canAdmin} requiredRole="admin">
-                  <Button onClick={() => setCreateOpen(true)} disabled={!canAdmin}>
+                  <Button onClick={() => { createKey.reset(); setCreateOpen(true) }} disabled={!canAdmin}>
                     <Plus className="h-4 w-4" />
                     {t('actions.createKey')}
                   </Button>
@@ -1590,7 +1612,7 @@ export function ApiKeysPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setEditing(key)}
+                          onClick={() => { updateKey.reset(); setEditing(key) }}
                           title={t('actions.editKey')}
                           disabled={!canAdmin}
                         >
@@ -1650,7 +1672,8 @@ export function ApiKeysPage() {
         namespaces={namespaces}
         teams={teams}
         pending={createKey.isPending}
-        onClose={() => setCreateOpen(false)}
+        error={createKey.error?.message}
+        onClose={() => { setCreateOpen(false); createKey.reset() }}
         onSubmit={(form) => {
           createKey.mutate(buildPayload(form), {
             onSuccess: (result) => {
@@ -1669,7 +1692,8 @@ export function ApiKeysPage() {
         namespaces={namespaces}
         teams={teams}
         pending={updateKey.isPending}
-        onClose={() => setEditing(null)}
+        error={updateKey.error?.message}
+        onClose={() => { setEditing(null); updateKey.reset() }}
         onSubmit={(form) => {
           if (!editing) return
           updateKey.mutate(

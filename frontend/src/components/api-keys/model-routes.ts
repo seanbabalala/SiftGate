@@ -9,17 +9,35 @@ export interface ModelRouteNode {
   upstream_model_aliases?: Record<string, string>
 }
 
-export interface ModelRoutePermissions {
-  allow_direct: boolean
+export interface ModelRoutePermissionScope {
   allowed_nodes: string[]
   allowed_models: string[]
 }
 
+export interface ModelRoutePermissions extends ModelRoutePermissionScope {
+  allow_direct: boolean
+  inherited_permissions?: ModelRoutePermissionScope[]
+  scope_available?: boolean
+}
+
+function intersectRestrictions(lists: string[][]): string[] | undefined {
+  const restricted = lists.filter(values => values.length > 0)
+  if (!restricted.length) return undefined
+  return restricted.slice(1).reduce(
+    (common, values) => common.filter(value => values.includes(value)),
+    [...restricted[0]],
+  )
+}
+
 export function canUseModelRouteNode(node: ModelRouteNode, model: string, permissions: ModelRoutePermissions) {
+  if (permissions.scope_available === false) return false
+  const scopes = [permissions, ...(permissions.inherited_permissions || [])]
+  const allowedNodes = intersectRestrictions(scopes.map(scope => scope.allowed_nodes))
+  const allowedModels = intersectRestrictions(scopes.map(scope => scope.allowed_models))
   const aliases = Object.entries(node.model_aliases || {}).filter(([, target]) => target === model).map(([alias]) => alias)
   return !node.disabled && node.chat_models.includes(model)
-    && (!permissions.allowed_nodes.length || permissions.allowed_nodes.includes(node.id))
-    && (!permissions.allowed_models.length || [model, node.upstream_model_aliases?.[model], ...aliases].some(alias => alias && permissions.allowed_models.includes(alias)))
+    && (allowedNodes === undefined || allowedNodes.includes(node.id))
+    && (allowedModels === undefined || [model, node.upstream_model_aliases?.[model], ...aliases].some(alias => alias && allowedModels.includes(alias)))
 }
 
 export function modelRouteCandidates(nodes: ModelRouteNode[], permissions: ModelRoutePermissions) {
