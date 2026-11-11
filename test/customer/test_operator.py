@@ -131,6 +131,34 @@ class OperatorTests(unittest.TestCase):
         self.assertEqual(result["error_code"],"operator_interrupted")
         self.assertNotIn("stop",self.install.actions)
 
+    def test_live_executor_lease_defers_sealing_until_it_expires(self):
+        job = self.plan(); self.approve(job)
+        self.operator.store.change(job["id"], ("queued",), status="running", stage="snapshot")
+        self.operator.write_executor_lease(job["id"])
+        # A job whose executor is still alive must never be sealed by one observation.
+        self.assertEqual(self.operator.reconcile_for_control(job["id"], job["plan_digest"])["status"], "running")
+        self.assertEqual(self.operator.store.get(job["id"])["status"], "running")
+        self.assertNotIn("stop", self.install.actions)
+        self.clock[0] += op.EXECUTOR_LEASE_SECONDS + 1
+        result = self.operator.reconcile_for_control(job["id"], job["plan_digest"])
+        self.assertEqual((result["status"], result["error_code"]), ("needs_attention", "operator_interrupted"))
+
+    def test_executor_crash_leaves_a_bounded_secret_free_reason(self):
+        job = self.plan(); self.approve(job)
+        with patch.object(op.Operator, "execute", side_effect=op.OperatorFailure("ledger_write_failed")):
+            with self.assertRaises(op.OperatorFailure): self.operator.run_once(job["id"])
+        evidence = json.loads((self.operator.home / "executor-error.json").read_text())
+        self.assertEqual((evidence["job"], evidence["code"]), (job["id"], "ledger_write_failed"))
+        self.assertFalse((self.operator.home / "executor.json").exists())
+
+    def test_executor_crash_never_persists_an_unclassified_message(self):
+        job = self.plan(); self.approve(job)
+        with patch.object(op.Operator, "execute", side_effect=RuntimeError("provider-secret-fixture")):
+            with self.assertRaises(RuntimeError): self.operator.run_once(job["id"])
+        body = (self.operator.home / "executor-error.json").read_text()
+        self.assertEqual(json.loads(body)["code"], "unclassified")
+        self.assertNotIn("provider-secret-fixture", body)
+
     def test_reconciliation_with_changed_digest_cannot_cancel_plan(self):
         job=self.plan()
         with self.assertRaisesRegex(op.OperatorFailure,"reconciliation_plan_mismatch"):

@@ -1,9 +1,29 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-11-11
-Release: **v2.12.15** (availability requires the matching successful release workflow)
+Release: **v2.12.16** (availability requires the matching successful release workflow)
 
-## v2.12.15 Release Scope
+## v2.12.16 Release Scope
+
+Publish the v2.12.15 fixes after that tag failed to publish: both native runners
+reached the synthetic Fleet acceptance, where amd64 repeatedly reported a
+backup/upgrade control operation as interrupted seconds after it started. arm64
+passed; the v2.12.15 tag stayed unpublished rather than bypassing the gate.
+
+A host executor now holds a private lease that its heartbeat refreshes every five
+seconds. Observation may seal a `running` job as `operator_interrupted` only after
+that lease expires, so one observation can no longer turn a job whose executor is
+still working into `needs_attention`. Nothing is replayed or restarted: a genuinely
+crashed executor still becomes reconcilable within one lease window, and every
+approval, maintenance marker and snapshot rule is unchanged.
+
+An executor failure that escapes its own handler now leaves a bounded
+`operator/executor-error.json` holding only the job ID, the exception type and a
+fixed operator code — never a message body, traceback, path or credential. The
+daemon and one-shot paths both record it before exiting, so an interrupted job is
+no longer unexplained.
+
+## v2.12.15 Release Scope (unpublished tag)
 
 Node saves preserve declared chat image input and operator-selected vision
 capabilities. Chat pricing no longer creates a model-level text-only override.
