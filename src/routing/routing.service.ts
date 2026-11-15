@@ -839,6 +839,7 @@ export class RoutingService {
     const model = requestedModel || 'auto';
     const kind = this.mediaKind(sourceFormat);
     const allTargets = this.getMediaTargets(kind);
+    const automaticTargets = allTargets.filter(target => this.config.getNode(target.node)?.media_direct_only !== true);
     const evidenceHints = this.withDefaultMediaSelectionHints(sourceFormat, selectionHints);
 
     if (model !== 'auto') {
@@ -862,9 +863,9 @@ export class RoutingService {
         );
       }
       this.assertTargetCompatibility(primary, evidenceHints);
-      const fallbacks = this.rankMediaTargets(
+      const fallbacks = this.config.getNode(primary.node)?.media_direct_only === true ? [] : this.rankMediaTargets(
         this.filterMediaTargets(
-          allTargets.filter((target) =>
+          automaticTargets.filter((target) =>
             target.node !== primary.node || target.model !== primary.model,
           ),
           targetFilter,
@@ -899,7 +900,7 @@ export class RoutingService {
     }
 
     const candidates = this.rankMediaTargets(
-      this.filterMediaTargets(allTargets, targetFilter, evidenceHints),
+      this.filterMediaTargets(automaticTargets, targetFilter, evidenceHints),
     );
     if (candidates.length === 0) {
       throw new RoutingConstraintError(

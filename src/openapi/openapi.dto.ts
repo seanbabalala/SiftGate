@@ -1076,6 +1076,9 @@ export class SanitizedNodeConfigDto {
   @ApiPropertyOptional({ description: 'Scope media idempotency to the gateway caller and node; default false.' })
   media_idempotency?: boolean;
 
+  @ApiPropertyOptional({ description: 'Restrict a media node to explicit requests without cross-target fallback; default false.' })
+  media_direct_only?: boolean;
+
   @ApiPropertyOptional({ example: '/v1/images/generations' })
   images_generations_endpoint?: string;
 

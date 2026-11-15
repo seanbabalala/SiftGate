@@ -62,8 +62,10 @@ describe('config validator', () => {
     for (const value of [true, false, 'true', 1]) {
       const config = secretReferenceConfig('synthetic-key');
       Object.assign(config.nodes[0], { media_idempotency: value });
+      Object.assign(config.nodes[0], { media_direct_only: value });
       const result = validateConfigObject(config, { env: {} });
       expect(codes(result.errors).includes('invalid_media_idempotency')).toBe(typeof value !== 'boolean');
+      expect(codes(result.errors).includes('invalid_media_direct_only')).toBe(typeof value !== 'boolean');
     }
   });
   it('accepts a valid standalone data-plane config', () => {

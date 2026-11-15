@@ -19,3 +19,9 @@ verifying the upstream's deduplication and conflict handling. It does not forwar
 other client headers, alter chat requests, or change existing retry policies.
 Avoid fallback to another image provider after an uncertain submission; do not
 use a new key to retry a possibly completed generation.
+
+For a local or quota-sensitive channel, also set `media_direct_only: true`.
+The node can then only be selected by an explicit media model/node request.
+It is excluded from automatic selection and other nodes' fallback pools; requests
+directed to it have no fallback targets, including aliases on the same node.
+Existing nodes default to their previous behavior. API key permissions still apply.

@@ -2059,6 +2059,10 @@ function validateNodeRoutingCapabilities(
     issues.push(issue('error', 'invalid_media_idempotency',
       'nodes[].media_idempotency must be a boolean when set.', `${basePath}.media_idempotency`));
   }
+  if (node.media_direct_only !== undefined && typeof node.media_direct_only !== 'boolean') {
+    issues.push(issue('error', 'invalid_media_direct_only',
+      'nodes[].media_direct_only must be a boolean when set.', `${basePath}.media_direct_only`));
+  }
   if (
     node.max_context_tokens !== undefined &&
     (!isFiniteNumber(node.max_context_tokens) || node.max_context_tokens <= 0)
