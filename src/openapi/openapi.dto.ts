@@ -1073,6 +1073,9 @@ export class SanitizedNodeConfigDto {
   @ApiPropertyOptional({ type: [String], example: ['gpt-image-1'] })
   image_models?: string[];
 
+  @ApiPropertyOptional({ description: 'Scope media idempotency to the gateway caller and node; default false.' })
+  media_idempotency?: boolean;
+
   @ApiPropertyOptional({ example: '/v1/images/generations' })
   images_generations_endpoint?: string;
 

@@ -847,6 +847,8 @@ export interface NodeConfig {
   images_variations_endpoint?: string;
   /** Image-capable model IDs exposed by this node. */
   image_models?: string[];
+  /** Opt-in scoped Idempotency-Key for media dispatch; synthesized once when clients omit it. */
+  media_idempotency?: boolean;
   /** Optional OpenAI-compatible audio transcription endpoint path (default: /v1/audio/transcriptions). */
   audio_transcriptions_endpoint?: string;
   /** Optional OpenAI-compatible audio translation endpoint path (default: /v1/audio/translations). */

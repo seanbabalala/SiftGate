@@ -2055,6 +2055,10 @@ function validateNodeRoutingCapabilities(
   basePath: string,
   issues: ConfigValidationIssue[],
 ): void {
+  if (node.media_idempotency !== undefined && typeof node.media_idempotency !== 'boolean') {
+    issues.push(issue('error', 'invalid_media_idempotency',
+      'nodes[].media_idempotency must be a boolean when set.', `${basePath}.media_idempotency`));
+  }
   if (
     node.max_context_tokens !== undefined &&
     (!isFiniteNumber(node.max_context_tokens) || node.max_context_tokens <= 0)

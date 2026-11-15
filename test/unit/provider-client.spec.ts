@@ -2632,6 +2632,28 @@ describe('ProviderClientService', () => {
       expect(result.provider_response_type).toBe('application/json');
     });
 
+    it('sends scoped media identity only when opted in and overrides conflicting static header casing', async () => {
+      const fetchMock = jest.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
+        created: 123, data: [{ b64_json: 'ZmFrZQ==' }],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+      global.fetch = fetchMock as any;
+      const canonical = makeMediaCanonical();
+      canonical.metadata.api_key_id = 'gateway-caller';
+      canonical.metadata.raw_headers = { authorization: 'Bearer PRIVATE_GATEWAY_KEY', 'idempotency-key': 'client-operation' };
+      const svc = makeServiceWithNode({ media_idempotency: true, headers: { 'idempotency-key': 'wrong-static-key' } });
+      await svc.forwardMedia(canonical, 'openai', 'gpt-image-1', routingMeta);
+      await svc.forwardMedia(canonical, 'openai', 'gpt-image-1', routingMeta);
+      const first = fetchMock.mock.calls[0][1].headers;
+      expect(first['Idempotency-Key']).toMatch(/^sg_media_[a-f0-9]{64}$/);
+      expect(first['idempotency-key']).toBeUndefined();
+      expect(first.Authorization).toBe('Bearer sk-test');
+      expect(first['Idempotency-Key']).toBe(fetchMock.mock.calls[1][1].headers['Idempotency-Key']);
+      expect(JSON.stringify(first)).not.toContain('PRIVATE_GATEWAY_KEY');
+      const legacy = makeServiceWithNode();
+      await legacy.forwardMedia(canonical, 'openai', 'gpt-image-1', routingMeta);
+      expect(fetchMock.mock.calls[2][1].headers['Idempotency-Key']).toBeUndefined();
+    });
+
     it('should forward image variations and audio translations to their configured endpoints', async () => {
       const fetchMock = jest.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({
         created: 123,
