@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatReasoningEffort } from '@/lib/reasoning-effort-display'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
@@ -1234,7 +1235,7 @@ function RouteDecisionDetail({ requestId }: { requestId: string }) {
                   <div className="mt-1 text-[11px] text-[var(--foreground-dim)]">
                     {trace.constraints.requires_reasoning
                       ? t('routeExplanation.detail.reasoningRequired', {
-                          effort: trace.constraints.reasoning_effort || t('routeExplanation.values.unknown'),
+                          effort: formatReasoningEffort(trace.constraints.reasoning_effort, trace.constraints.reasoning_budget_tokens, t('detail.reasoningBudget'), t('routeExplanation.values.unknown')),
                           strategy: trace.constraints.reasoning_strategy || t('routeExplanation.values.unknown'),
                         })
                       : t('routeExplanation.detail.reasoningNotRequired')}

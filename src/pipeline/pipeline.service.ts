@@ -55,6 +55,7 @@ import {
   normalizeReasoningFromBody,
   resolveReasoningForwarding,
 } from '../canonical/reasoning-effort';
+import { observeNativeMessagesReasoning } from '../canonical/reasoning-observation';
 import {
   ProviderClientService,
   ProviderError,
@@ -6984,7 +6985,7 @@ export class PipelineService implements BeforeApplicationShutdown {
           model,
         ).supports_reasoning
       : null;
-    const intent =
+    const transportIntent =
       canonical.reasoning ||
       (
         canonical.metadata.raw_body &&
@@ -6996,6 +6997,12 @@ export class PipelineService implements BeforeApplicationShutdown {
             ).reasoning
           : undefined
       );
+    const intent = observeNativeMessagesReasoning(
+      transportIntent,
+      canonical.metadata.raw_body,
+      canonical.metadata.source_format,
+      node?.protocol,
+    );
     const forwarding = resolveReasoningForwarding(
       intent,
       canonical.metadata.source_format,
