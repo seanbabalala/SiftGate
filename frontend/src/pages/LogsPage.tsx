@@ -1,10 +1,10 @@
 import { formatCacheMoney } from '@/lib/cache-reference-display'
 import { useLogCostSummaries } from '@/hooks/use-log-cost-summaries'
 import { ReportCostCell } from '@/components/pricing/report-cost-cell'
-import { Fragment, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Activity, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, CircleDollarSign, Gauge, KeyRound, Radio, Download, ScrollText, Route, Database, Terminal, Monitor, Code2, Braces } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, CircleDollarSign, Gauge, KeyRound, Radio, Download, ScrollText, Route, Database, Terminal, Monitor, Code2, Braces, Search, X } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { NodeIcon } from '@/components/shared/NodeIcon'
 import { TierBadge } from '@/components/shared/TierBadge'
@@ -46,6 +46,70 @@ import type { CallLog, LogsSummaryResponse } from '@/types/api'
 
 const LIMIT = 20
 const TABLE_COLUMNS = 14
+const LOG_SEARCH_MAX_LENGTH = 200
+const LOG_SEARCH_DEBOUNCE_MS = 300
+
+/**
+ * Request Logs search box. The committed value lives in the `search` URL
+ * parameter, so the header search, a shared link and Back all land on the
+ * same filtered view. Typing is debounced before it is committed.
+ */
+function LogsSearchField({ value, onCommit }: { value: string; onCommit: (next: string) => void }) {
+  const { t } = useTranslation('logs')
+  const [draft, setDraft] = useState(value)
+  const onCommitRef = useRef(onCommit)
+  onCommitRef.current = onCommit
+
+  // Follow outside changes (header search, Back) without trimming what the
+  // user is still typing: only replace the draft when it means something else.
+  useEffect(() => {
+    setDraft((current) => (current.trim() === value ? current : value))
+  }, [value])
+
+  useEffect(() => {
+    const next = draft.trim()
+    if (next === value) return
+    const timer = window.setTimeout(() => onCommitRef.current(next), LOG_SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [draft, value])
+
+  const clear = () => {
+    setDraft('')
+    onCommitRef.current('')
+  }
+
+  return (
+    <div className="logs-search-field flex h-9 w-64 max-w-full items-center gap-2 rounded-lg bg-[var(--inset-bg)] px-3 focus-within:ring-2 focus-within:ring-[var(--ring)]">
+      <Search className="h-3.5 w-3.5 shrink-0 text-[var(--foreground-dim)]" aria-hidden="true" />
+      <input
+        type="search"
+        value={draft}
+        maxLength={LOG_SEARCH_MAX_LENGTH}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') onCommitRef.current(draft.trim())
+          if (event.key === 'Escape' && draft) {
+            event.preventDefault()
+            clear()
+          }
+        }}
+        placeholder={t('filters.searchPlaceholder')}
+        aria-label={t('filters.searchLabel')}
+        className="min-w-0 flex-1 bg-transparent text-[13px] text-[var(--foreground)] outline-none placeholder:text-[var(--foreground-dim)] [&::-webkit-search-cancel-button]:hidden"
+      />
+      {draft && (
+        <button
+          type="button"
+          onClick={clear}
+          className="rounded p-0.5 text-[var(--foreground-dim)] hover:text-[var(--foreground)] cursor-pointer"
+          aria-label={t('filters.clearSearch')}
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  )
+}
 
 function ThroughputCell({ log }: { log: CallLog }) {
   const { t, i18n } = useTranslation('logs')
@@ -722,6 +786,23 @@ export function LogsPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [exportFormat, setExportFormat] = useState('csv')
   const [timeRange, setTimeRange] = useState('today')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const search = (searchParams.get('search') ?? '').trim().slice(0, LOG_SEARCH_MAX_LENGTH)
+  // A new search starts at the first page, including one from the header
+  // search while this page is already open.
+  const [pageSearch, setPageSearch] = useState(search)
+  if (pageSearch !== search) {
+    setPageSearch(search)
+    setPage(1)
+  }
+  const commitSearch = (next: string) => {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current)
+      if (next) params.set('search', next)
+      else params.delete('search')
+      return params
+    }, { replace: true })
+  }
 
   const { data: apiKeysData } = useApiKeys()
   const { data: namespacesData } = useNamespaces()
@@ -776,6 +857,7 @@ export function LogsPage() {
     api_key_id: apiKeyFilter || undefined,
     namespace: namespaceFilter || undefined,
     period: timeRange,
+    search: search || undefined,
   }
 
   const { data: logsData, isLoading, isError, error, refetch } = useLogs(page, LIMIT, logFilters)
@@ -807,6 +889,7 @@ export function LogsPage() {
     const params = new URLSearchParams({ format: exportFormat, period: timeRange })
     if (apiKeyFilter) params.set('api_key_id', apiKeyFilter)
     if (namespaceFilter) params.set('namespace', namespaceFilter)
+    if (search) params.set('search', search)
     const url = `/api/dashboard/logs/export?${params.toString()}`
     // Use a hidden link with auth header via fetch + blob download
     fetch(url, {
@@ -873,6 +956,7 @@ export function LogsPage() {
       {/* Filters */}
       <CardStatic className="animate-fade-up p-4">
         <div className="flex flex-wrap items-center gap-3">
+          <LogsSearchField value={search} onCommit={commitSearch} />
           <Select
             options={tierOptions}
             value={tierFilter}

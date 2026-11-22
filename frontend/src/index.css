@@ -435,3 +435,9 @@ body {
   outline-offset: 2px;
   border-radius: var(--radius);
 }
+
+/* The Request Logs search draws one focus ring around the whole field
+   (icon, input and clear button), so its input must not add a second one. */
+.logs-search-field input:focus-visible {
+  outline: none;
+}
