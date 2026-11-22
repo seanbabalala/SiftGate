@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.14.0 - 2026-11-22
 
 - Record requests the gateway refuses on a governance policy: a budget limit,
   a key's endpoint, modality, routing-mode or model permission, or a key's own
@@ -37,6 +37,9 @@
   when the request also sets a thinking budget. A request with only a thinking
   budget shows "Thinking Budget" instead of an inferred tier. Forwarding and
   routing are unchanged, and existing log rows are not rewritten.
+- Include the signed published v2.13.0 in native upgrade/Fleet/recovery
+  acceptance, and raise the release verify job's limit from 60 to 120 minutes
+  so 14 source releases fit on the arm64 runner.
 
 ## 2.13.0 - 2026-11-22
 

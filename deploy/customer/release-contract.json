@@ -78,6 +78,12 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:69052a419994c6affe3657b813194df3bde369a971b51555734ed5c31f8b4542",
       "installer_sha256": "c32bcaf210599c193db4c030266ca804df8c2b972efdae281c0090c1eb1e1eb7",
       "source_commit": "a1b1510f14d77ece0cd09d626add13b44bbbea3b"
+    },
+    {
+      "version": "2.13.0",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:ce5d92d5667572d885d504e4132f958f890d0a90156a155aeb873c40d698b16a",
+      "installer_sha256": "c4fb69b2e5b872e59b199a9ec17634cffd290c3633e82d58fb82ea18fc14499a",
+      "source_commit": "bceb8e356f8c00510c1fd674e4fa0a063abc581e"
     }
   ],
   "source_kit_protocols": [
@@ -176,6 +182,10 @@
     {
       "kind": "feature",
       "summary": "Dashboard navigation is grouped by governance domain with page tabs; every existing route and URL is unchanged. The Governance Overview adds a metadata-only posture strip and Test Request shows route evidence. Playground probes flush write-behind call logs before reading their evidence, and Request Logs search matches stored metadata only, inside the active workspace. Native upgrade acceptance includes published v2.12.16; no new schema change."
+    },
+    {
+      "kind": "feature",
+      "summary": "Budget, key-permission and key rate-limit refusals are recorded as metadata-only rows per key, reason and minute in an additive gateway_denials table created at startup; existing tables and call logs are unchanged. Adds a read-only privacy posture API, coding agent Quick connect, opt-in media_idempotency and media_direct_only node settings (default false) and native Messages effort logging without forwarding changes. Native upgrade acceptance includes published v2.13.0."
     }
   ]
 }
