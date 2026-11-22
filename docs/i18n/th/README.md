@@ -2,43 +2,59 @@
 
 [หน้าหลักเอกสาร](../../README.md) · [README ของโปรเจกต์](../../../README.md)
 
-รีลีสปัจจุบัน: **v2.11.3**
+รีลีสปัจจุบัน: **v2.12.16**
 
-SiftGate คือ self-hosted AI traffic data plane สำหรับทีมที่ไม่ต้องการจบที่การแจก
-provider key โดยตรง การตั้งค่า proxy เฉพาะหน้า หรือ model routing ที่ตรวจสอบไม่ได้
-ระบบรวมแอป, Coding Agent, MCP tools, provider credentials, routing policy, budget,
-cache evidence และ production operations ไว้ใน control plane ภายในเครื่องของคุณเอง
+**AI gateway แบบ self-hosted สำหรับธรรมาภิบาล AI ในองค์กร** SiftGate วางจุดควบคุมเดียวที่องค์กรดูแลเองไว้หน้าการเรียก AI ทุกครั้ง ทั้งจากแอปธุรกิจ Coding Agent และ MCP tools โดย provider key อยู่บนเซิร์ฟเวอร์ขององค์กร การเข้าถึงเป็นไปตามนโยบาย ค่าใช้จ่ายมีงบประมาณและปันส่วนให้แต่ละทีมได้ และทุก request มี audit trail โดยค่าเริ่มต้นไม่บันทึก prompt และ response
 
 <p align="center">
-  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate AI traffic data plane" width="100%" />
+  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate: AI gateway แบบ self-hosted สำหรับธรรมาภิบาล AI ในองค์กร" width="100%" />
 </p>
 
-## เรื่องราวผลิตภัณฑ์ล่าสุด
+## ทำไมองค์กรจึงใช้ SiftGate
 
-| จุดแข็งของ SiftGate | ทำไมจึงสำคัญ |
+| ปัญหาที่เกิดเมื่อใช้ AI มากขึ้น | สิ่งที่ SiftGate เปลี่ยน |
 | --- | --- |
-| AI traffic data plane | policy, routing, credential selection, budget, cost, cache, audit และ evidence ทำงานใน self-hosted request path เดียว |
-| Agent และ MCP governance | Cursor, Cline, Roo Code, Continue, Codex, Claude Code, OpenCode, OpenAI/Anthropic agent ทั่วไป และ MCP tools แบบ HTTP JSON-RPC, Streamable HTTP, legacy SSE หรือ stdio ใช้ ingress ที่ถูกควบคุมร่วมกันได้ |
-| Cache-aware credential pools | Provider Node เดียวมีหลาย upstream key ได้ พร้อม `cache_aware`, least-in-flight, weighted rotation, sticky affinity, cooldown และ retry failover |
-| Route Explanation | operator ตรวจสอบได้ว่า model/node ถูกเลือก ข้าม retry downgrade หรือ reject เพราะอะไร โดยไม่บันทึก prompt/response เป็นค่าเริ่มต้น |
-| metadata-only by default | ค่าเริ่มต้นไม่บันทึก prompt, response, raw header, provider key, tool payload, media bytes, source, diff, hidden reasoning หรือ resolved secret |
-| เส้นทาง production | เริ่มจาก SQLite และ memory state แล้วขยายไป PostgreSQL, Redis, Docker, Kubernetes, Helm, OIDC, secret references, log sinks และ OpenTelemetry ได้ |
+| Shadow AI และ key กระจัดกระจาย | provider key อยู่ใน gateway เท่านั้น ทีมได้รับ Gateway API Key ที่จำกัดขอบเขตและเพิกถอนได้ |
+| การตรวจสอบความปลอดภัยทำให้เปิดใช้ไม่ได้ | ค่าเริ่มต้นเก็บเฉพาะ metadata ไม่บันทึก prompt, response, source code, tool payload หรือ secret |
+| บิลมาเป็นยอดรวมก้อนเดียว | งบประมาณระดับ global, namespace, team และ key พร้อม export สำหรับปันส่วนต้นทุน และ key pool ที่คำนึงถึง cache |
+| provider รายเดียวล่ม ทุกคนหยุดงาน | fallback chain, circuit breaker, credential failover และ route explanation ของทุก request |
 
-## เข้าใจ SiftGate ใน 30 วินาที
+## เสาหลักธรรมาภิบาลสี่ด้าน
 
-gateway ส่วนใหญ่หยุดที่ "ส่ง request นี้ไป model ไหน" แต่ SiftGate เปลี่ยน AI traffic
-ให้เป็น control loop ที่ governance ได้และอธิบายได้
+| เสาหลัก | ครอบคลุม |
+| --- | --- |
+| การเข้าถึงและนโยบาย | key ที่จำกัดขอบเขต, Workspace, Team, Policy Namespace (ถ้าส่วนร่วมว่างจะปฏิเสธทันที), model pool ราย key, Agent Profile, MCP Tool Gateway, RBAC และ OIDC |
+| การปกป้องข้อมูลและการตรวจสอบ | log และ route trace แบบ metadata-only, guardrails ภายในสำหรับ PII, secret และ prompt injection, management audit แบบ hash chain, rollback ของ config แบบมีเวอร์ชัน |
+| การควบคุมต้นทุน | งบ token และค่าใช้จ่ายรายวัน, price book ราย Workspace, cost report, การปันส่วนแบบ CSV/JSON, หลักฐานความผิดปกติ, ยอดประหยัดจาก cache |
+| ความเสถียรและการปฏิบัติการ | smart routing, fallback, circuit breaker, route explanation, เส้นทาง PostgreSQL/Redis/Kubernetes, release kit ที่ลงนามด้วย Sigstore, แผนอัปเกรดที่ผ่านการตรวจทาน |
 
-1. ตรวจสอบ Gateway API Key และ resolve Workspace, Team, Policy Namespace
-2. ตรวจ permission ของ endpoint, modality, model, node, budget และ rate limit
-3. route ตาม compatibility, cost, latency, health, cache evidence และ fallback rule
-4. เลือก upstream provider credential ที่เหมาะสม รวมถึง cache-aware affinity
-5. ส่ง provider-compatible response กลับ และเก็บ operational evidence ที่ export ได้อย่างปลอดภัย
+## ขั้นตอนการประเมิน
 
-## Provider Credential Pools
+1. ประกอบการตัดสินใจ: [Enterprise overview](../../enterprise-overview.md)
+2. ตรวจสอบความปลอดภัย: [Security and compliance brief](../../security-compliance-brief.md)
+3. สาธิตใน 30 นาที: [PoC playbook](../../poc-playbook.md)
 
-Provider Node ใช้ `api_key` เดียวได้ หรือใช้ `credentials[]` pool แบบ first-class ได้
-pool จะ rotate/retry upstream key ภายใน logical node เดียวก่อนเข้าสู่ node-level fallback
+## เริ่มต้นอย่างรวดเร็ว
+
+```bash
+git clone https://github.com/seanbabalala/ai-gateway.git
+cd ai-gateway
+# เลือก Node >=22.13.0 <23 ตาม .nvmrc
+npm run runtime:check
+npm install
+cd frontend && npm install && cd ..
+cp gateway.config.example.yaml gateway.config.yaml
+cp .env.example .env
+npm run build
+# ตั้งค่า dashboard.password (หรือ OIDC) ใน YAML ส่วนตัวก่อนขั้นตอนนี้
+npm start
+```
+
+เปิด `http://localhost:2099/dashboard` เพิ่ม Provider Node หนึ่งตัว สร้าง Gateway API Key แล้วส่ง request ไปที่ `http://localhost:2099/v1/chat/completions` หากต้องการติดตั้งด้วย Docker แบบระบุเวอร์ชันพร้อมรหัสเปิดใช้งานครั้งเดียว ให้ใช้ [customer install kit](../../customer-install.md)
+
+## Provider credential pools
+
+Provider Node เดียวเก็บ upstream key ได้หลายตัว `cache_aware` จะให้ request ที่สร้างหรืออ่าน prompt cache ของ provider อยู่กับ key เดิม และสลับไป key อื่นเมื่อเจอ 429, 5xx หรือ timeout
 
 ```yaml
 credential_pool:
@@ -46,86 +62,18 @@ credential_pool:
   strategy: cache_aware
   sticky_by: agent_session
   cooldown_ms: 60000
-  max_failures: 3
   retry_on_status: [429, 500, 502, 503, 504]
 ```
 
-เมื่อ coding plan หรือ Agent workload มีหลาย key สำหรับ provider/account/model surface
-เดียวกัน ให้ใช้ `cache_aware` ได้ดีเป็นพิเศษ SiftGate จะพยายามให้ traffic ที่สร้างหรืออ่าน
-provider prompt cache อยู่กับ upstream key เดิม และยังสลับ key เมื่อเจอ 429/5xx/timeout
-
-## ตำแหน่งเมื่อเทียบกับโปรเจกต์อื่น
-
-SiftGate ไม่ใช่แค่ model router ราคาถูก และไม่ใช่ API resale panel จุดหลักคือ
-self-hosted AI traffic data plane สำหรับ BYOK governance, route evidence,
-Agent/MCP control, cache-aware key pool และ production operations
-
-<p align="center">
-  <img src="../../assets/comparison/competitive-matrix.svg" alt="SiftGate competitive matrix" width="100%" />
-</p>
-
-ดูรายละเอียดที่ [Comparison](../../COMPARISON.md)
-
-## Evidence Assets
-
-Provider smoke evidence แยกการทดสอบ protocol ภายใน repo ออกจาก live provider
-check ที่ต้องใช้ key จริงของ operator ดูที่
-[Provider Smoke Matrix](../../PROVIDER_SMOKE_MATRIX.md)
-
-<p align="center">
-  <img src="../../assets/providers/provider-smoke-matrix.svg" alt="SiftGate provider smoke matrix" width="100%" />
-</p>
-
-Provider Catalog Dashboard แสดง active catalog, transport-only preset,
-compatibility profiles, สถานะ pricing review และ catalog sync governance.
-
-<p align="center">
-  <img src="../../assets/dashboard/provider-catalog-dashboard.png" alt="SiftGate Provider Catalog Dashboard" width="100%" />
-</p>
-
-เส้นทาง Codex/Claude Code + MiniMax MCP ดูที่
-[Agent + MCP Demo](../../AGENT_MCP_DEMO.md)
-
-<p align="center">
-  <img src="../../assets/demo/agent-mcp-demo.svg" alt="SiftGate Agent and MCP demo" width="100%" />
-</p>
-
-## เริ่มต้นอย่างรวดเร็ว
-
-```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
-npm install
-cd frontend && npm install && cd ..
-cp gateway.config.example.yaml gateway.config.yaml
-cp .env.example .env
-npm run build
-npm start
-```
-
-เปิด `http://localhost:2099/dashboard` เพิ่ม Provider Node สร้าง Gateway API Key
-แล้วส่ง request ไปที่ `http://localhost:2099/v1/chat/completions`
-
-## เส้นทางตั้งค่าครั้งแรก
-
-1. ตรวจสอบหรือสร้าง Workspace ที่ใช้งานอยู่
-2. เพิ่ม Provider Node หนึ่งรายการ
-3. สร้าง Dashboard-managed Gateway API Key
-4. ผูก Policy Namespace หรือ Team หากจำเป็น
-5. ตรวจสอบ daily Budget scope และ source of truth
-6. ส่ง request แรกจาก Playground, SDK หรือ OpenAI-compatible client
-7. ตรวจสอบ Logs, Sessions และ Route Explanation
-8. ตั้งค่า Semantic Controls, Traffic Experiments, Evals, Shadow Traffic หรือ MCP Tool Gateway เฉพาะเมื่อจำเป็น
-
 ## แผนที่เอกสาร
 
-| พื้นที่ | จุดเริ่มต้น |
+| เป้าหมาย | เริ่มที่ |
 | --- | --- |
+| การประเมินสำหรับองค์กร | [Enterprise overview](../../enterprise-overview.md), [Security and compliance brief](../../security-compliance-brief.md), [PoC playbook](../../poc-playbook.md), [Comparison](../../COMPARISON.md) |
 | ทดลองในเครื่องและ Dashboard | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
-| Production operations | [Docker Quickstart](../../DOCKER_QUICKSTART.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Validation](../../CONFIG_VALIDATION.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
-| Provider และ protocol | [Provider Catalog](../../PROVIDER_CATALOG.md), [Adding Providers](../../ADDING_PROVIDERS.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Provider Extensibility](../../PROVIDER_EXTENSIBILITY.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md), [Batch API](../../BATCH_API.md) |
-| Routing และ governance | [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Policy Namespaces and Shadow Traffic](../../NAMESPACES_AND_SHADOW.md), [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md) |
-| Agent และ MCP traffic | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Gateway Profiles](../../AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [Agent Platform Preview](../../AGENT_PLATFORM_PREVIEW.md), [MCP Tool Gateway](../../MCP_GATEWAY.md) |
-| Advanced controls และ evidence | [Semantic Controls](../../SEMANTIC_PLATFORM.md), [Caching](../../CACHING.md), [Stream, Cache, and Batching](../../STREAM_CACHE_BATCHING.md), [Intelligence Loop](../../INTELLIGENCE_LOOP.md), [Evaluation Framework](../../EVALUATION_FRAMEWORK.md), [Performance](../../PERFORMANCE.md) |
-| Observability และ control plane | [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Control Plane Contract](../../CONTROL_PLANE.md), [Security](../../SECURITY.md) |
-| Development และ migration | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Migration Compatibility](../../MIGRATION_COMPAT.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |
+| การใช้งาน production | [Customer install](../../customer-install.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
+| Agent และ MCP tools | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [MCP Tool Gateway](../../MCP_GATEWAY.md), [Agent + MCP Demo](../../AGENT_MCP_DEMO.md) |
+| ธรรมาภิบาลต้นทุน | [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md), [Policy Namespaces](../../NAMESPACES_AND_SHADOW.md) |
+| Provider และ routing | [Provider Catalog](../../PROVIDER_CATALOG.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md) |
+| Observability และการแจ้งเตือน | [Operator Observability](../../OPERATOR_OBSERVABILITY.md), [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Security](../../SECURITY.md) |
+| การพัฒนา | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |

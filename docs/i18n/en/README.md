@@ -2,45 +2,68 @@
 
 [Documentation home](../../README.md) · [Project README](../../../README.md)
 
-Current release: **v2.11.3**.
+Current release: **v2.12.16**.
 
-SiftGate is the self-hosted AI traffic data plane for teams that have outgrown
-direct provider keys, one-off proxy configs, and opaque model routing. It gives
-operators one local control point for apps, coding agents, MCP tools, provider
-credentials, routing policy, budgets, cache evidence, and production
-operations.
+**Self-hosted AI gateway for enterprise AI governance.** SiftGate puts one
+control point you run in front of every AI call your company makes, from
+business apps, coding agents and MCP tools. Provider keys stay on your servers,
+access follows policy, spend is budgeted and charged back, and every request
+leaves an audit trail without storing prompts or responses.
 
 <p align="center">
-  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate AI traffic data plane" width="100%" />
+  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate: self-hosted AI gateway for enterprise AI governance" width="100%" />
 </p>
 
-## What Is New In The Product Story
+## Why Enterprises Use SiftGate
 
-| SiftGate strength | Why it matters |
+| What breaks as AI use grows | What SiftGate changes |
 | --- | --- |
-| AI traffic data plane | Policy, routing, credential selection, budgets, cost, cache, audit, and evidence run in one self-hosted request path. |
-| Agent and MCP governance | Cursor, Cline, Roo Code, Continue, Codex, Claude Code, OpenCode, generic OpenAI/Anthropic agents, and HTTP JSON-RPC, Streamable HTTP, legacy SSE, or stdio MCP tools can share one governed ingress. |
-| Cache-aware credential pools | Multiple upstream provider keys can live inside one node with `cache_aware`, least-in-flight, weighted rotation, sticky affinity, cooldown, and retry failover. |
-| Route explanation | Operators can inspect why SiftGate selected, skipped, retried, downgraded, or rejected a model/provider without storing prompt or response bodies by default. |
-| Metadata-only default | SiftGate does not store prompts, responses, raw headers, provider keys, tool payloads, media, source, diffs, hidden reasoning, or resolved secrets by default. |
-| Production path | Start with SQLite and memory state, then move to PostgreSQL, optional Redis, Docker, Kubernetes, Helm, OIDC, secret references, log sinks, and OpenTelemetry. |
+| Shadow AI and key sprawl | Provider keys stay in the gateway; teams get scoped, revocable Gateway API keys. |
+| Security review blocks rollout | Metadata-only by default: no prompts, responses, source code, tool payloads or secrets stored. |
+| Spend arrives as one unexplained bill | Budgets at global, namespace, team and key scope, chargeback exports, cache-aware key pools. |
+| One provider outage stops everyone | Fallback chains, circuit breakers, credential failover and a route explanation per request. |
 
-## 30-Second Pitch
+## Four Governance Pillars
 
-Most gateways stop at "route this request to a model." SiftGate turns AI
-traffic into a governed, explainable control loop:
+| Pillar | What it covers |
+| --- | --- |
+| Access and policy | Scoped keys, Workspaces, Teams and Policy Namespaces with fail-closed intersections, per-key model pools, Agent Profiles, MCP Tool Gateway, RBAC and OIDC. |
+| Data protection and audit | Metadata-only logs and traces, local guardrails for PII, secrets and prompt injection, hash-chained management audit, versioned config rollback. |
+| Cost control | Daily token and cost budgets, workspace price books, cost report, chargeback CSV/JSON, anomaly evidence, cache savings. |
+| Reliability and operations | Smart routing, fallbacks, circuit breakers, route explanation, PostgreSQL/Redis/Kubernetes path, Sigstore-signed release kits, reviewed upgrade plans. |
 
-1. Authenticate a Gateway API key and resolve workspace/team/namespace policy.
-2. Check endpoint, modality, model, node, budget, and rate-limit permissions.
-3. Route by compatibility, cost, latency, health, cache evidence, and fallback rules.
-4. Select the right upstream provider credential, including cache-aware affinity.
-5. Return a provider-compatible response and store export-safe operational evidence.
+## Evaluate SiftGate
+
+1. Decide: [Enterprise overview](../../enterprise-overview.md)
+2. Review security: [Security and compliance brief](../../security-compliance-brief.md)
+3. Demo in 30 minutes: [PoC playbook](../../poc-playbook.md)
+
+## Quick Start
+
+```bash
+git clone https://github.com/seanbabalala/ai-gateway.git
+cd ai-gateway
+# Select Node >=22.13.0 <23 using .nvmrc.
+npm run runtime:check
+npm install
+cd frontend && npm install && cd ..
+cp gateway.config.example.yaml gateway.config.yaml
+cp .env.example .env
+npm run build
+# Configure dashboard.password (or OIDC) in the private YAML before this step.
+npm start
+```
+
+Open `http://localhost:2099/dashboard`, add a provider node, create a Gateway
+API key, then send requests to `http://localhost:2099/v1/chat/completions`.
+For a versioned Docker installation with a one-time activation code, use the
+[customer install kit](../../customer-install.md).
 
 ## Provider Credential Pools
 
-Provider nodes can use one `api_key` or a first-class `credentials[]` pool.
-Pools rotate and retry upstream keys inside the same logical node before
-node-level fallback runs.
+One provider node can hold several upstream keys. `cache_aware` keeps requests
+that created or read a provider prompt cache on the same key, and moves to
+another key on 429, 5xx or timeouts.
 
 ```yaml
 credential_pool:
@@ -48,87 +71,18 @@ credential_pool:
   strategy: cache_aware
   sticky_by: agent_session
   cooldown_ms: 60000
-  max_failures: 3
   retry_on_status: [429, 500, 502, 503, 504]
 ```
 
-Use `cache_aware` when coding-plan or agent workloads have several upstream
-keys for the same provider account/model surface. SiftGate keeps cache-creating
-or cache-reading traffic on the same provider key when it can, and still moves
-away from keys that return 429/5xx/timeouts.
+## Documentation Map
 
-## Competitive Positioning
-
-SiftGate is not only a cheap model router and not only an API resale panel. It
-is a self-hosted AI traffic data plane for BYOK governance, route evidence,
-agent/MCP control, cache-aware key pooling, and production operations.
-
-<p align="center">
-  <img src="../../assets/comparison/competitive-matrix.svg" alt="SiftGate competitive matrix" width="100%" />
-</p>
-
-See [Comparison](../../COMPARISON.md) for the detailed public positioning.
-
-## Evidence Assets
-
-Provider smoke evidence separates local protocol tests from operator-run live
-provider checks. See [Provider Smoke Matrix](../../PROVIDER_SMOKE_MATRIX.md).
-
-<p align="center">
-  <img src="../../assets/providers/provider-smoke-matrix.svg" alt="SiftGate provider smoke matrix" width="100%" />
-</p>
-
-The Provider Catalog Dashboard shows active catalog rows, transport-only
-presets, compatibility profiles, pricing review state, and catalog sync
-governance.
-
-<p align="center">
-  <img src="../../assets/dashboard/provider-catalog-dashboard.png" alt="SiftGate Provider Catalog Dashboard" width="100%" />
-</p>
-
-For a Codex/Claude Code + MiniMax MCP walkthrough, see
-[Agent + MCP Demo](../../AGENT_MCP_DEMO.md).
-
-<p align="center">
-  <img src="../../assets/demo/agent-mcp-demo.svg" alt="SiftGate Agent and MCP demo" width="100%" />
-</p>
-
-## Quick Start
-
-```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
-npm install
-cd frontend && npm install && cd ..
-cp gateway.config.example.yaml gateway.config.yaml
-cp .env.example .env
-npm run build
-npm start
-```
-
-Open `http://localhost:2099/dashboard`, add one Provider Node, create a Gateway
-API Key, then send a request to `http://localhost:2099/v1/chat/completions`.
-
-## First-Run Path
-
-1. Confirm or create the active Workspace.
-2. Add one Provider Node.
-3. Create a Dashboard-managed Gateway API Key.
-4. Optionally bind the key to a Policy Namespace or Team.
-5. Review the daily Budget scope and source of truth.
-6. Send a first request from Playground, SDK, or an OpenAI-compatible client.
-7. Inspect Logs, Sessions, and Route Explanation.
-8. Configure Semantic Controls, Traffic Experiments, Evals, Shadow Traffic, or MCP Tool Gateway only when needed.
-
-## Docs Map
-
-| Area | Entry points |
+| Goal | Start here |
 | --- | --- |
-| Local evaluation and Dashboard | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
-| Production operations | [Docker Quickstart](../../DOCKER_QUICKSTART.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Validation](../../CONFIG_VALIDATION.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
-| Providers and protocols | [Provider Catalog](../../PROVIDER_CATALOG.md), [Adding Providers](../../ADDING_PROVIDERS.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Provider Extensibility](../../PROVIDER_EXTENSIBILITY.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md), [Batch API](../../BATCH_API.md) |
-| Routing and governance | [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Policy Namespaces and Shadow Traffic](../../NAMESPACES_AND_SHADOW.md), [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md) |
-| Agent and MCP traffic | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Gateway Profiles](../../AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [Agent Platform Preview](../../AGENT_PLATFORM_PREVIEW.md), [MCP Tool Gateway](../../MCP_GATEWAY.md) |
-| Advanced controls and evidence | [Semantic Controls](../../SEMANTIC_PLATFORM.md), [Caching](../../CACHING.md), [Stream, Cache, and Batching](../../STREAM_CACHE_BATCHING.md), [Intelligence Loop](../../INTELLIGENCE_LOOP.md), [Evaluation Framework](../../EVALUATION_FRAMEWORK.md), [Performance](../../PERFORMANCE.md) |
-| Observability and control | [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Control Plane Contract](../../CONTROL_PLANE.md), [Security](../../SECURITY.md) |
-| Development and migration | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Migration Compatibility](../../MIGRATION_COMPAT.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |
+| Enterprise evaluation | [Enterprise overview](../../enterprise-overview.md), [Security and compliance brief](../../security-compliance-brief.md), [PoC playbook](../../poc-playbook.md), [Comparison](../../COMPARISON.md) |
+| Local trial and Dashboard | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
+| Production operations | [Customer install](../../customer-install.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
+| Agents and MCP tools | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [MCP Tool Gateway](../../MCP_GATEWAY.md), [Agent + MCP Demo](../../AGENT_MCP_DEMO.md) |
+| Cost governance | [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md), [Policy Namespaces](../../NAMESPACES_AND_SHADOW.md) |
+| Providers and routing | [Provider Catalog](../../PROVIDER_CATALOG.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md) |
+| Observability and alerts | [Operator Observability](../../OPERATOR_OBSERVABILITY.md), [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Security](../../SECURITY.md) |
+| Development | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |

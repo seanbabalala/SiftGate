@@ -2,44 +2,59 @@
 
 [문서 홈](../../README.md) · [프로젝트 README](../../../README.md)
 
-현재 릴리스: **v2.11.3**.
+현재 릴리스: **v2.12.16**.
 
-SiftGate는 직접 배포된 provider key, 임시 proxy 설정, 불투명한 model routing을
-넘어선 팀을 위한 self-hosted AI traffic data plane입니다. 앱, Coding Agent,
-MCP 도구, provider credential, routing policy, budget, cache evidence,
-production operation을 하나의 로컬 제어면으로 모읍니다.
+**엔터프라이즈 AI 거버넌스를 위한 셀프 호스팅 AI 게이트웨이.** SiftGate는 업무 애플리케이션, 코딩 에이전트, MCP 도구에서 발생하는 모든 AI 호출 앞에 직접 운영하는 단일 통제 지점을 둡니다. 공급자 키는 자체 서버에 머물고, 접근은 정책을 따르며, 지출은 예산으로 관리되고 팀별로 배분됩니다. 모든 요청에 감사 기록이 남지만 프롬프트와 응답은 기본적으로 저장하지 않습니다.
 
 <p align="center">
-  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate AI traffic data plane" width="100%" />
+  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate: 엔터프라이즈 AI 거버넌스를 위한 셀프 호스팅 AI 게이트웨이" width="100%" />
 </p>
 
-## 최신 제품 메시지
+## 기업이 SiftGate를 쓰는 이유
 
-| SiftGate 강점 | 중요한 이유 |
+| AI 사용이 늘면서 생기는 문제 | SiftGate가 바꾸는 점 |
 | --- | --- |
-| AI traffic data plane | 정책, 라우팅, credential 선택, budget, cost, cache, audit, evidence가 하나의 self-hosted request path에서 실행됩니다. |
-| Agent와 MCP governance | Cursor, Cline, Roo Code, Continue, Codex, Claude Code, OpenCode, 범용 OpenAI/Anthropic Agent와 HTTP JSON-RPC, Streamable HTTP, legacy SSE, stdio MCP 도구를 하나의 관리형 ingress로 묶을 수 있습니다. |
-| Cache-aware credential pools | 하나의 Provider Node에 여러 upstream key를 두고 `cache_aware`, least-in-flight, weighted rotation, sticky affinity, cooldown, retry failover를 사용할 수 있습니다. |
-| Route Explanation | prompt/response를 기본 저장하지 않으면서 모델이나 노드가 선택, 제외, 재시도, 다운그레이드, 거절된 이유를 확인할 수 있습니다. |
-| metadata-only 기본값 | 기본적으로 prompt, response, raw header, provider key, tool payload, media bytes, source, diff, hidden reasoning, resolved secret을 저장하지 않습니다. |
-| Production path | SQLite와 memory state로 시작해 PostgreSQL, Redis, Docker, Kubernetes, Helm, OIDC, secret references, log sinks, OpenTelemetry로 확장할 수 있습니다. |
+| 섀도 AI와 키 난립 | 공급자 키는 게이트웨이 안에만 두고, 팀에는 범위가 제한되고 회수 가능한 Gateway API Key를 발급합니다. |
+| 보안 검토에서 도입이 멈춤 | 기본은 메타데이터만 저장합니다. 프롬프트, 응답, 소스 코드, 도구 페이로드, 시크릿을 저장하지 않습니다. |
+| 내역 없는 총액 청구서 | 글로벌, 네임스페이스, 팀, 키 단위 예산, 비용 배분 내보내기, 캐시 인식 키 풀. |
+| 공급자 한 곳의 장애로 모두 멈춤 | 폴백 체인, 서킷 브레이커, 자격 증명 장애 조치, 요청별 라우팅 설명. |
 
-## 30초 요약
+## 네 가지 거버넌스 축
 
-대부분의 gateway는 "이 요청을 어떤 모델로 보낼까"에서 멈춥니다. SiftGate는
-AI 트래픽을 governance 가능하고 설명 가능한 control loop로 바꿉니다.
+| 축 | 다루는 범위 |
+| --- | --- |
+| 액세스 및 정책 | 범위 제한 키, Workspace, Team, Policy Namespace(교집합이 비면 거부), 키별 모델 풀, Agent Profile, MCP Tool Gateway, RBAC와 OIDC. |
+| 데이터 보호 및 감사 | 메타데이터만 남기는 로그와 라우팅 기록, PII·시크릿·프롬프트 인젝션용 로컬 가드레일, 해시 체인 관리 감사, 버전 관리되는 설정 롤백. |
+| 비용 관리 | 일일 토큰·비용 예산, Workspace 가격표, 비용 보고서, CSV/JSON 비용 배분, 이상 징후 증거, 캐시 절감액. |
+| 안정성 및 운영 | 스마트 라우팅, 폴백, 서킷 브레이커, 라우팅 설명, PostgreSQL/Redis/Kubernetes 운영 경로, Sigstore 서명 릴리스 키트, 검토된 업그레이드 계획. |
 
-1. Gateway API Key를 인증하고 Workspace, Team, Policy Namespace를 해석합니다.
-2. endpoint, modality, model, node, budget, rate limit 권한을 확인합니다.
-3. compatibility, cost, latency, health, cache evidence, fallback rule로 라우팅합니다.
-4. cache-aware affinity를 포함해 올바른 upstream provider credential을 선택합니다.
-5. provider-compatible response를 반환하고 export-safe 운영 evidence를 저장합니다.
+## 평가 순서
 
-## Provider Credential Pools
+1. 도입 판단: [Enterprise overview](../../enterprise-overview.md)
+2. 보안 검토: [Security and compliance brief](../../security-compliance-brief.md)
+3. 30분 데모: [PoC playbook](../../poc-playbook.md)
 
-Provider Node는 하나의 `api_key`뿐 아니라 first-class `credentials[]` pool을
-사용할 수 있습니다. pool은 같은 logical node 안에서 upstream key를 먼저
-rotation/retry한 뒤 node-level fallback으로 넘어갑니다.
+## 빠른 시작
+
+```bash
+git clone https://github.com/seanbabalala/ai-gateway.git
+cd ai-gateway
+# .nvmrc에 맞춰 Node >=22.13.0 <23을 선택합니다.
+npm run runtime:check
+npm install
+cd frontend && npm install && cd ..
+cp gateway.config.example.yaml gateway.config.yaml
+cp .env.example .env
+npm run build
+# 시작하기 전에 비공개 YAML에서 dashboard.password(또는 OIDC)를 설정합니다.
+npm start
+```
+
+`http://localhost:2099/dashboard`를 열고 Provider Node를 하나 추가한 뒤 Gateway API Key를 만들고 `http://localhost:2099/v1/chat/completions`로 요청을 보냅니다. 버전이 고정되고 일회용 활성화 코드를 쓰는 Docker 설치는 [customer install kit](../../customer-install.md)를 사용하세요.
+
+## 공급자 자격 증명 풀
+
+하나의 Provider Node에 여러 상위 키를 둘 수 있습니다. `cache_aware`는 공급자 프롬프트 캐시를 만들거나 읽은 요청을 같은 키에 유지하고, 429, 5xx, 시간 초과가 발생하면 다른 키로 전환합니다.
 
 ```yaml
 credential_pool:
@@ -47,87 +62,18 @@ credential_pool:
   strategy: cache_aware
   sticky_by: agent_session
   cooldown_ms: 60000
-  max_failures: 3
   retry_on_status: [429, 500, 502, 503, 504]
 ```
 
-같은 provider/account/model surface에 여러 key가 있는 coding plan 또는 Agent
-workload에는 `cache_aware`가 적합합니다. SiftGate는 provider prompt cache를 만들거나
-읽은 traffic을 가능한 같은 upstream key에 유지하고, 429/5xx/timeout에서는 다른 key로
-전환합니다.
-
-## 경쟁 포지셔닝
-
-SiftGate는 단순히 저렴한 모델 router도, API 재판매 panel도 아닙니다. BYOK
-governance, route evidence, Agent/MCP control, cache-aware key pool, production
-operation을 위한 self-hosted AI traffic data plane입니다.
-
-<p align="center">
-  <img src="../../assets/comparison/competitive-matrix.svg" alt="SiftGate competitive matrix" width="100%" />
-</p>
-
-자세한 내용은 [Comparison](../../COMPARISON.md)을 참고하세요.
-
-## Evidence Assets
-
-Provider smoke evidence는 로컬 프로토콜 테스트와 운영자의 실제 key가 필요한
-live provider check를 분리해서 보여줍니다. 자세한 내용은
-[Provider Smoke Matrix](../../PROVIDER_SMOKE_MATRIX.md)를 참고하세요.
-
-<p align="center">
-  <img src="../../assets/providers/provider-smoke-matrix.svg" alt="SiftGate provider smoke matrix" width="100%" />
-</p>
-
-Provider Catalog Dashboard는 active catalog, transport-only preset,
-compatibility profiles, pricing review 상태, catalog sync governance를 보여줍니다.
-
-<p align="center">
-  <img src="../../assets/dashboard/provider-catalog-dashboard.png" alt="SiftGate Provider Catalog Dashboard" width="100%" />
-</p>
-
-Codex/Claude Code + MiniMax MCP 흐름은
-[Agent + MCP Demo](../../AGENT_MCP_DEMO.md)를 참고하세요.
-
-<p align="center">
-  <img src="../../assets/demo/agent-mcp-demo.svg" alt="SiftGate Agent and MCP demo" width="100%" />
-</p>
-
-## 빠른 시작
-
-```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
-npm install
-cd frontend && npm install && cd ..
-cp gateway.config.example.yaml gateway.config.yaml
-cp .env.example .env
-npm run build
-npm start
-```
-
-`http://localhost:2099/dashboard`를 열고 Provider Node를 추가한 뒤 Gateway API Key를
-만들고 `http://localhost:2099/v1/chat/completions`로 요청을 보내세요.
-
-## 최초 설정 경로
-
-1. 활성 Workspace를 확인하거나 생성합니다.
-2. Provider Node 하나를 추가합니다.
-3. Dashboard-managed Gateway API Key를 생성합니다.
-4. 필요한 경우 Policy Namespace 또는 Team에 연결합니다.
-5. 일일 Budget scope와 source of truth를 확인합니다.
-6. Playground, SDK, OpenAI-compatible client에서 첫 요청을 보냅니다.
-7. Logs, Sessions, Route Explanation을 확인합니다.
-8. 필요한 경우에만 Semantic Controls, Traffic Experiments, Evals, Shadow Traffic, MCP Tool Gateway를 설정합니다.
-
 ## 문서 지도
 
-| 영역 | 시작점 |
+| 목적 | 시작 문서 |
 | --- | --- |
-| 로컬 평가와 Dashboard | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
-| 운영 환경 | [Docker Quickstart](../../DOCKER_QUICKSTART.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Validation](../../CONFIG_VALIDATION.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
-| Provider와 protocol | [Provider Catalog](../../PROVIDER_CATALOG.md), [Adding Providers](../../ADDING_PROVIDERS.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Provider Extensibility](../../PROVIDER_EXTENSIBILITY.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md), [Batch API](../../BATCH_API.md) |
-| 라우팅과 governance | [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Policy Namespaces and Shadow Traffic](../../NAMESPACES_AND_SHADOW.md), [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md) |
-| Agent와 MCP traffic | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Gateway Profiles](../../AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [Agent Platform Preview](../../AGENT_PLATFORM_PREVIEW.md), [MCP Tool Gateway](../../MCP_GATEWAY.md) |
-| 고급 제어와 evidence | [Semantic Controls](../../SEMANTIC_PLATFORM.md), [Caching](../../CACHING.md), [Stream, Cache, and Batching](../../STREAM_CACHE_BATCHING.md), [Intelligence Loop](../../INTELLIGENCE_LOOP.md), [Evaluation Framework](../../EVALUATION_FRAMEWORK.md), [Performance](../../PERFORMANCE.md) |
-| Observability와 control plane | [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Control Plane Contract](../../CONTROL_PLANE.md), [Security](../../SECURITY.md) |
-| 개발과 migration | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Migration Compatibility](../../MIGRATION_COMPAT.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |
+| 엔터프라이즈 평가 | [Enterprise overview](../../enterprise-overview.md), [Security and compliance brief](../../security-compliance-brief.md), [PoC playbook](../../poc-playbook.md), [Comparison](../../COMPARISON.md) |
+| 로컬 체험과 대시보드 | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
+| 운영 환경 | [Customer install](../../customer-install.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
+| 에이전트와 MCP 도구 | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [MCP Tool Gateway](../../MCP_GATEWAY.md), [Agent + MCP Demo](../../AGENT_MCP_DEMO.md) |
+| 비용 거버넌스 | [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md), [Policy Namespaces](../../NAMESPACES_AND_SHADOW.md) |
+| 공급자와 라우팅 | [Provider Catalog](../../PROVIDER_CATALOG.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md) |
+| 관측성과 알림 | [Operator Observability](../../OPERATOR_OBSERVABILITY.md), [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Security](../../SECURITY.md) |
+| 개발 | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |

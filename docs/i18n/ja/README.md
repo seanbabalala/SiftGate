@@ -2,44 +2,59 @@
 
 [ドキュメントホーム](../../README.md) · [プロジェクト README](../../../README.md)
 
-現在のリリース: **v2.11.3**。
+現在のリリース: **v2.12.16**。
 
-SiftGate は、直接配布されたプロバイダーキー、場当たり的なプロキシ設定、
-不透明なモデルルーティングを卒業したチームのためのセルフホスト型 AI traffic
-data plane です。アプリ、Coding Agent、MCP ツール、プロバイダー認証情報、
-ルーティングポリシー、予算、キャッシュ証跡、本番運用を 1 つのローカル制御面にまとめます。
+**エンタープライズ AI ガバナンスのためのセルフホスト型 AI ゲートウェイ。** SiftGate は、業務アプリ、コーディングエージェント、MCP ツールから発生するすべての AI 呼び出しの前に、自社で運用する単一のコントロールポイントを置きます。プロバイダーの Key は自社サーバーに留まり、アクセスはポリシーに従い、支出は予算で管理されて部門ごとに配賦されます。すべてのリクエストに監査証跡が残りますが、プロンプトとレスポンスは既定で保存しません。
 
 <p align="center">
-  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate AI traffic data plane" width="100%" />
+  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate: エンタープライズ AI ガバナンスのためのセルフホスト型 AI ゲートウェイ" width="100%" />
 </p>
 
-## 最新の製品メッセージ
+## 企業が SiftGate を導入する理由
 
-| SiftGate の強み | なぜ重要か |
+| AI 活用の拡大で起きる問題 | SiftGate による変化 |
 | --- | --- |
-| AI traffic data plane | ポリシー、ルーティング、認証情報選択、予算、コスト、キャッシュ、監査、証跡を 1 つのセルフホスト request path で扱います。 |
-| Agent と MCP のガバナンス | Cursor、Cline、Roo Code、Continue、Codex、Claude Code、OpenCode、汎用 OpenAI/Anthropic Agent、HTTP JSON-RPC、Streamable HTTP、legacy SSE、stdio MCP ツールを 1 つの管理された入口に集約できます。 |
-| キャッシュ認識 credential pool | 1 つの Provider Node に複数の upstream key を置き、`cache_aware`、least-in-flight、weighted rotation、sticky affinity、cooldown、retry failover を使えます。 |
-| Route Explanation | prompt/response を既定保存せずに、モデルやノードが選択、除外、再試行、降格、拒否された理由を確認できます。 |
-| metadata-only by default | 既定では prompt、response、raw header、provider key、tool payload、media bytes、source、diff、hidden reasoning、resolved secret を保存しません。 |
-| 本番運用への道筋 | SQLite と memory state から始め、PostgreSQL、Redis、Docker、Kubernetes、Helm、OIDC、secret references、log sinks、OpenTelemetry に拡張できます。 |
+| シャドー AI と Key の散在 | プロバイダー Key はゲートウェイ内に限定し、チームには範囲を限定して失効可能な Gateway API Key を発行します。 |
+| セキュリティ審査で導入が止まる | 既定はメタデータのみ。プロンプト、レスポンス、ソースコード、ツールペイロード、シークレットを保存しません。 |
+| 請求書が内訳のない総額だけ | グローバル、Namespace、チーム、Key 単位の予算、配賦エクスポート、キャッシュを考慮した Key プール。 |
+| 1 社の障害で全員が止まる | フォールバックチェーン、サーキットブレーカー、認証情報のフェイルオーバー、リクエストごとのルーティング説明。 |
 
-## 30 秒で理解する SiftGate
+## 4 つのガバナンスの柱
 
-多くのゲートウェイは「このリクエストをどのモデルへ送るか」で止まります。
-SiftGate は AI トラフィックを、ガバナンス可能で説明可能な制御ループにします。
+| 柱 | 対象範囲 |
+| --- | --- |
+| アクセスとポリシー | 範囲限定 Key、Workspace、Team、Policy Namespace（共通部分が空なら拒否）、Key 単位のモデルプール、Agent Profile、MCP Tool Gateway、RBAC と OIDC。 |
+| データ保護と監査 | メタデータのみのログとルート記録、PII・シークレット・プロンプトインジェクション向けのローカルガードレール、ハッシュチェーン化された管理監査、バージョン管理された設定ロールバック。 |
+| コスト管理 | 日次のトークン・費用予算、Workspace 価格表、コストレポート、CSV/JSON 配賦、異常の証跡、キャッシュによる削減額。 |
+| 信頼性と運用 | スマートルーティング、フォールバック、サーキットブレーカー、ルーティング説明、PostgreSQL/Redis/Kubernetes への移行パス、Sigstore 署名付きリリースキット、レビュー済みのアップグレード計画。 |
 
-1. Gateway API Key を認証し、Workspace、Team、Policy Namespace を解決します。
-2. endpoint、modality、model、node、budget、rate limit の権限を確認します。
-3. 互換性、コスト、レイテンシ、ヘルス、キャッシュ証跡、fallback ルールでルーティングします。
-4. キャッシュ認識 affinity を含め、適切な upstream provider credential を選択します。
-5. provider-compatible response を返し、export-safe な運用証跡を保存します。
+## 評価の進め方
 
-## Provider Credential Pools
+1. 導入判断: [Enterprise overview](../../enterprise-overview.md)
+2. セキュリティ審査: [Security and compliance brief](../../security-compliance-brief.md)
+3. 30 分デモ: [PoC playbook](../../poc-playbook.md)
 
-Provider Node は単一の `api_key` だけでなく、第一級の `credentials[]` pool を
-使えます。pool は同じ論理ノード内で upstream key を rotation/retry し、その後に
-node-level fallback へ進みます。
+## クイックスタート
+
+```bash
+git clone https://github.com/seanbabalala/ai-gateway.git
+cd ai-gateway
+# .nvmrc に従って Node >=22.13.0 <23 を選択します。
+npm run runtime:check
+npm install
+cd frontend && npm install && cd ..
+cp gateway.config.example.yaml gateway.config.yaml
+cp .env.example .env
+npm run build
+# 起動前に非公開の YAML で dashboard.password（または OIDC）を設定します。
+npm start
+```
+
+`http://localhost:2099/dashboard` を開き、Provider Node を 1 つ追加して Gateway API Key を作成し、`http://localhost:2099/v1/chat/completions` にリクエストを送ります。バージョン固定でワンタイム有効化コードを使う Docker インストールには [customer install kit](../../customer-install.md) を使用してください。
+
+## プロバイダー認証情報プール
+
+1 つの Provider Node に複数の上流 Key を登録できます。`cache_aware` は、プロバイダーのプロンプトキャッシュを作成または読み取ったリクエストを同じ Key に留め、429、5xx、タイムアウト時には別の Key に切り替えます。
 
 ```yaml
 credential_pool:
@@ -47,87 +62,18 @@ credential_pool:
   strategy: cache_aware
   sticky_by: agent_session
   cooldown_ms: 60000
-  max_failures: 3
   retry_on_status: [429, 500, 502, 503, 504]
 ```
 
-同じ provider/account/model surface に複数の key を持つ coding plan や Agent
-workload では、`cache_aware` が有効です。SiftGate は provider prompt cache を
-作成または読み取った traffic を可能な限り同じ upstream key に維持し、429/5xx/timeout
-では別 key に切り替えます。
-
-## 競合との位置づけ
-
-SiftGate は安価なモデルルーターだけでも、API 再販パネルだけでもありません。
-BYOK ガバナンス、route evidence、Agent/MCP control、cache-aware key pool、
-production operations のためのセルフホスト型 AI traffic data plane です。
-
-<p align="center">
-  <img src="../../assets/comparison/competitive-matrix.svg" alt="SiftGate competitive matrix" width="100%" />
-</p>
-
-詳細は [Comparison](../../COMPARISON.md) を参照してください。
-
-## 証拠アセット
-
-Provider smoke evidence は、ローカルのプロトコルテストと、運用者の実 Key が
-必要な live provider check を分けて示します。詳しくは
-[Provider Smoke Matrix](../../PROVIDER_SMOKE_MATRIX.md) を参照してください。
-
-<p align="center">
-  <img src="../../assets/providers/provider-smoke-matrix.svg" alt="SiftGate provider smoke matrix" width="100%" />
-</p>
-
-Provider Catalog Dashboard では active catalog、transport-only preset、
-compatibility profiles、pricing review state、catalog sync governance を確認できます。
-
-<p align="center">
-  <img src="../../assets/dashboard/provider-catalog-dashboard.png" alt="SiftGate Provider Catalog Dashboard" width="100%" />
-</p>
-
-Codex/Claude Code + MiniMax MCP の流れは
-[Agent + MCP Demo](../../AGENT_MCP_DEMO.md) を参照してください。
-
-<p align="center">
-  <img src="../../assets/demo/agent-mcp-demo.svg" alt="SiftGate Agent and MCP demo" width="100%" />
-</p>
-
-## クイックスタート
-
-```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
-npm install
-cd frontend && npm install && cd ..
-cp gateway.config.example.yaml gateway.config.yaml
-cp .env.example .env
-npm run build
-npm start
-```
-
-`http://localhost:2099/dashboard` を開き、Provider Node を追加し、Gateway API Key
-を作成して、`http://localhost:2099/v1/chat/completions` にリクエストを送ります。
-
-## 初回セットアップ
-
-1. 現在の Workspace を確認または作成します。
-2. Provider Node を 1 つ追加します。
-3. Dashboard 管理の Gateway API Key を作成します。
-4. 必要に応じて Policy Namespace または Team に紐付けます。
-5. 日次 Budget の scope と source of truth を確認します。
-6. Playground、SDK、または OpenAI-compatible client から最初のリクエストを送信します。
-7. Logs、Sessions、Route Explanation を確認します。
-8. 必要な場合だけ Semantic Controls、Traffic Experiments、Evals、Shadow Traffic、MCP Tool Gateway を設定します。
-
 ## ドキュメントマップ
 
-| 領域 | 入口 |
+| 目的 | 最初に読むもの |
 | --- | --- |
-| ローカル評価と Dashboard | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
-| 本番運用 | [Docker Quickstart](../../DOCKER_QUICKSTART.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Validation](../../CONFIG_VALIDATION.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
-| プロバイダーとプロトコル | [Provider Catalog](../../PROVIDER_CATALOG.md), [Adding Providers](../../ADDING_PROVIDERS.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Provider Extensibility](../../PROVIDER_EXTENSIBILITY.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md), [Batch API](../../BATCH_API.md) |
-| ルーティングとガバナンス | [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Policy Namespaces and Shadow Traffic](../../NAMESPACES_AND_SHADOW.md), [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md) |
-| Agent と MCP traffic | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Gateway Profiles](../../AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [Agent Platform Preview](../../AGENT_PLATFORM_PREVIEW.md), [MCP Tool Gateway](../../MCP_GATEWAY.md) |
-| 高度な制御と証跡 | [Semantic Controls](../../SEMANTIC_PLATFORM.md), [Caching](../../CACHING.md), [Stream, Cache, and Batching](../../STREAM_CACHE_BATCHING.md), [Intelligence Loop](../../INTELLIGENCE_LOOP.md), [Evaluation Framework](../../EVALUATION_FRAMEWORK.md), [Performance](../../PERFORMANCE.md) |
-| 可観測性と control plane | [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Control Plane Contract](../../CONTROL_PLANE.md), [Security](../../SECURITY.md) |
-| 開発と移行 | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Migration Compatibility](../../MIGRATION_COMPAT.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |
+| エンタープライズ評価 | [Enterprise overview](../../enterprise-overview.md), [Security and compliance brief](../../security-compliance-brief.md), [PoC playbook](../../poc-playbook.md), [Comparison](../../COMPARISON.md) |
+| ローカル試用とダッシュボード | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
+| 本番運用 | [Customer install](../../customer-install.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
+| エージェントと MCP ツール | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [MCP Tool Gateway](../../MCP_GATEWAY.md), [Agent + MCP Demo](../../AGENT_MCP_DEMO.md) |
+| コストガバナンス | [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md), [Policy Namespaces](../../NAMESPACES_AND_SHADOW.md) |
+| プロバイダーとルーティング | [Provider Catalog](../../PROVIDER_CATALOG.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md) |
+| 可観測性とアラート | [Operator Observability](../../OPERATOR_OBSERVABILITY.md), [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Security](../../SECURITY.md) |
+| 開発 | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |

@@ -1,10 +1,10 @@
 # Comparison
 
-SiftGate is positioned as an open-source AI traffic data plane for teams that
-want self-hosted control over provider keys, provider credential pools, model
-routing, agent traffic, budgets, policy, audit, and operational evidence. It is
-not primarily an API resale platform, billing wallet, or single-purpose model
-router.
+SiftGate is positioned as an open-source, self-hosted AI gateway for
+enterprise AI governance: one control point that companies run themselves for
+provider keys, provider credential pools, model routing, agent and MCP traffic,
+budgets, policy, audit, and operational evidence. It is not primarily an API
+resale platform, billing wallet, or single-purpose model router.
 
 Public positioning references:
 
@@ -24,9 +24,9 @@ aggregation, channel management, quota workflows, and self-hosted admin
 operations accessible to many operators. LiteLLM helped normalize the idea that
 teams should not be locked into one provider SDK or model API.
 
-SiftGate takes a different path: a self-hosted AI traffic data plane focused on
-BYOK governance, explainable routing, agent and MCP controls, privacy-safe
-metadata, and production operations. We are grateful for the public work these
+SiftGate takes a different path: a self-hosted AI gateway for enterprise AI
+governance, focused on BYOK control, explainable routing, agent and MCP
+controls, privacy-safe metadata, and production operations. We are grateful for the public work these
 projects contributed to the ecosystem.
 
 ## Positioning Summary
@@ -151,7 +151,7 @@ These additions would make the comparison easier for new operators to act on:
 
 | Capability | SiftGate | Manifest | One API | New API | LiteLLM Proxy |
 | --- | --- | --- | --- | --- | --- |
-| Primary stance | Self-hosted AI traffic data plane | Smart model router | API management and redistribution | Aggregation/distribution hub | Multi-provider proxy |
+| Primary stance | Self-hosted AI gateway for enterprise AI governance | Smart model router | API management and redistribution | Aggregation/distribution hub | Multi-provider proxy |
 | Core buyer/operator | Platform teams, AI infrastructure owners, agent teams | Agent builders and cost-conscious app builders | API distributors and internal admins | Aggregation operators and internal admins | Developers and platform teams |
 | OpenAI-compatible ingress | Yes | Yes | Yes | Yes | Yes |
 | Anthropic Messages-compatible ingress | Yes | Not primary | Partial / adapter-dependent | Yes | Yes |

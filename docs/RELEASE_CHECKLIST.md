@@ -39,6 +39,7 @@ For a normal release, confirm the version is aligned in every applicable file:
 - `README.md`
 - `CHANGELOG.md`
 - `docs/BASELINE.md`
+- `docs/i18n/*/README.md` (all seven localized entrypoints)
 
 Additional release docs may also mention the new version when the release
 changes those surfaces.
