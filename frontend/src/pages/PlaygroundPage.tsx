@@ -16,6 +16,7 @@ import {
   Video,
 } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { PlaygroundRouteEvidence } from '@/components/playground/playground-route-evidence'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardStatic, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -195,6 +196,8 @@ function ResultPanel({ result }: { result: PlaygroundRunResponse | null }) {
         <MetricTile label={t('playground.metrics.cost')} value={formatCost(result.cost_usd)} tone="zinc" />
         <MetricTile label={t('playground.metrics.tokens')} value={formatTokens(result.usage.total_tokens)} tone="zinc" />
       </div>
+
+      <PlaygroundRouteEvidence result={result} />
 
       <CardStatic>
         <CardHeader className="flex-row items-center justify-between">
