@@ -22,6 +22,7 @@ import { EvaluationModule } from './evaluation/evaluation.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
 import { CostPlatformModule } from './cost-platform/cost-platform.module';
 import { SemanticPlatformModule } from './semantic-platform/semantic-platform.module';
+import { GovernanceModule } from './governance/governance.module';
 import { PublicGatewayExceptionFilter } from './http/public-gateway-exception.filter';
 import { HttpListenerWatchdogService } from './http/http-listener-watchdog.service';
 import { PricingModule } from './pricing/pricing.module';
@@ -49,6 +50,7 @@ import { PricingModule } from './pricing/pricing.module';
     CostPlatformModule,
     PricingModule,
     SemanticPlatformModule,
+    GovernanceModule,
     PluginModule,
     AuthModule,
     IngestModule,
