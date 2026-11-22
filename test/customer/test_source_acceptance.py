@@ -2,6 +2,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import re
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -75,6 +76,18 @@ class SourceAcceptanceTests(unittest.TestCase):
         self.assertEqual(records["2.12.1"]["image"],upgrade.release.REGISTRY+"@sha256:695cc662caa19a3a9c4c01404b6c0c78268396471a86719be6249fc76ee1f481")
         self.assertEqual(records["2.12.0"]["installer_sha256"],"18441230c819a2ff346f4f50dfe752442a1a339814b30eda44d1e14b27ae0f92")
         self.assertEqual(records["2.12.0"]["image"],upgrade.release.REGISTRY+"@sha256:12bf52e23f65b7cdd940a3adfac8075cfad1f3c98c8b74134aec93549d91ac03")
+
+    def test_native_acceptance_time_budget_keeps_up_with_source_releases(self):
+        # Each source release adds an upgrade, a Fleet run and a recovery run to
+        # the native verify job. Allow 20 minutes of fixed work plus 6 per
+        # source, so adding a source cannot silently push a release past the
+        # job limit (v2.13.0's arm64 verify timed out at 60 minutes).
+        contract=json.loads((ROOT/"deploy/customer/release-contract.json").read_text())
+        workflow=(ROOT/".github/workflows/customer-release.yml").read_text()
+        verify=workflow[workflow.index("\n  verify:\n"):workflow.index("\n  publish:\n")]
+        limit=int(re.search(r"^    timeout-minutes: (\d+)$",verify,re.M).group(1))
+        self.assertGreaterEqual(limit,20+6*len(contract["source_releases"]))
+        self.assertLessEqual(limit,360)
 
     def test_managed_baseline_uses_one_time_activation_and_never_legacy_password_fallback(self):
         with tempfile.TemporaryDirectory() as directory:
