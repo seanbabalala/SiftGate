@@ -332,6 +332,30 @@ assert(
   'Agent Profiles UI must not render stored key hashes or plaintext keys.',
 )
 
+// Quick connect creates a scoped key and profile together. The one-time key is
+// shown in its own field and only kept in the dialog's memory; the rendered
+// snippet keeps its placeholder, and nothing writes the key to storage.
+const quickConnectSource = read('src/components/agents/agent-quick-connect.tsx')
+assert(pageSource.includes('<AgentQuickConnect'), 'Agent Profiles page must offer Quick connect.')
+for (const needle of [
+  'useCreateGatewayApiKey',
+  'useCreateAgentProfile',
+  'useRenderAgentProfile',
+  "created_by: 'quick_connect'",
+  "t('agents.quickConnect.onceWarning')",
+  'card.snippet',
+]) {
+  assert(quickConnectSource.includes(needle), `Quick connect missing ${needle}`)
+}
+assert(
+  !/localStorage|sessionStorage|indexedDB/.test(quickConnectSource),
+  'Quick connect must not persist the one-time gateway key.',
+)
+assert(
+  !/replace\([^)]*SIFTGATE_GATEWAY_API_KEY/.test(quickConnectSource),
+  'Quick connect must not write the one-time key into rendered snippets.',
+)
+
 const literalAgentKeys = collectLiteralKeys(pageSource)
   .filter((key) => key.startsWith('agents.') && !key.includes('${'))
   .sort()

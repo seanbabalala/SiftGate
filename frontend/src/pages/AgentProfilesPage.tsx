@@ -30,6 +30,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
+import { AgentQuickConnect } from '@/components/agents/agent-quick-connect'
 import { SkeletonTable } from '@/components/ui/skeleton'
 import {
   useAgentProfiles,
@@ -1529,6 +1530,7 @@ export function AgentProfilesPage() {
   const [selectedProfile, setSelectedProfile] = useState<AgentProfile | null>(null)
   const [rendered, setRendered] = useState<AgentProfileRenderedConfig | null>(null)
   const [gatewayBaseUrl, setGatewayBaseUrl] = useState('')
+  const [quickConnectOpen, setQuickConnectOpen] = useState(false)
 
   const profiles = agentProfiles.data?.items || []
   const keys = apiKeys.data?.items || []
@@ -1587,11 +1589,28 @@ export function AgentProfilesPage() {
           <RefreshCw className={cn('h-4 w-4 shrink-0', agentProfiles.isFetching && 'animate-spin')} />
           <span className="min-w-0 truncate">{tCommon('action.refresh')}</span>
         </Button>
-        <Button onClick={() => setCreateOpen(true)}>
+        <Button variant="outline" onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4 shrink-0" />
           <span className="min-w-0 truncate">{t('agents.actions.create')}</span>
         </Button>
+        <Button onClick={() => setQuickConnectOpen(true)}>
+          <KeyRound className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 truncate">{t('agents.quickConnect.open')}</span>
+        </Button>
       </PageHeader>
+
+      <AgentQuickConnect
+        open={quickConnectOpen}
+        onClose={() => setQuickConnectOpen(false)}
+        connectors={CONNECTORS.map((id) => ({
+          id,
+          label: t(connectorLabelKeys[id]),
+          description: t(connectorDescriptionKeys[id]),
+        }))}
+        renderLogo={(connector, label) => <ConnectorLogo connector={connector} label={label} />}
+        modelOptions={modelOptions}
+        namespaces={namespaceItems}
+      />
 
       <PrivacyCopy />
 

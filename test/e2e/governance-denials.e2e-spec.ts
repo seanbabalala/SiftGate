@@ -102,6 +102,62 @@ describe('Governance denials (e2e)', () => {
     );
   });
 
+  it('quick connect: a pinned key plus profile renders a placeholder snippet and the key enforces its scope', async () => {
+    const unique = Date.now();
+    // The same three calls the Quick connect dialog makes, in order.
+    const key = await harness.agent.post('/api/dashboard/api-keys').send({
+      name: `quick-connect-${unique}`,
+      allow_auto: true,
+      allow_direct: true,
+      allowed_nodes: [],
+      allowed_models: ['gpt-4o'],
+      allowed_endpoints: [],
+      allowed_modalities: [],
+      daily_cost_limit: 5,
+      rate_limit_per_minute: 60,
+    });
+    expect(key.status).toBe(201);
+    const profile = await harness.agent.post('/api/dashboard/agent-profiles').send({
+      name: `quick-connect-${unique}`,
+      connector: 'codex',
+      status: 'active',
+      api_key_id: key.body.item.id,
+      default_model: 'gpt-4o',
+      smart_model_id: 'auto',
+      base_url_mode: 'openai_v1',
+      metadata: { routing_mode: 'direct', created_by: 'quick_connect' },
+    });
+    expect(profile.status).toBe(201);
+    const render = await harness.agent.post(`/api/dashboard/agent-profiles/${profile.body.item.id}/render`).send({});
+    expect([200, 201]).toContain(render.status);
+    const snippets = render.body.item.cards.map((card: { snippet: string }) => card.snippet).join('\n');
+    expect(snippets).toContain('<SIFTGATE_GATEWAY_API_KEY>');
+    expect(snippets).not.toContain(key.body.key);
+
+    harness.fetchMock.setHandler(async () =>
+      new Response(
+        JSON.stringify({
+          id: 'chatcmpl-quick-connect',
+          object: 'chat.completion',
+          model: 'gpt-4o',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const allowed = await harness.agent
+      .post('/v1/chat/completions')
+      .set('Authorization', `Bearer ${key.body.key}`)
+      .send({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }] });
+    expect(allowed.status).toBe(200);
+    const outside = await harness.agent
+      .post('/v1/chat/completions')
+      .set('Authorization', `Bearer ${key.body.key}`)
+      .send({ model: 'claude-sonnet-4-20250514', messages: [{ role: 'user', content: 'hi' }] });
+    expect(outside.status).toBe(403);
+  });
+
   it('keeps denials inside the active workspace', async () => {
     const created = await harness.agent
       .post('/api/dashboard/workspaces')

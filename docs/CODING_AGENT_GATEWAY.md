@@ -94,7 +94,31 @@ tracing:
 Header values are normalized, control characters are removed, whitespace is
 collapsed, and stored tags are truncated. SiftGate does not store raw headers.
 
+## Quick Connect
+
+**Coding Agents → Quick connect** sets up a tool in three steps:
+
+1. Choose the tool.
+2. Name it and choose its scope. The scope is either gateway routing or one
+   model. You can also set an optional policy scope, a daily cost limit (USD)
+   and requests per minute (60 by default).
+3. Copy the result.
+
+Step 3 creates a new Gateway API key with that scope and limits, plus an active
+agent profile bound to it, and renders the setup snippet.
+
+The full key is shown once, in its own field, and is kept only in that dialog's
+memory. The rendered snippet keeps the `<SIFTGATE_GATEWAY_API_KEY>` placeholder,
+so you paste the key in yourself. If the profile cannot be created, the key is
+still shown, and you can add a profile for it from the list.
+
+Requests from the tool then follow the key's model scope, budget and rate limit.
+Refusals appear under Request Logs → Blocked requests.
+
 ## Setup Flow
+
+For full control over the profile (routing hints, MCP servers, an existing key),
+create it manually:
 
 1. Open the Dashboard and go to **Agents**.
 2. Create a profile for the target connector.

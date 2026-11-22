@@ -287,6 +287,11 @@ internal `auto` only for a matching active profile and Gateway API key. Smart
 routing still requires `allow_auto`; direct model routing still requires
 `allow_direct`.
 
+**Quick connect** creates a scoped Gateway API key and a bound profile in one
+step, then shows the rendered snippet. The full key is displayed once, outside
+the snippet, and is not stored by the Dashboard. See
+[Coding agent gateway](CODING_AGENT_GATEWAY.md#quick-connect).
+
 The Agents page also shows recent coding-agent sessions. These summaries are
 metadata-only and aggregate request count, cost, latency, connector, repo label,
 project label, and Route Explanation links without storing source files, diffs,

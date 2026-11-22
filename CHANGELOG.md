@@ -19,6 +19,11 @@
 - Correct the security brief: the exact-match response cache keeps responses in
   memory for its TTL when `cache.enabled` is on. Only the semantic cache needs
   `store_responses: true`.
+- Add Quick connect for coding agents. Choose a tool, then a model scope (gateway
+  routing or one model) and optional policy scope, daily cost and per-minute
+  limits. SiftGate then creates a scoped Gateway API key and a bound agent
+  profile together and shows the rendered setup snippet. The full key is shown
+  once outside the snippet and is never stored by the Dashboard.
 
 ## 2.13.0 - 2026-11-22
 
