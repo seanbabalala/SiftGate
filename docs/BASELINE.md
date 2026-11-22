@@ -1,7 +1,30 @@
 # Current Engineering Baseline
 
 Reviewed: 2026-11-22
-Release: **v2.13.0** (availability requires the matching successful release workflow)
+Release: **v2.14.0** (availability requires the matching successful release workflow)
+
+## v2.14.0 Release Scope
+
+Make governance decisions visible. Requests refused by a budget, a key
+permission or a key's own rate limit are recorded as metadata-only denial rows,
+grouped per key, reason and minute. Request Logs → Blocked requests lists them,
+and the Governance Overview shows the 24-hour count. Denials stay out of call
+logs, so success rates, routing samples, alerts and cost reports are unchanged.
+A read-only privacy posture API lists every setting that keeps prompt or
+response content and whether the running configuration turns it on. Quick
+connect creates a scoped Gateway API key and a bound coding agent profile in
+one flow.
+
+Media nodes gain two opt-in settings, `media_idempotency` and
+`media_direct_only`, both default `false`. Native Messages requests report
+`output_config.effort` in logs and route explanations without changing
+forwarding.
+
+Database: startup creates one additive `gateway_denials` table. Existing
+tables, columns, configuration and API-key formats are unchanged. Native
+upgrade/Fleet/recovery includes the signed published v2.13.0 baseline, and the
+release verify job allows 120 minutes. Publication does not switch a running
+gateway.
 
 ## v2.13.0 Release Scope
 

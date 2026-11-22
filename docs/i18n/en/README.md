@@ -2,7 +2,7 @@
 
 [Documentation home](../../README.md) · [Project README](../../../README.md)
 
-Current release: **v2.13.0**.
+Current release: **v2.14.0**.
 
 **Self-hosted AI gateway for enterprise AI governance.** SiftGate puts one
 control point you run in front of every AI call your company makes, from
