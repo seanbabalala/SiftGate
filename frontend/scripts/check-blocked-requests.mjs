@@ -18,7 +18,8 @@ assert(
   navigation.includes("to: '/blocked-requests'") && navigation.includes("labelKey: 'nav.tab.blockedRequests'"),
   'Request Logs section is missing the Blocked requests tab.',
 )
-assert(hook.includes("'/api/dashboard/governance/denials'"), 'Denial hooks must call the governance denials API.')
+assert(hook.includes("'/api/dashboard/governance'") && hook.includes('`/denials'), 'Denial hooks must call the governance denials API.')
+assert(hook.includes("'/privacy-posture'"), 'Privacy posture hook must call the governance posture API.')
 assert(hook.includes('scopedDashboardClient'), 'Denial hooks must be workspace-scoped like Request Logs.')
 assert(!/'(POST|PUT|PATCH|DELETE)'/.test(hook), 'Denial hooks must stay read-only.')
 assert(page.includes("t('blocked.metadataOnly')"), 'Blocked requests page must show the metadata-only badge.')

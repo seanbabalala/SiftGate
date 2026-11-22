@@ -18,23 +18,26 @@ import { DashboardRbacGuard } from '../auth/dashboard-rbac.guard';
 import { RequireDashboardRole } from '../auth/dashboard-rbac';
 import { GATEWAY_DENIAL_REASONS } from '../database/entities/gateway-denial.entity';
 import { WorkspaceContextService } from '../workspaces/workspace-context.service';
+import { ConfigService } from '../config/config.service';
 import { GatewayDenialService } from './gateway-denial.service';
+import { computePrivacyPosture } from './privacy-posture';
 
 const PERIOD_EXAMPLE = '24h';
 const PERIOD_ENUM = ['1h', '24h', '7d', '30d'];
 
-@Controller('api/dashboard/governance/denials')
+@Controller('api/dashboard/governance')
 @UseGuards(DashboardGuard, DashboardRbacGuard)
 @RequireDashboardRole('viewer')
 @ApiTags('Governance')
 @ApiBearerAuth('dashboardSession')
-export class GovernanceDenialsController {
+export class GovernanceController {
   constructor(
     private readonly denials: GatewayDenialService,
     private readonly workspaceContext: WorkspaceContextService,
+    private readonly config: ConfigService,
   ) {}
 
-  @Get()
+  @Get('denials')
   @ApiOperation({ summary: 'List requests refused by a governance policy' })
   @ApiQuery({ name: 'period', required: false, enum: PERIOD_ENUM, example: PERIOD_EXAMPLE })
   @ApiQuery({ name: 'reason', required: false, enum: [...GATEWAY_DENIAL_REASONS] })
@@ -62,11 +65,21 @@ export class GovernanceDenialsController {
     });
   }
 
-  @Get('summary')
+  @Get('denials/summary')
   @ApiOperation({ summary: 'Count governance refusals by reason and key' })
   @ApiQuery({ name: 'period', required: false, enum: PERIOD_ENUM, example: PERIOD_EXAMPLE })
   @ApiOkResponse({ description: 'Total refused requests, grouped by reason and by gateway key (top 10).' })
   summary(@Query('period') period: string | undefined) {
     return this.denials.summary(this.workspaceContext.currentWorkspaceId(), period);
+  }
+
+  @Get('privacy-posture')
+  @ApiOperation({ summary: 'Which content stores this gateway has turned on' })
+  @ApiOkResponse({
+    description:
+      'Read-only. Lists every setting that keeps prompt or response content (response cache, semantic cache responses, prompt template bodies, evaluation and shadow samples, system prompt capture) and whether it is on, plus how many configured plugins this check cannot inspect. Returns configuration flags only, never values, paths or secrets.',
+  })
+  privacyPosture() {
+    return computePrivacyPosture(this.config.getFullConfig());
   }
 }

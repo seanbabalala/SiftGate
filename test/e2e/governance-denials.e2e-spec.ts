@@ -82,6 +82,26 @@ describe('Governance denials (e2e)', () => {
     expect(await harness.callLogRepo.count()).toBe(callLogsBefore);
   });
 
+  it('reports the content-store posture of the running configuration without values', async () => {
+    const res = await harness.agent.get('/api/dashboard/governance/privacy-posture');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      metadata_only: expect.any(Boolean),
+      active_content_stores: expect.any(Number),
+      plugins: { configured: expect.any(Number), unreviewed: expect.any(Number) },
+    });
+    const ids = res.body.content_stores.map((store: { id: string }) => store.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(['response_cache', 'semantic_cache_responses', 'evaluation_samples', 'system_prompt_capture']),
+    );
+    for (const store of res.body.content_stores) {
+      expect(Object.keys(store).sort()).toEqual(['config_path', 'enabled', 'id', 'location', 'requires', 'stores']);
+    }
+    expect(res.body.active_content_stores).toBe(
+      res.body.content_stores.filter((store: { enabled: boolean }) => store.enabled).length,
+    );
+  });
+
   it('keeps denials inside the active workspace', async () => {
     const created = await harness.agent
       .post('/api/dashboard/workspaces')

@@ -4,7 +4,7 @@ import { ConfigModule } from '../config/config.module';
 import { AuthModule } from '../auth/auth.module';
 import { GatewayDenial } from '../database/entities/gateway-denial.entity';
 import { GatewayDenialService } from './gateway-denial.service';
-import { GovernanceDenialsController } from './governance-denials.controller';
+import { GovernanceController } from './governance.controller';
 
 /**
  * Global so the pipeline and the per-key rate-limit guard can record denials
@@ -13,7 +13,7 @@ import { GovernanceDenialsController } from './governance-denials.controller';
 @Global()
 @Module({
   imports: [ConfigModule, AuthModule, TypeOrmModule.forFeature([GatewayDenial])],
-  controllers: [GovernanceDenialsController],
+  controllers: [GovernanceController],
   providers: [GatewayDenialService],
   exports: [GatewayDenialService],
 })

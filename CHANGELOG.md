@@ -11,6 +11,14 @@
   cost reports are unchanged. Anonymous per-IP limits and configuration errors
   are not recorded. A new `gateway_denials` table is created on startup;
   existing tables are not changed.
+- Add a read-only privacy posture: `GET /api/dashboard/governance/privacy-posture`
+  lists every setting that keeps prompt or response content and whether the
+  running configuration has turned it on, and counts plugins the check cannot
+  inspect. The Governance Overview's Data protection tile uses it and names each
+  active store instead of only checking the response cache.
+- Correct the security brief: the exact-match response cache keeps responses in
+  memory for its TTL when `cache.enabled` is on. Only the semantic cache needs
+  `store_responses: true`.
 
 ## 2.13.0 - 2026-11-22
 

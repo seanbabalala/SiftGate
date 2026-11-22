@@ -25,7 +25,7 @@ that changes it requires explicit operator configuration.
 | Data | Stored by default | Notes |
 | --- | --- | --- |
 | Prompts and request bodies | **No** | Not written to logs, traces, sessions, exports or telemetry. |
-| Model responses | **No** | The optional response caches store nothing unless an operator sets `store_responses: true`; semantic caching additionally needs a per-request opt-in header. |
+| Model responses | **No** | Off by default. If an operator turns on the exact-match response cache (`cache.enabled`), it keeps responses in memory for its TTL (300 s by default). The semantic cache keeps none unless `semantic_cache.store_responses: true`, and it also needs a per-request opt-in header. |
 | Raw provider headers and authorization headers | **No** | Not stored; redacted from error text. |
 | Provider API keys | Config only | Kept in config, environment or secret-manager references. Never returned by Dashboard APIs, logs, route traces, exports or log sinks. |
 | Tool payloads, source code, diffs, media bytes | **No** | MCP calls, coding-agent sessions and media jobs keep metadata only. |
@@ -39,6 +39,12 @@ that changes it requires explicit operator configuration.
 Call-log retention defaults to 30 days (`database.log_retention_days`). Pricing
 evidence retention is configurable with
 `database.pricing_evidence_retention_days`.
+
+`GET /api/dashboard/governance/privacy-posture` lists every setting that keeps
+content and shows whether the running configuration has turned it on. It covers
+the response cache, semantic cache responses, prompt template bodies, evaluation
+and shadow samples, and system prompt capture, and it also counts plugins the
+check cannot inspect. The Governance Overview's Data protection tile uses it.
 
 ## Credentials And Secrets
 

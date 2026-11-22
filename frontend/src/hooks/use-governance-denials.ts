@@ -15,6 +15,30 @@ export const GOVERNANCE_DENIAL_REASONS = [
 export type GovernanceDenialReason = (typeof GOVERNANCE_DENIAL_REASONS)[number]
 export type GovernanceDenialPeriod = '1h' | '24h' | '7d' | '30d'
 
+export type ContentStoreId =
+  | 'response_cache'
+  | 'semantic_cache_responses'
+  | 'prompt_template_content'
+  | 'evaluation_samples'
+  | 'shadow_prompt_samples'
+  | 'shadow_response_samples'
+  | 'system_prompt_capture'
+
+export interface PrivacyPosture {
+  metadata_only: boolean
+  active_content_stores: number
+  content_stores: Array<{
+    id: ContentStoreId
+    enabled: boolean
+    config_path: string
+    stores: string
+    location: 'memory' | 'database' | 'file'
+    requires: string[]
+  }>
+  plugins: { configured: number; unreviewed: number }
+  never_stored: string[]
+}
+
 export interface GovernanceDenial {
   id: string
   first_at: string
@@ -56,7 +80,7 @@ function query(params: Record<string, string | number | undefined>): string {
 function useScopedRequest() {
   const { data } = useWorkspaces()
   const workspace = data?.active_workspace.id ?? ''
-  const request = useMemo(() => scopedDashboardClient(workspace, '/api/dashboard/governance/denials'), [workspace])
+  const request = useMemo(() => scopedDashboardClient(workspace, '/api/dashboard/governance'), [workspace])
   return { workspace, request }
 }
 
@@ -73,7 +97,7 @@ export function useGovernanceDenials(filters: {
     enabled: Boolean(workspace),
     queryFn: ({ signal }) =>
       request<GovernanceDenialsResponse>(
-        query({ period: filters.period, reason: filters.reason, api_key_id: filters.apiKeyId, page: filters.page, limit: filters.limit }),
+        `/denials${query({ period: filters.period, reason: filters.reason, api_key_id: filters.apiKeyId, page: filters.page, limit: filters.limit })}`,
         undefined,
         'GET',
         signal,
@@ -87,7 +111,18 @@ export function useGovernanceDenialSummary(period: GovernanceDenialPeriod = '24h
   return useQuery<GovernanceDenialSummary>({
     queryKey: ['governance-denials-summary', workspace, period],
     enabled: enabled && Boolean(workspace),
-    queryFn: ({ signal }) => request<GovernanceDenialSummary>(`/summary${query({ period })}`, undefined, 'GET', signal),
+    queryFn: ({ signal }) => request<GovernanceDenialSummary>(`/denials/summary${query({ period })}`, undefined, 'GET', signal),
     refetchInterval: 30_000,
+  })
+}
+
+/** Which content stores the running configuration has turned on. Gateway-wide, read-only. */
+export function usePrivacyPosture(enabled = true) {
+  const { workspace, request } = useScopedRequest()
+  return useQuery<PrivacyPosture>({
+    queryKey: ['governance-privacy-posture', workspace],
+    enabled: enabled && Boolean(workspace),
+    queryFn: ({ signal }) => request<PrivacyPosture>('/privacy-posture', undefined, 'GET', signal),
+    staleTime: 60_000,
   })
 }

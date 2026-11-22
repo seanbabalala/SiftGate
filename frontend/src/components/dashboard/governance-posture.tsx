@@ -10,6 +10,11 @@ type PostureTone = 'good' | 'attention' | 'critical' | 'pending'
 export interface GovernancePostureProps {
   /** Undefined while the cache status is still loading. */
   responseCacheEnabled: boolean | undefined
+  /** Content stores turned on in configuration. Undefined while loading or unavailable. */
+  privacy?: {
+    activeStores: string[]
+    unreviewedPlugins: number
+  }
   activeKeyCount: number | undefined
   /** Requests refused by a budget, key permission or key rate limit in the last 24 hours. Undefined while loading. */
   blockedLast24h?: number
@@ -39,6 +44,7 @@ const toneClass: Record<PostureTone, { dot: string; value: string }> = {
  */
 export function GovernancePosture({
   responseCacheEnabled,
+  privacy,
   activeKeyCount,
   blockedLast24h,
   providerCount,
@@ -49,7 +55,36 @@ export function GovernancePosture({
   const { t } = useTranslation('dashboard')
   const pending = t('posture.pending')
 
-  const dataTone: PostureTone = responseCacheEnabled === undefined ? 'pending' : responseCacheEnabled ? 'attention' : 'good'
+  const dataTone: PostureTone = privacy
+    ? privacy.activeStores.length > 0 || privacy.unreviewedPlugins > 0
+      ? 'attention'
+      : 'good'
+    : responseCacheEnabled === undefined
+      ? 'pending'
+      : responseCacheEnabled
+        ? 'attention'
+        : 'good'
+  const dataValue = privacy
+    ? privacy.activeStores.length > 0
+      ? t('posture.dataProtection.storesOn', { count: privacy.activeStores.length })
+      : t('posture.dataProtection.value')
+    : responseCacheEnabled === undefined
+      ? pending
+      : responseCacheEnabled
+        ? t('posture.dataProtection.cacheOn')
+        : t('posture.dataProtection.value')
+  const storeNames = privacy?.activeStores.map((id) => t(`posture.dataProtection.store.${id}`)) ?? []
+  const dataDescription = privacy
+    ? storeNames.length > 0
+      ? storeNames.length > 3
+        ? t('posture.dataProtection.storesListMore', { list: storeNames.slice(0, 3).join(', '), count: storeNames.length - 3 })
+        : storeNames.join(', ')
+      : privacy.unreviewedPlugins > 0
+        ? t('posture.dataProtection.unreviewedPlugins', { count: privacy.unreviewedPlugins })
+        : t('posture.dataProtection.description')
+    : responseCacheEnabled
+      ? t('posture.dataProtection.cacheOnDescription')
+      : t('posture.dataProtection.description')
   const blocked = blockedLast24h ?? 0
   const accessTone: PostureTone =
     activeKeyCount === undefined ? 'pending' : activeKeyCount === 0 || blocked > 0 ? 'attention' : 'good'
@@ -63,16 +98,8 @@ export function GovernancePosture({
         icon={ShieldCheck}
         label={t('posture.dataProtection.label')}
         tone={dataTone}
-        value={
-          responseCacheEnabled === undefined
-            ? pending
-            : responseCacheEnabled
-              ? t('posture.dataProtection.cacheOn')
-              : t('posture.dataProtection.value')
-        }
-        description={
-          responseCacheEnabled ? t('posture.dataProtection.cacheOnDescription') : t('posture.dataProtection.description')
-        }
+        value={dataValue}
+        description={dataDescription}
         href={repoDocsUrl('docs/security-compliance-brief.md')}
         external
       />
