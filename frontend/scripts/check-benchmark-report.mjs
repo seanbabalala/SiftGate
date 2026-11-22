@@ -5,7 +5,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const read = (path) => readFileSync(new URL(path, `file://${root}/`), 'utf8')
 
 const app = read('src/App.tsx')
-const sidebar = read('src/components/layout/Sidebar.tsx')
+const sidebar = read('src/lib/navigation.ts')
 const hook = read('src/hooks/use-benchmark-report.ts')
 const page = read('src/pages/BenchmarkPage.tsx')
 const types = read('src/types/api.ts')

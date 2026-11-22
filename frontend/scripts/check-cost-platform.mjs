@@ -7,7 +7,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const checks = [
   ['src/App.tsx', '/cost-platform'],
   ['src/App.tsx', 'CostPlatformPage'],
-  ['src/components/layout/Sidebar.tsx', 'nav.costPlatform'],
+  ['src/lib/navigation.ts', 'nav.costPlatform'],
   ['src/hooks/use-cost-platform.ts', '/api/dashboard/cost-platform'],
   ['src/hooks/use-cost-platform.ts', '/api/dashboard/cost-platform/export'],
   ['src/pages/CostPlatformPage.tsx', 'costPlatform.privacy.description'],

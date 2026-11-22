@@ -105,7 +105,7 @@
   "configHealth.title": "สุขภาพการตั้งค่า",
   "configHealth.upstreams": "Upstreams",
   "dashboard.description": "ตรวจการตั้งค่า ทราฟฟิกสด ความเสถียร และค่าใช้จ่ายได้ในหน้าเดียว",
-  "dashboard.title": "ภาพรวมเกตเวย์",
+  "dashboard.title": "ภาพรวมธรรมาภิบาล",
   "onboarding.actions.addProvider": "เพิ่มผู้ให้บริการ",
   "onboarding.actions.createKey": "สร้างคีย์เกตเวย์",
   "onboarding.actions.hideChecklist": "ซ่อนเช็กลิสต์",

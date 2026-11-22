@@ -1,105 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import {
-  LayoutDashboard,
-  ScrollText,
-  Server,
-  GitFork,
-  Wallet,
-  BarChart3,
-  FlaskConical,
-  KeyRound,
-  Layers3,
-  GitCompareArrows,
-  Activity,
-  Gauge,
-  Boxes,
-  Building2,
-  X,
-  FileClock,
-  SquareTerminal,
-  Network,
-  FileStack,
-  Scale,
-  ChevronDown,
-  Bot,
-  ShieldCheck,
-  FileSearch,
-  BrainCircuit,
-  ReceiptText,
-  BookOpen,
-  BellRing,
-} from 'lucide-react'
+import { Activity, ChevronDown, FlaskConical, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useHealth } from '@/hooks/use-health'
 import { useTelemetryStatus } from '@/hooks/use-telemetry-status'
+import { useWorkspaces } from '@/hooks/use-workspaces'
+import { isSectionActive, navDomains, visibleTabs, type NavSection } from '@/lib/navigation'
 import { StatusDot } from '@/components/shared/StatusDot'
 import { Tooltip } from '@/components/ui/tooltip'
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher'
 
-const navGroups = [
-  {
-    labelKey: 'nav.monitor',
-    items: [
-      { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
-      { to: '/logs', icon: ScrollText, labelKey: 'nav.logs' },
-      { to: '/alerts', icon: BellRing, labelKey: 'nav.alertConnectors' },
-      { to: '/sessions', icon: Network, labelKey: 'nav.sessions' },
-      { to: '/route-decisions', icon: GitFork, labelKey: 'nav.routeExplanation' },
-      { to: '/analytics', icon: BarChart3, labelKey: 'nav.analytics' },
-      { to: '/benchmarks', icon: Gauge, labelKey: 'nav.benchmarks' },
-    ],
-  },
-  {
-    labelKey: 'nav.runtime',
-    items: [
-      { to: '/launchpad', icon: SquareTerminal, labelKey: 'nav.launchpad' },
-      { to: '/control-room', icon: Gauge, labelKey: 'nav.controlRoom' },
-      { to: '/updates', icon: BellRing, labelKey: 'nav.releaseUpdates' },
-      { to: '/nodes', icon: Server, labelKey: 'nav.nodes' },
-      { to: '/catalog', icon: Boxes, labelKey: 'nav.catalog' },
-      { to: '/routing', icon: GitFork, labelKey: 'nav.routing' },
-      { to: '/playground', icon: SquareTerminal, labelKey: 'nav.playground' },
-    ],
-  },
-  {
-    labelKey: 'nav.intelligence',
-    items: [
-      { to: '/semantic-platform', icon: BrainCircuit, labelKey: 'nav.semanticPlatform' },
-      { to: '/cost-platform', icon: ReceiptText, labelKey: 'nav.costPlatform' },
-      { to: '/pricing', icon: BookOpen, labelKey: 'nav.pricing' },
-      { to: '/budget', icon: Wallet, labelKey: 'nav.budget' },
-      { to: '/experiments', icon: FlaskConical, labelKey: 'nav.experiments' },
-      { to: '/shadow', icon: GitCompareArrows, labelKey: 'nav.shadow' },
-      { to: '/evals', icon: Scale, labelKey: 'nav.evals' },
-    ],
-  },
-  {
-    labelKey: 'nav.agentsTools',
-    items: [
-      { to: '/agents', icon: Bot, labelKey: 'nav.agents' },
-      { to: '/agent-platform', icon: BrainCircuit, labelKey: 'nav.agentPlatform' },
-      { to: '/mcp', icon: Network, labelKey: 'nav.mcp' },
-      { to: '/batches', icon: FileStack, labelKey: 'nav.batches' },
-    ],
-  },
-  {
-    labelKey: 'nav.governance',
-    items: [
-      { to: '/workspaces', icon: Building2, labelKey: 'nav.workspaces' },
-      { to: '/namespaces', icon: Layers3, labelKey: 'nav.namespaces' },
-      { to: '/api-keys', icon: KeyRound, labelKey: 'nav.apiKeys' },
-      { to: '/members', icon: ShieldCheck, labelKey: 'nav.members' },
-      { to: '/audit', icon: FileSearch, labelKey: 'nav.audit' },
-      { to: '/config-audit', icon: FileClock, labelKey: 'nav.configAudit' },
-    ],
-  },
-]
+const LABS_OPEN_STORAGE_KEY = 'siftgate.sidebar.labsOpen'
 
-function isNavItemActive(pathname: string, to: string) {
-  if (to === '/') return pathname === '/' || pathname === '/dashboard'
-  return pathname === to || pathname.startsWith(`${to}/`)
+function readLabsOpen() {
+  try {
+    return window.localStorage.getItem(LABS_OPEN_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function writeLabsOpen(value: boolean) {
+  try {
+    window.localStorage.setItem(LABS_OPEN_STORAGE_KEY, String(value))
+  } catch {
+    // Hardened browsers can disable localStorage; Labs then starts closed.
+  }
 }
 
 interface SidebarProps {
@@ -114,8 +41,20 @@ export function Sidebar({ collapsed = false, isMobile = false, mobileOpen = fals
   const location = useLocation()
   const { data: health } = useHealth()
   const { data: telemetry } = useTelemetryStatus()
+  const { data: workspaces } = useWorkspaces()
+  const role = workspaces?.access?.role
   const navRef = useRef<HTMLElement | null>(null)
   const [showScrollHint, setShowScrollHint] = useState(false)
+  const [labsOpen, setLabsOpen] = useState(readLabsOpen)
+  const labsDomain = navDomains.find((domain) => domain.collapsible)
+  // The current page stays visible: Labs is forced open while one of its pages is active.
+  const labsActive = Boolean(labsDomain?.sections.some((section) => isSectionActive(location.pathname, section)))
+  const labsExpanded = labsOpen || labsActive
+  const toggleLabs = () => {
+    const next = !labsOpen
+    setLabsOpen(next)
+    writeLabsOpen(next)
+  }
 
   const updateScrollHint = useCallback(() => {
     const nav = navRef.current
@@ -130,6 +69,22 @@ export function Sidebar({ collapsed = false, isMobile = false, mobileOpen = fals
     setShowScrollHint(canScroll && hasMoreBelow)
   }, [])
 
+  const pendingRevealRef = useRef(true)
+  const revealActive = useCallback(() => {
+    const nav = navRef.current
+    const current = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (!nav || !current || !pendingRevealRef.current || nav.clientHeight === 0) return
+    const hintClearance = 44
+    const navBox = nav.getBoundingClientRect()
+    const itemBox = current.getBoundingClientRect()
+    if (itemBox.bottom > navBox.bottom - hintClearance) {
+      nav.scrollTop += itemBox.bottom - (navBox.bottom - hintClearance)
+    } else if (itemBox.top < navBox.top) {
+      nav.scrollTop -= navBox.top - itemBox.top
+    }
+    updateScrollHint()
+  }, [updateScrollHint])
+
   useEffect(() => {
     updateScrollHint()
 
@@ -138,22 +93,87 @@ export function Sidebar({ collapsed = false, isMobile = false, mobileOpen = fals
       return undefined
     }
 
+    const stopReveal = () => {
+      pendingRevealRef.current = false
+    }
+    const onResize = () => {
+      revealActive()
+      updateScrollHint()
+    }
+
     nav.addEventListener('scroll', updateScrollHint, { passive: true })
-    window.addEventListener('resize', updateScrollHint)
+    nav.addEventListener('wheel', stopReveal, { passive: true })
+    nav.addEventListener('touchstart', stopReveal, { passive: true })
+    nav.addEventListener('keydown', stopReveal)
+    window.addEventListener('resize', onResize)
 
     const resizeObserver =
       typeof ResizeObserver === 'undefined'
         ? null
-        : new ResizeObserver(() => updateScrollHint())
+        : new ResizeObserver(onResize)
 
     resizeObserver?.observe(nav)
 
     return () => {
       nav.removeEventListener('scroll', updateScrollHint)
-      window.removeEventListener('resize', updateScrollHint)
+      nav.removeEventListener('wheel', stopReveal)
+      nav.removeEventListener('touchstart', stopReveal)
+      nav.removeEventListener('keydown', stopReveal)
+      window.removeEventListener('resize', onResize)
       resizeObserver?.disconnect()
     }
-  }, [collapsed, isMobile, mobileOpen, updateScrollHint])
+  }, [collapsed, isMobile, mobileOpen, labsExpanded, revealActive, updateScrollHint])
+
+  // Keep the current page visible, above the floating scroll hint, after navigation.
+  // The sidebar can still change height while it settles (footer, fonts), so the
+  // reveal repeats on resize until the operator scrolls the sidebar themselves.
+  useEffect(() => {
+    pendingRevealRef.current = true
+    revealActive()
+  }, [location.pathname, collapsed, labsExpanded, revealActive])
+
+  function renderSection(section: NavSection): ReactNode {
+    const label = t(section.labelKey)
+    const isActive = isSectionActive(location.pathname, section)
+    const target = visibleTabs(section, role)[0]?.to ?? section.tabs[0].to
+    const Icon = section.icon
+
+    const link = (
+      <Link
+        key={section.id}
+        to={target}
+        onClick={() => isMobile && onCloseMobile?.()}
+        aria-current={isActive ? 'page' : undefined}
+        aria-label={collapsed ? label : undefined}
+        className={cn(
+          'group flex items-center rounded-lg text-[13px] font-semibold transition-all duration-200',
+          collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
+          isActive
+            ? 'sidebar-active bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)]'
+            : 'text-[var(--sidebar-nav-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-nav-text-hover)]'
+        )}
+      >
+        <Icon
+          className={cn(
+            'h-[18px] w-[18px] shrink-0 transition-colors',
+            isActive
+              ? 'text-[var(--accent)]'
+              : 'text-[var(--sidebar-nav-icon)] group-hover:text-[var(--sidebar-nav-icon-hover)]'
+          )}
+        />
+        {!collapsed && label}
+      </Link>
+    )
+
+    if (collapsed) {
+      return (
+        <Tooltip key={section.id} content={label} side="right">
+          {link}
+        </Tooltip>
+      )
+    }
+    return link
+  }
 
   const sidebarContent = (
     <aside
@@ -202,57 +222,78 @@ export function Sidebar({ collapsed = false, isMobile = false, mobileOpen = fals
           aria-label={t('nav.primaryNavigation')}
           className={cn('sidebar-nav-scroll h-full min-h-0 space-y-6 overflow-y-auto overscroll-contain py-5', collapsed ? 'px-2' : 'px-4')}
         >
-          {navGroups.map((group) => (
-            <div key={group.labelKey}>
-              {!collapsed && (
-                <div className="mb-2.5 px-3 text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sidebar-group-label)]">
-                  {t(group.labelKey)}
+          {navDomains.map((domain) => {
+            const sections = domain.sections.map((section) => renderSection(section))
+            if (!domain.collapsible) {
+              return (
+                <div key={domain.id}>
+                  {!collapsed && domain.labelKey && (
+                    <div className="mb-2.5 px-3 text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sidebar-group-label)]">
+                      {t(domain.labelKey)}
+                    </div>
+                  )}
+                  <div className="space-y-0.5">{sections}</div>
                 </div>
-              )}
-              <div className="space-y-0.5">
-                {group.items.map((item) => {
-                  const label = t(item.labelKey)
-                  const isActive = isNavItemActive(location.pathname, item.to)
+              )
+            }
 
-                  const link = (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      onClick={() => isMobile && onCloseMobile?.()}
-                      aria-current={isActive ? 'page' : undefined}
-                      aria-label={collapsed ? label : undefined}
+            const groupLabel = domain.labelKey ? t(domain.labelKey) : ''
+            const toggleLabel = labsExpanded ? t('nav.labsHide') : t('nav.labsShow')
+            const toggle = (
+              <button
+                type="button"
+                onClick={labsActive ? undefined : toggleLabs}
+                aria-expanded={labsExpanded}
+                aria-controls="sidebar-labs-group"
+                aria-disabled={labsActive || undefined}
+                aria-label={collapsed ? toggleLabel : undefined}
+                className={cn(
+                  'group flex w-full items-center rounded-lg transition-colors',
+                  collapsed ? 'justify-center p-2.5' : 'gap-2 px-3 py-1.5',
+                  labsActive ? 'cursor-default' : 'cursor-pointer hover:bg-[var(--sidebar-hover-bg)]',
+                )}
+              >
+                {collapsed ? (
+                  <FlaskConical className="h-[18px] w-[18px] shrink-0 text-[var(--sidebar-nav-icon)] group-hover:text-[var(--sidebar-nav-icon-hover)]" />
+                ) : (
+                  <>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--sidebar-group-label)]">
+                      {groupLabel}
+                    </span>
+                    <ChevronDown
+                      aria-hidden="true"
                       className={cn(
-                        'group flex items-center rounded-lg text-[13px] font-semibold transition-all duration-200',
-                        collapsed ? 'justify-center p-2.5' : 'gap-3 px-3 py-2.5',
-                        isActive
-                          ? 'sidebar-active bg-[var(--sidebar-active-bg)] text-[var(--sidebar-active-text)]'
-                          : 'text-[var(--sidebar-nav-text)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-nav-text-hover)]'
+                        'ml-auto h-3.5 w-3.5 text-[var(--sidebar-group-label)] transition-transform',
+                        labsExpanded ? 'rotate-0' : '-rotate-90',
                       )}
-                    >
-                      <item.icon
-                        className={cn(
-                          'h-[18px] w-[18px] shrink-0 transition-colors',
-                          isActive
-                            ? 'text-[var(--accent)]'
-                            : 'text-[var(--sidebar-nav-icon)] group-hover:text-[var(--sidebar-nav-icon-hover)]'
-                        )}
-                      />
-                      {!collapsed && label}
-                    </NavLink>
-                  )
+                    />
+                  </>
+                )}
+              </button>
+            )
 
-                  if (collapsed) {
-                    return (
-                      <Tooltip key={item.to} content={label} side="right">
-                        {link}
-                      </Tooltip>
-                    )
-                  }
-                  return link
-                })}
+            return (
+              <div key={domain.id}>
+                {collapsed ? (
+                  <Tooltip content={toggleLabel} side="right">
+                    {toggle}
+                  </Tooltip>
+                ) : (
+                  toggle
+                )}
+                {labsExpanded && (
+                  <div id="sidebar-labs-group" className="mt-1 space-y-0.5">
+                    {!collapsed && (
+                      <p className="px-3 pb-1 text-[10px] font-medium leading-4 text-[var(--sidebar-nav-icon)]">
+                        {t('nav.labsDescription')}
+                      </p>
+                    )}
+                    {sections}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </nav>
         {showScrollHint && (
           <div

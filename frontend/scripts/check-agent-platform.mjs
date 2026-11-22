@@ -7,7 +7,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const checks = [
   ['src/App.tsx', '/agent-platform'],
   ['src/App.tsx', 'AgentPlatformPage'],
-  ['src/components/layout/Sidebar.tsx', 'nav.agentPlatform'],
+  ['src/lib/navigation.ts', 'nav.agentPlatform'],
   ['src/hooks/use-agent-platform.ts', '/api/dashboard/agent-platform'],
   ['src/pages/AgentPlatformPage.tsx', 'agentPlatform.privacy.description'],
   ['src/pages/AgentPlatformPage.tsx', 'workflow_preview'],

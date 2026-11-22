@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
+import { DomainTabs } from './DomainTabs'
 import { useSidebar } from '@/hooks/use-sidebar'
 
 export function AppLayout() {
@@ -37,6 +38,8 @@ export function AppLayout() {
           aria-label={t('nav.mainContent')}
           className="noise-overlay relative flex-1 overflow-y-auto px-4 py-4 outline-none sm:px-6 sm:py-5 lg:px-8 lg:py-7"
         >
+          {/* Sibling pages of the current section stay mounted across page transitions. */}
+          <DomainTabs />
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

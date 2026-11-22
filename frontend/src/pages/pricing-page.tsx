@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { BookOpen, Plus, RefreshCw, ShieldCheck, Upload } from 'lucide-react'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CardStatic } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -31,9 +31,9 @@ export function PricingPage() {
   const { t } = useTranslation('pricing')
   const { data: workspaces, isLoading, error, refresh } = useWorkspaces()
   if (error) return <CardStatic className="p-6"><p role="alert" className="text-sm text-[var(--destructive)]">{t('error.request')}</p><Button variant="outline" onClick={() => void refresh().catch(() => undefined)}>{t('refresh')}</Button></CardStatic>
-  return isLoading || !workspaces ? <SkeletonCard /> : <PricingNavigationGuard><PricingWorkspace key={workspaces.active_workspace.id} workspace={workspaces.active_workspace.id} canManage={hasWorkspaceRole(workspaces.access, 'admin')} canInspect={hasWorkspaceRole(workspaces.access, 'operator')} isDefault={workspaces.active_workspace.is_default} /></PricingNavigationGuard>
+  return isLoading || !workspaces ? <SkeletonCard /> : <PricingNavigationGuard><PricingWorkspace key={workspaces.active_workspace.id} workspace={workspaces.active_workspace.id} canManage={hasWorkspaceRole(workspaces.access, 'admin')} isDefault={workspaces.active_workspace.is_default} /></PricingNavigationGuard>
 }
-function PricingWorkspace({ workspace, canManage, canInspect, isDefault }: { workspace: string; canManage: boolean; canInspect: boolean; isDefault: boolean }) {
+function PricingWorkspace({ workspace, canManage, isDefault }: { workspace: string; canManage: boolean; isDefault: boolean }) {
   const { t, i18n } = useTranslation('pricing'), request = useMemo(() => pricingClient(workspace), [workspace])
   const [params, setParams] = useSearchParams(), queryClient = useQueryClient()
   const [offset, setOffset] = useState(0), [newDialog, setNewDialog] = useState<{ content?: PriceBookContent; name?: string; inheritance?: PricingInheritanceView } | null>(null)
@@ -47,7 +47,7 @@ function PricingWorkspace({ workspace, canManage, canInspect, isDefault }: { wor
   const canEdit = canManage && (book.data?.book.workspace_id !== null || isDefault)
   const error = status.error ?? books.error ?? book.error
   return <div className="space-y-5">
-    <PageHeader title={t('title')} description={t('description')} icon={BookOpen} badge={<Badge variant="zinc">{t('scope.workspace')}</Badge>}><><Link to="/pricing/cost-report" className={buttonVariants({variant:'outline'})}>{t('report.title')}</Link><Link to="/pricing/admission-preview" className={buttonVariants({variant:'outline'})}>{t('admissionPreview.title')}</Link>{canInspect && <Link to="/pricing/media" className={buttonVariants({variant:'outline'})}>{t('mediaOps.title')}</Link>}{canInspect && <Link to="/pricing/group-outcomes" className={buttonVariants({ variant: 'outline' })}>{t('groupDisposition.title')}</Link>}{canInspect && <Link to="/pricing/outcomes" className={buttonVariants({ variant: 'outline' })}>{t('disposition.title')}</Link>}{canInspect && <Link to="/pricing/recovery" className={buttonVariants({ variant: 'outline' })}>{t('recovery.title')}</Link>}</><Button variant="outline" onClick={refresh}><RefreshCw className="h-4 w-4" />{t('refresh')}</Button><Button disabled={!canManage || status.data?.state !== 'applied'} onClick={() => setNewDialog({})}><Plus className="h-4 w-4" />{t('newBook')}</Button></PageHeader>
+    <PageHeader title={t('title')} description={t('description')} icon={BookOpen} badge={<Badge variant="zinc">{t('scope.workspace')}</Badge>}><Button variant="outline" onClick={refresh}><RefreshCw className="h-4 w-4" />{t('refresh')}</Button><Button disabled={!canManage || status.data?.state !== 'applied'} onClick={() => setNewDialog({})}><Plus className="h-4 w-4" />{t('newBook')}</Button></PageHeader>
     {targetContext && <section className="flex flex-wrap items-center justify-between gap-3 border-y border-[var(--border)] py-4"><div className="min-w-0 space-y-1 text-sm"><h2 className="font-semibold">{t('modelStatus.context')}</h2><p className="break-all font-mono text-xs text-[var(--foreground-muted)]">{targetContext.node_id} · {targetContext.model} · {targetContext.operation}</p><p className="text-xs text-[var(--foreground-muted)]">{t('modelStatus.contextHelp')}</p></div><Button variant="outline" disabled={!canManage || status.data?.state !== 'applied'} onClick={() => setNewDialog({})}>{t('modelStatus.newForTarget')}</Button></section>}
     {status.isLoading ? <SkeletonCard /> : status.data?.state !== 'applied' ? <CardStatic className="space-y-3 p-6"><ShieldCheck className="h-7 w-7 text-[var(--accent)]" /><h2 className="text-lg font-semibold">{t('schema.title')}</h2><p className="max-w-3xl text-sm leading-6 text-[var(--foreground-muted)]">{t('schema.help')}</p><code className="block break-all text-xs">{status.data?.version ?? '—'}</code>{status.isError && <p role="alert" className="text-sm text-[var(--destructive)]">{t(pricingErrorKey(status.error))}</p>}</CardStatic> : <>
       <PriceGovernancePanel workspace={workspace} canManage={canManage} isDefault={isDefault} />

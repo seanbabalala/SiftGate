@@ -105,7 +105,7 @@
   "configHealth.title": "설정 상태",
   "configHealth.upstreams": "업스트림",
   "dashboard.description": "설정, 실시간 트래픽, 안정성, 비용을 한곳에서 확인합니다.",
-  "dashboard.title": "게이트웨이 개요",
+  "dashboard.title": "거버넌스 개요",
   "onboarding.actions.addProvider": "공급자 추가",
   "onboarding.actions.createKey": "게이트웨이 키 생성",
   "onboarding.actions.hideChecklist": "체크리스트 접기",

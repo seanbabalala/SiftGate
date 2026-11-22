@@ -8,6 +8,8 @@ const packageJson = JSON.parse(read('package.json'))
 const app = read('src/App.tsx')
 const appLayout = read('src/components/layout/AppLayout.tsx')
 const sidebar = read('src/components/layout/Sidebar.tsx')
+const navigation = read('src/lib/navigation.ts')
+const domainTabs = read('src/components/layout/DomainTabs.tsx')
 const header = read('src/components/layout/Header.tsx')
 const locales = ['en', 'zh', 'zh-TW', 'ja', 'ko', 'th', 'es']
 
@@ -55,10 +57,24 @@ for (const token of [
   "aria-label={t('nav.primaryNavigation')}",
   "aria-current={isActive ? 'page' : undefined}",
   'aria-label={collapsed ? label : undefined}',
+  'aria-expanded={labsExpanded}',
+]) {
+  assert(sidebar.includes(token), `Sidebar must keep accessible primary navigation behavior: ${token}.`)
+}
+for (const token of [
   "if (to === '/') return pathname === '/' || pathname === '/dashboard'",
   'pathname === to || pathname.startsWith(`${to}/`)',
 ]) {
-  assert(sidebar.includes(token), `Sidebar must keep accessible primary navigation behavior: ${token}.`)
+  assert(navigation.includes(token), `Navigation model must keep exact/child-path active matching: ${token}.`)
+}
+for (const token of [
+  "aria-label={t('nav.domainTabs', { section: sectionLabel })}",
+  "aria-current={active ? 'page' : undefined}",
+  'aria-expanded={open}',
+  'aria-controls={menuId}',
+  "event.key !== 'Escape'",
+]) {
+  assert(domainTabs.includes(token), `Domain tabs must keep accessible navigation semantics: ${token}.`)
 }
 
 assert(header.includes('role="search"'), 'Header search form must expose a search landmark.')

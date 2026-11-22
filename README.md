@@ -110,6 +110,12 @@ Read the [enterprise overview](docs/enterprise-overview.md) for the full
 governance model, or hand the [security and compliance brief](docs/security-compliance-brief.md)
 to your security reviewers.
 
+The Dashboard follows the same structure. Its sidebar groups work into
+**Access & Policy**, **Agents & Tools**, **Models & Routing**, **Cost Control**
+and **Audit & Operations**, with previews and evaluation tools in a collapsed
+**Labs** group. Related pages appear as tabs inside each section, and every
+existing URL still works. See the [Dashboard guide](docs/DASHBOARD.md#navigation).
+
 ## See It In A 30-Minute Evaluation
 
 Each scenario below is part of the [PoC playbook](docs/poc-playbook.md), which

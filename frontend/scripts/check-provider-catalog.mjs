@@ -7,7 +7,7 @@ const app = readFileSync(
 );
 const sidebar = readFileSync(
   fileURLToPath(
-    new URL("../src/components/layout/Sidebar.tsx", import.meta.url),
+    new URL("../src/lib/navigation.ts", import.meta.url),
   ),
   "utf8",
 );

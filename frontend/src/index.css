@@ -309,6 +309,15 @@ body {
   }
 }
 
+/* Domain tabs scroll sideways on narrow screens; keep the scrollbar out of the way. */
+.domain-tabs-row {
+  scrollbar-width: none;
+}
+
+.domain-tabs-row::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes pulse-dot {
   0%, 100% {
     opacity: 1;

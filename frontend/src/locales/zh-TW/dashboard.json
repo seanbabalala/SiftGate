@@ -105,7 +105,7 @@
   "configHealth.title": "設定健康度",
   "configHealth.upstreams": "上游",
   "dashboard.description": "在同一個頁面檢查設定、即時流量、可靠性和成本。",
-  "dashboard.title": "閘道總覽",
+  "dashboard.title": "治理總覽",
   "onboarding.actions.addProvider": "加入供應商",
   "onboarding.actions.createKey": "建立閘道金鑰",
   "onboarding.actions.hideChecklist": "收合清單",
