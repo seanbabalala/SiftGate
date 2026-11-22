@@ -294,4 +294,46 @@ describe('RateLimitGuard', () => {
       { workspaceId: 'default-workspace' },
     );
   });
+
+  describe('governance denial records', () => {
+    const limited = () =>
+      mockConfigService({ auth: { api_keys: [], rate_limit: { requests_per_minute: 60, requests_per_minute_ip: 1 } } });
+
+    it('records a per-key rate-limit refusal with the key identity only', () => {
+      const denials = { record: jest.fn() };
+      const guard = new RateLimitGuard(limited(), undefined, denials as any);
+      const key = { id: 'key-1', name: 'ci-agent', rate_limit_per_minute: 1, workspace_id: 'ws-a', namespace_id: 'ns-1', team_id: 'team-1' };
+      guard.canActivate(makeContext({ apiKeyId: 'key-1', apiKeyName: 'ci-agent', gatewayApiKey: key as any }));
+      expect(() =>
+        guard.canActivate(makeContext({ apiKeyId: 'key-1', apiKeyName: 'ci-agent', gatewayApiKey: key as any })),
+      ).toThrow(HttpException);
+      expect(denials.record).toHaveBeenCalledTimes(1);
+      expect(denials.record).toHaveBeenCalledWith({
+        reason: 'rate_limited',
+        statusCode: 429,
+        // The key's own workspace when the request carries none.
+        workspaceId: 'ws-a',
+        apiKeyId: 'key-1',
+        apiKeyName: 'ci-agent',
+        namespaceId: 'ns-1',
+        teamId: 'team-1',
+        requestedModel: null,
+      });
+    });
+
+    it('does not record anonymous per-IP refusals', () => {
+      const denials = { record: jest.fn() };
+      const guard = new RateLimitGuard(limited(), undefined, denials as any);
+      guard.canActivate(makeContext({ ip: '10.9.9.9' }));
+      expect(() => guard.canActivate(makeContext({ ip: '10.9.9.9' }))).toThrow(HttpException);
+      expect(denials.record).not.toHaveBeenCalled();
+    });
+
+    it('does not record allowed requests', () => {
+      const denials = { record: jest.fn() };
+      const guard = new RateLimitGuard(limited(), undefined, denials as any);
+      guard.canActivate(makeContext({ apiKeyId: 'key-2', apiKeyName: 'ok', gatewayApiKey: { id: 'key-2', name: 'ok', rate_limit_per_minute: 5 } }));
+      expect(denials.record).not.toHaveBeenCalled();
+    });
+  });
 });

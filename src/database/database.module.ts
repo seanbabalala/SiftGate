@@ -4,6 +4,7 @@ import { ConfigService } from '../config/config.service';
 import { CallLogSchemaPatchService } from './call-log-schema-patch.service';
 import { PromptTemplateSchemaPatchService } from './prompt-template-schema-patch.service';
 import { RouteFeedbackSchemaPatchService } from './route-feedback-schema-patch.service';
+import { GatewayDenialSchemaPatchService } from './gateway-denial-schema-patch.service';
 import { WorkspaceSchemaPatchService } from './workspace-schema-patch.service';
 import {
   buildTypeOrmDatabaseOptions,
@@ -32,6 +33,7 @@ import {
   EvalSampleResult,
   VideoJob,
   ManagementAuditEvent,
+  GatewayDenial,
   Workspace,
   WorkspaceInvitation,
   WorkspaceMembership,
@@ -67,6 +69,7 @@ import {
             EvalSampleResult,
             VideoJob,
             ManagementAuditEvent,
+            GatewayDenial,
           ],
           // Default remains true for the OSS single-node SQLite/dev path.
           // Production PostgreSQL deployments should set database.synchronize=false.
@@ -114,12 +117,14 @@ import {
       EvalSampleResult,
       VideoJob,
       ManagementAuditEvent,
+      GatewayDenial,
     ]),
   ],
   providers: [
     CallLogSchemaPatchService,
     PromptTemplateSchemaPatchService,
     RouteFeedbackSchemaPatchService,
+    GatewayDenialSchemaPatchService,
     WorkspaceSchemaPatchService,
     DatabaseHealthService,
     SqliteAnalyticsService,

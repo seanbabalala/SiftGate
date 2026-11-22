@@ -102,6 +102,7 @@
   "nav.sessions": "เซสชัน",
   "nav.mcp": "MCP Tool Gateway",
   "nav.batches": "แบตช์",
+  "nav.tab.blockedRequests": "คำขอที่ถูกบล็อก",
   "nav.evals": "รายงาน Eval",
   "workspace.organization": "องค์กร",
   "workspace.workspace": "เวิร์กสเปซ",

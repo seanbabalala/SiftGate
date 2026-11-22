@@ -107,7 +107,7 @@ working.
 | | Test Request | `/playground` |
 | Cost Control | Budgets & Chargeback | Budget Rules (`/budget`), Cost Review (`/cost-platform`), Usage Analytics (`/analytics`) |
 | | Pricing | Price books, Cost report, Admission preview, Media tasks, Event sources, and a Reconciliation menu for retained evidence, group evidence and budget recovery (`/pricing/*`) |
-| Audit & Operations | Request Logs | Request Logs (`/logs`), Batches (`/batches`) |
+| Audit & Operations | Request Logs | Request Logs (`/logs`), Batches (`/batches`), Blocked requests (`/blocked-requests`) |
 | | Audit Trail | Audit Log (`/audit`), Config Audit (`/config-audit`) |
 | | Operations & Alerts | Alert connectors (`/alerts`), Host operations (`/control-room`, admins), Release updates (`/updates`) |
 | Labs (collapsed) | Traffic Experiments, Shadow, Eval Reports, Benchmarks, Agent Registry | `/experiments`, `/shadow`, `/evals`, `/benchmarks`, `/agent-platform` |
@@ -287,6 +287,11 @@ internal `auto` only for a matching active profile and Gateway API key. Smart
 routing still requires `allow_auto`; direct model routing still requires
 `allow_direct`.
 
+**Quick connect** creates a scoped Gateway API key and a bound profile in one
+step, then shows the rendered snippet. The full key is displayed once, outside
+the snippet, and is not stored by the Dashboard. See
+[Coding agent gateway](CODING_AGENT_GATEWAY.md#quick-connect).
+
 The Agents page also shows recent coding-agent sessions. These summaries are
 metadata-only and aggregate request count, cost, latency, connector, repo label,
 project label, and Route Explanation links without storing source files, diffs,
@@ -401,6 +406,30 @@ change routing policy. Workflow metadata is explicitly marked preview-only with
 Prompts, responses, source code, diffs, tool payloads, raw headers, provider
 keys, media bytes, hidden reasoning text, and resolved secrets remain excluded
 from default storage.
+
+## Blocked Requests
+
+`/blocked-requests` lists requests the gateway refused on a governance policy
+before any provider call:
+
+- a budget limit (429, with the budget scope that tripped)
+- a key permission: endpoint, modality, routing mode or model (403)
+- a key's own rate limit (429)
+
+Configuration and capability errors, such as an unknown model or a request too
+large for every target, are not policy decisions and are not listed. Anonymous
+per-IP rate limits are not recorded either.
+
+Each row covers one minute of the same workspace, key and reason, with a request
+count, so retries against an exhausted budget do not create one row each. Rows
+hold the reason, status, key, policy namespace, team, source format, requested
+model, client and the first request id. No prompt, response, header or
+credential is stored. Refusals are kept out of call logs, so success rates,
+routing samples, alerts and cost reports are unchanged. Rows follow
+`database.log_retention_days`.
+
+The Governance Overview's Access control tile shows how many requests were blocked
+in the last 24 hours and links here when that number is above zero.
 
 ## Batch Jobs
 

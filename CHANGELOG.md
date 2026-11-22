@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- Record requests the gateway refuses on a governance policy: a budget limit,
+  a key's endpoint, modality, routing-mode or model permission, or a key's own
+  rate limit. Request Logs → Blocked requests lists them, with summary counts
+  and filters, and the Governance Overview's Access control tile shows the last
+  24 hours. Records are metadata only and grouped per key, reason and minute;
+  they stay out of call logs, so success rates, routing samples, alerts and
+  cost reports are unchanged. Anonymous per-IP limits and configuration errors
+  are not recorded. A new `gateway_denials` table is created on startup;
+  existing tables are not changed.
+- Add a read-only privacy posture: `GET /api/dashboard/governance/privacy-posture`
+  lists every setting that keeps prompt or response content and whether the
+  running configuration has turned it on, and counts plugins the check cannot
+  inspect. The Governance Overview's Data protection tile uses it and names each
+  active store instead of only checking the response cache.
+- Correct the security brief: the exact-match response cache keeps responses in
+  memory for its TTL when `cache.enabled` is on. Only the semantic cache needs
+  `store_responses: true`.
+- Add Quick connect for coding agents. Choose a tool, then a model scope (gateway
+  routing or one model) and optional policy scope, daily cost and per-minute
+  limits. SiftGate then creates a scoped Gateway API key and a bound agent
+  profile together and shows the rendered setup snippet. The full key is shown
+  once outside the snippet and is never stored by the Dashboard.
+
 ## 2.13.0 - 2026-11-22
 
 - Reposition the public README around enterprise AI governance: "Self-Hosted AI

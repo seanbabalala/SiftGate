@@ -102,6 +102,7 @@
   "nav.sessions": "会话",
   "nav.mcp": "MCP 工具网关",
   "nav.batches": "批处理",
+  "nav.tab.blockedRequests": "已拦截请求",
   "nav.evals": "评测报告",
   "workspace.organization": "组织",
   "workspace.workspace": "工作区",

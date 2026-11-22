@@ -9,6 +9,8 @@ import { MediaDispatchUncertainError } from "../pricing/media-task.types";
 import { PricingRuntimeService } from '../pricing/pricing-runtime.service';
 import type { RuntimeSettlementLogs } from '../pricing/cost-ledger.service';
 import { serializeDatabaseAccess } from '../database/database-serialization';
+import { GatewayDenialService } from '../governance/gateway-denial.service';
+import type { GatewayDenialReason } from '../database/entities/gateway-denial.entity';
 import {
   Injectable,
   BeforeApplicationShutdown,
@@ -224,6 +226,20 @@ class GatewayRequestRejectedError extends Error {
   }
 }
 
+/** A refusal decided by the caller's key permissions, recorded as a governance denial. */
+class GatewayPolicyDeniedError extends GatewayRequestRejectedError {
+  constructor(
+    message: string,
+    public readonly reason: GatewayDenialReason,
+  ) {
+    super(message, 403);
+    this.name = 'GatewayPolicyDeniedError';
+  }
+}
+
+// Nested catch blocks can see the same error; record each refusal once.
+const recordedGovernanceDenials = new WeakSet<object>();
+
 type LoggableCanonicalRequest =
   | CanonicalRequest
   | CanonicalEmbeddingRequest
@@ -270,6 +286,7 @@ export class PipelineService implements BeforeApplicationShutdown {
     @Optional() private readonly semanticPlatform?: SemanticPlatformService,
     @Optional() private readonly pricingRuntime?: PricingRuntimeService,
     @Optional() private readonly pricedEmbeddingBatching?: PricedEmbeddingBatchingService,
+    @Optional() private readonly governanceDenials?: GatewayDenialService,
   ) {}
 
   // ══════════════════════════════════════════════════════
@@ -333,6 +350,7 @@ export class PipelineService implements BeforeApplicationShutdown {
                 await this.checkBudget(canonical);
               } catch (err) {
                 if (err instanceof BudgetExceededError) {
+                  this.recordGovernanceDenial(canonical, requestId, err);
                   this.logger.warn(`Budget exceeded: ${err.message}`);
                   return {
                     body: this.formatBudgetError(canonical.metadata.source_format, err),
@@ -373,6 +391,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             await this.checkBudget(canonical);
           } catch (err) {
             if (err instanceof BudgetExceededError) {
+              this.recordGovernanceDenial(canonical, requestId, err);
               this.logger.warn(`Budget exceeded: ${err.message}`);
               return {
                 body: this.formatBudgetError(canonical.metadata.source_format, err),
@@ -909,6 +928,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             };
           }
           if (err instanceof BudgetExceededError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             this.logger.warn(`Budget reservation exceeded: ${err.message}`);
             return {
               body: this.formatBudgetError(canonical.metadata.source_format, err),
@@ -917,6 +937,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             };
           }
           if (err instanceof GatewayRequestRejectedError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             return {
               body: this.formatError(
                 canonical.metadata.source_format,
@@ -990,6 +1011,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             await this.checkBudget(canonical);
           } catch (err) {
             if (err instanceof BudgetExceededError) {
+              this.recordGovernanceDenial(canonical, requestId, err);
               this.logger.warn(`Budget exceeded (embeddings): ${err.message}`);
               return {
                 body: this.formatBudgetError('embeddings', err),
@@ -1151,6 +1173,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         } catch (err) {
           await this.releaseBudgetReservation(activeBudgetReservation);
           if (err instanceof BudgetExceededError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             this.logger.warn(`Budget exceeded (embeddings reservation): ${err.message}`);
             return {
               body: this.formatBudgetError('embeddings', err),
@@ -1158,6 +1181,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             };
           }
           if (err instanceof GatewayRequestRejectedError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             return {
               body: this.formatError('embeddings', err.statusCode, err.message),
               statusCode: err.statusCode,
@@ -1221,6 +1245,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             await this.checkBudget(canonical);
           } catch (err) {
             if (err instanceof BudgetExceededError) {
+              this.recordGovernanceDenial(canonical, requestId, err);
               this.logger.warn(`Budget exceeded (rerank): ${err.message}`);
               return {
                 body: this.formatBudgetError('rerank', err),
@@ -1375,6 +1400,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         } catch (err) {
           await this.releaseBudgetReservation(activeBudgetReservation);
           if (err instanceof BudgetExceededError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             this.logger.warn(`Budget exceeded (rerank reservation): ${err.message}`);
             return {
               body: this.formatBudgetError('rerank', err),
@@ -1382,6 +1408,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             };
           }
           if (err instanceof GatewayRequestRejectedError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             return {
               body: this.formatError('rerank', err.statusCode, err.message),
               statusCode: err.statusCode,
@@ -1451,6 +1478,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             await this.checkBudget(canonical);
           } catch (err) {
             if (err instanceof BudgetExceededError) {
+              this.recordGovernanceDenial(canonical, requestId, err);
               this.logger.warn(`Budget exceeded (${canonical.source_format}): ${err.message}`);
               return {
                 body: this.formatBudgetError(canonical.source_format, err),
@@ -1613,6 +1641,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         } catch (err) {
           await this.releaseBudgetReservation(activeBudgetReservation);
           if (err instanceof BudgetExceededError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             this.logger.warn(`Budget exceeded (${canonical.source_format} reservation): ${err.message}`);
             return {
               body: this.formatBudgetError(canonical.source_format, err),
@@ -1620,6 +1649,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             };
           }
           if (err instanceof GatewayRequestRejectedError) {
+            this.recordGovernanceDenial(canonical, requestId, err);
             return {
               body: this.formatError(canonical.source_format, err.statusCode, err.message),
               statusCode: err.statusCode,
@@ -2843,6 +2873,7 @@ export class PipelineService implements BeforeApplicationShutdown {
             await this.checkBudget(canonical);
           } catch (err) {
             if (err instanceof BudgetExceededError) {
+              this.recordGovernanceDenial(canonical, requestId, err);
               this.logger.warn(`Budget exceeded (stream): ${err.message}`);
               res.status(429).json(
                 this.formatBudgetError(canonical.metadata.source_format, err),
@@ -2886,6 +2917,7 @@ export class PipelineService implements BeforeApplicationShutdown {
         await this.checkBudget(canonical);
       } catch (err) {
         if (err instanceof BudgetExceededError) {
+          this.recordGovernanceDenial(canonical, requestId, err);
           this.logger.warn(`Budget exceeded (stream): ${err.message}`);
           res.status(429).json(
             this.formatBudgetError(canonical.metadata.source_format, err),
@@ -3722,6 +3754,7 @@ export class PipelineService implements BeforeApplicationShutdown {
       }
 
       if (err instanceof BudgetExceededError && !headersFlushed) {
+        this.recordGovernanceDenial(canonical, requestId, err);
         this.logger.warn(`Budget exceeded (stream reservation): ${err.message}`);
         res.status(429).json(
           this.formatBudgetError(canonical.metadata.source_format, err),
@@ -3731,6 +3764,7 @@ export class PipelineService implements BeforeApplicationShutdown {
       }
 
       if (err instanceof GatewayRequestRejectedError && !headersFlushed) {
+        this.recordGovernanceDenial(canonical, requestId, err);
         res.status(err.statusCode).json(
           this.formatError(
             canonical.metadata.source_format,
@@ -4048,9 +4082,9 @@ export class PipelineService implements BeforeApplicationShutdown {
           this.isTargetAllowed(canonical, target.node, target.model),
         );
       if (!permitted.length)
-        throw new GatewayRequestRejectedError(
+        throw new GatewayPolicyDeniedError(
           'This API key has no permitted target in its model pool.',
-          403,
+          'model_not_allowed',
         );
       const estimate = estimateCanonicalRequestTokens(canonical);
       const scope = JSON.stringify([
@@ -5457,16 +5491,16 @@ export class PipelineService implements BeforeApplicationShutdown {
     if (!permissions) return;
 
     if (mode === 'auto' && !permissions.allow_auto) {
-      throw new GatewayRequestRejectedError(
+      throw new GatewayPolicyDeniedError(
         'This API key is not allowed to use automatic model routing.',
-        403,
+        'routing_mode_not_allowed',
       );
     }
 
     if (mode === 'direct' && !permissions.allow_direct) {
-      throw new GatewayRequestRejectedError(
+      throw new GatewayPolicyDeniedError(
         'This API key is not allowed to use direct model routing.',
-        403,
+        'routing_mode_not_allowed',
       );
     }
   }
@@ -5494,6 +5528,50 @@ export class PipelineService implements BeforeApplicationShutdown {
     return match.internal_model;
   }
 
+  /**
+   * Records a refusal decided by budget or key-permission policy. Other
+   * rejections (unknown model, context size, client cancel) are not governance
+   * decisions and are ignored. Never throws, and records each error once even
+   * when several catch blocks see it.
+   */
+  private recordGovernanceDenial(
+    canonical: LoggableCanonicalRequest,
+    requestId: string | undefined,
+    err: unknown,
+  ): void {
+    if (!this.governanceDenials || !err || typeof err !== 'object') return;
+    if (recordedGovernanceDenials.has(err)) return;
+    let reason: GatewayDenialReason;
+    let statusCode: number;
+    let budgetScope: string | null = null;
+    if (err instanceof BudgetExceededError) {
+      reason = 'budget_exceeded';
+      statusCode = 429;
+      budgetScope = err.scope;
+    } else if (err instanceof GatewayPolicyDeniedError) {
+      reason = err.reason;
+      statusCode = err.statusCode;
+    } else {
+      return;
+    }
+    recordedGovernanceDenials.add(err);
+    const metadata = canonical.metadata;
+    this.governanceDenials.record({
+      reason,
+      statusCode,
+      budgetScope,
+      workspaceId: this.workspaceIdForCanonical(canonical),
+      requestId: requestId || null,
+      apiKeyId: metadata.api_key_id || null,
+      apiKeyName: metadata.api_key_name || null,
+      namespaceId: metadata.namespace_id || null,
+      teamId: metadata.team_id || null,
+      sourceFormat: metadata.source_format || null,
+      requestedModel: metadata.original_model || ('model' in canonical ? canonical.model : null) || null,
+      clientSource: metadata.agent_connector || metadata.client_source || null,
+    });
+  }
+
   private assertApiKeyRequestAllowed(canonical: LoggableCanonicalRequest): void {
     const permissions = canonical.metadata.api_key_permissions;
     if (!permissions) return;
@@ -5507,9 +5585,9 @@ export class PipelineService implements BeforeApplicationShutdown {
       !this.permissionEndpointAliases(endpoint, canonical.metadata.source_format)
         .some((candidate) => allowedEndpoints.includes(candidate))
     ) {
-      throw new GatewayRequestRejectedError(
+      throw new GatewayPolicyDeniedError(
         `This API key is not allowed to use endpoint "${endpoint}".`,
-        403,
+        'endpoint_not_allowed',
       );
     }
 
@@ -5520,9 +5598,9 @@ export class PipelineService implements BeforeApplicationShutdown {
         (modality) => !allowedModalities.includes(modality),
       )
     ) {
-      throw new GatewayRequestRejectedError(
+      throw new GatewayPolicyDeniedError(
         `This API key is not allowed to use modality "${requestedModalities.join(',')}".`,
-        403,
+        'modality_not_allowed',
       );
     }
   }
@@ -5585,9 +5663,9 @@ export class PipelineService implements BeforeApplicationShutdown {
     model: string,
   ): void {
     if (this.isTargetAllowed(canonical, nodeId, model)) return;
-    throw new GatewayRequestRejectedError(
+    throw new GatewayPolicyDeniedError(
       `This API key is not allowed to use ${nodeId}/${model}.`,
-      403,
+      'model_not_allowed',
     );
   }
 
@@ -5609,9 +5687,9 @@ export class PipelineService implements BeforeApplicationShutdown {
     ]);
 
     if (allowedTargets.length === 0) {
-      throw new GatewayRequestRejectedError(
+      throw new GatewayPolicyDeniedError(
         'This API key has no permitted models for the resolved automatic route.',
-        403,
+        'model_not_allowed',
       );
     }
 

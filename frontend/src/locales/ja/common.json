@@ -102,6 +102,7 @@
   "nav.sessions": "セッション",
   "nav.mcp": "MCP Tool Gateway",
   "nav.batches": "バッチ",
+  "nav.tab.blockedRequests": "ブロックされたリクエスト",
   "nav.evals": "評価レポート",
   "workspace.organization": "組織",
   "workspace.workspace": "ワークスペース",

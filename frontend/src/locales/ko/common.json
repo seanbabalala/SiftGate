@@ -102,6 +102,7 @@
   "nav.sessions": "세션",
   "nav.mcp": "MCP Tool Gateway",
   "nav.batches": "배치",
+  "nav.tab.blockedRequests": "차단된 요청",
   "nav.evals": "평가 리포트",
   "workspace.organization": "조직",
   "workspace.workspace": "워크스페이스",

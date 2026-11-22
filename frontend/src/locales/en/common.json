@@ -102,6 +102,7 @@
   "nav.sessions": "Sessions",
   "nav.mcp": "MCP Tool Gateway",
   "nav.batches": "Batches",
+  "nav.tab.blockedRequests": "Blocked requests",
   "nav.evals": "Eval Reports",
   "workspace.organization": "Organization",
   "workspace.workspace": "Workspace",

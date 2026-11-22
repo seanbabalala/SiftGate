@@ -75,6 +75,7 @@ import { useCacheSavings } from '@/hooks/use-cache-savings'
 import { useClusterStatus } from '@/hooks/use-cluster-status'
 import { useWorkspaces } from '@/hooks/use-workspaces'
 import { useIntelligenceSummary } from '@/hooks/use-intelligence'
+import { useGovernanceDenialSummary, usePrivacyPosture } from '@/hooks/use-governance-denials'
 import { useThemeColors } from '@/lib/theme'
 import type { BudgetRule } from '@/types/api'
 import {
@@ -211,6 +212,8 @@ export function DashboardPage() {
     id: apiKeyFilter || undefined,
     namespaceId: namespaceFilter || undefined,
   }, secondaryQueriesEnabled)
+  const { data: denialSummary } = useGovernanceDenialSummary('24h', secondaryQueriesEnabled)
+  const { data: privacyPosture } = usePrivacyPosture(secondaryQueriesEnabled)
   const colors = useThemeColors()
 
   const apiKeyOptions = [
@@ -551,7 +554,16 @@ export function DashboardPage() {
 
       <GovernancePosture
         responseCacheEnabled={cacheStats ? cacheStats.enabled : undefined}
+        privacy={
+          privacyPosture
+            ? {
+                activeStores: privacyPosture.content_stores.filter((store) => store.enabled).map((store) => store.id),
+                unreviewedPlugins: privacyPosture.plugins.unreviewed,
+              }
+            : undefined
+        }
         activeKeyCount={apiKeysData ? apiKeyCount : undefined}
+        blockedLast24h={denialSummary?.total}
         providerCount={configData ? configuredNodeCount : undefined}
         policyScopeCount={policyNamespaceCount}
         spend={

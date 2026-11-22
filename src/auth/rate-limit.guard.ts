@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '../config/config.service';
 import { StateBackendService } from '../state/state-backend.service';
 import { normalizeWorkspaceId } from '../workspaces/workspace-scope';
+import { GatewayDenialService } from '../governance/gateway-denial.service';
 
 interface WindowEntry {
   timestamps: number[];
@@ -28,7 +29,42 @@ export class RateLimitGuard implements CanActivate {
   constructor(
     private readonly config: ConfigService,
     @Optional() private readonly state?: StateBackendService,
+    @Optional() private readonly denials?: GatewayDenialService,
   ) {}
+
+  /**
+   * A per-key limit is a governance control, so its refusals are recorded.
+   * Anonymous per-IP limits are not: there is no governed identity, and
+   * recording them would let unauthenticated traffic drive database writes.
+   */
+  private recordKeyRateLimit(request: {
+    apiKeyId?: string;
+    apiKeyName?: string;
+    workspaceId?: string;
+    body?: unknown;
+    gatewayApiKey?: {
+      id?: string;
+      name?: string;
+      workspace_id?: string | null;
+      namespace_id?: string | null;
+      team_id?: string | null;
+    };
+  }): void {
+    const apiKeyId = request.apiKeyId || request.gatewayApiKey?.id;
+    const apiKeyName = request.apiKeyName || request.gatewayApiKey?.name;
+    if (!this.denials || (!apiKeyId && !apiKeyName)) return;
+    this.denials.record({
+      reason: 'rate_limited',
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      workspaceId: request.workspaceId || request.gatewayApiKey?.workspace_id || null,
+      apiKeyId: apiKeyId || null,
+      apiKeyName: apiKeyName || null,
+      namespaceId: request.gatewayApiKey?.namespace_id || null,
+      teamId: request.gatewayApiKey?.team_id || null,
+      // The model name the client asked for; the request body is never stored.
+      requestedModel: requestedModelOf(request.body),
+    });
+  }
 
   canActivate(context: ExecutionContext): boolean | Promise<boolean> {
     if (this.state?.isRedisConfigured()) {
@@ -70,6 +106,7 @@ export class RateLimitGuard implements CanActivate {
 
     if (!result.allowed) {
       response.setHeader('Retry-After', String(Math.max(1, result.retryAfterSec)));
+      this.recordKeyRateLimit(request);
       throw new HttpException(
         {
           error: {
@@ -145,6 +182,7 @@ export class RateLimitGuard implements CanActivate {
     if (entry.timestamps.length >= limit) {
       const retryAfterSec = Math.ceil((entry.timestamps[0] + windowMs - now) / 1000);
       response.setHeader('Retry-After', String(Math.max(1, retryAfterSec)));
+      this.recordKeyRateLimit(request);
       throw new HttpException(
         {
           error: {
@@ -173,4 +211,10 @@ export class RateLimitGuard implements CanActivate {
       }
     }
   }
+}
+
+function requestedModelOf(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const model = (body as { model?: unknown }).model;
+  return typeof model === 'string' && model.trim() ? model : null;
 }
