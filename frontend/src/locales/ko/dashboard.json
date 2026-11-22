@@ -1134,6 +1134,8 @@
   "posture.access.unit": "개의 활성 게이트웨이 키",
   "posture.access.description": "공급자 {{providers}}개 · 정책 범위 {{scopes}}개",
   "posture.access.noKeys": "게이트웨이 키를 만들어 앱과 에이전트가 공급자 키를 직접 쓰지 않게 하세요.",
+  "posture.access.blocked_one": "최근 24시간 동안 요청 {{count}}건 차단. 사유를 확인하세요.",
+  "posture.access.blocked_other": "최근 24시간 동안 요청 {{count}}건 차단. 사유를 확인하세요.",
   "posture.spend.label": "지출 가드레일",
   "posture.spend.ofTokenLimit": "일일 토큰 한도 사용률",
   "posture.spend.ofCostLimit": "일일 비용 한도 사용률",

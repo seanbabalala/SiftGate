@@ -11,6 +11,8 @@ export interface GovernancePostureProps {
   /** Undefined while the cache status is still loading. */
   responseCacheEnabled: boolean | undefined
   activeKeyCount: number | undefined
+  /** Requests refused by a budget, key permission or key rate limit in the last 24 hours. Undefined while loading. */
+  blockedLast24h?: number
   providerCount: number | undefined
   policyScopeCount: number
   /** Highest-usage global budget rule, or null when no daily limit is set. Undefined while loading. */
@@ -38,6 +40,7 @@ const toneClass: Record<PostureTone, { dot: string; value: string }> = {
 export function GovernancePosture({
   responseCacheEnabled,
   activeKeyCount,
+  blockedLast24h,
   providerCount,
   policyScopeCount,
   spend,
@@ -47,8 +50,9 @@ export function GovernancePosture({
   const pending = t('posture.pending')
 
   const dataTone: PostureTone = responseCacheEnabled === undefined ? 'pending' : responseCacheEnabled ? 'attention' : 'good'
+  const blocked = blockedLast24h ?? 0
   const accessTone: PostureTone =
-    activeKeyCount === undefined ? 'pending' : activeKeyCount > 0 ? 'good' : 'attention'
+    activeKeyCount === undefined ? 'pending' : activeKeyCount === 0 || blocked > 0 ? 'attention' : 'good'
   const spendTone: PostureTone =
     spend === undefined ? 'pending' : spend === null ? 'attention' : spend.exceeded ? 'critical' : spend.alert || spend.percentage >= 80 ? 'attention' : 'good'
   const runtimeTone: PostureTone = runtime === undefined ? 'pending' : runtime.degraded ? 'attention' : 'good'
@@ -81,9 +85,12 @@ export function GovernancePosture({
         description={
           activeKeyCount === 0
             ? t('posture.access.noKeys')
-            : t('posture.access.description', { providers: providerCount ?? '-', scopes: policyScopeCount })
+            : blocked > 0
+              ? t('posture.access.blocked', { count: blocked })
+              : t('posture.access.description', { providers: providerCount ?? '-', scopes: policyScopeCount })
         }
-        href="/api-keys"
+        // When the gateway refused requests, the next step is to see why.
+        href={blocked > 0 ? '/blocked-requests' : '/api-keys'}
       />
       <PostureTile
         icon={Wallet}

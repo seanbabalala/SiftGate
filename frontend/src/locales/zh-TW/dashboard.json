@@ -1134,6 +1134,8 @@
   "posture.access.unit": "個啟用的閘道金鑰",
   "posture.access.description": "{{providers}} 個供應商 · {{scopes}} 個政策範圍",
   "posture.access.noKeys": "建立閘道金鑰，讓應用與 Agent 不再直接使用供應商 Key。",
+  "posture.access.blocked_one": "最近 24 小時攔截 {{count}} 個請求，查看原因。",
+  "posture.access.blocked_other": "最近 24 小時攔截 {{count}} 個請求，查看原因。",
   "posture.spend.label": "支出護欄",
   "posture.spend.ofTokenLimit": "已用每日 Token 上限",
   "posture.spend.ofCostLimit": "已用每日費用上限",

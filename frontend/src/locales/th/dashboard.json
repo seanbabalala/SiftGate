@@ -1134,6 +1134,8 @@
   "posture.access.unit": "คีย์เกตเวย์ที่ใช้งานอยู่",
   "posture.access.description": "ผู้ให้บริการ {{providers}} ราย · ขอบเขตนโยบาย {{scopes}} รายการ",
   "posture.access.noKeys": "สร้างคีย์เกตเวย์เพื่อให้แอปและเอเจนต์เลิกใช้ provider key โดยตรง",
+  "posture.access.blocked_one": "บล็อก {{count}} คำขอใน 24 ชม. ที่ผ่านมา ดูเหตุผล",
+  "posture.access.blocked_other": "บล็อก {{count}} คำขอใน 24 ชม. ที่ผ่านมา ดูเหตุผล",
   "posture.spend.label": "การควบคุมค่าใช้จ่าย",
   "posture.spend.ofTokenLimit": "ของวงเงิน token รายวัน",
   "posture.spend.ofCostLimit": "ของวงเงินค่าใช้จ่ายรายวัน",

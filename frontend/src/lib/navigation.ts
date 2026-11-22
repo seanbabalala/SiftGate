@@ -25,6 +25,7 @@ import {
   Scale,
   ScrollText,
   Server,
+  ShieldAlert,
   ShieldCheck,
   SquareTerminal,
   Wallet,
@@ -215,6 +216,7 @@ export const navDomains: NavDomain[] = [
         tabs: [
           { to: '/logs', icon: ScrollText, labelKey: 'nav.logs' },
           { to: '/batches', icon: FileStack, labelKey: 'nav.batches' },
+          { to: '/blocked-requests', icon: ShieldAlert, labelKey: 'nav.tab.blockedRequests' },
         ],
       },
       {

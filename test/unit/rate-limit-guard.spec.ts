@@ -317,6 +317,7 @@ describe('RateLimitGuard', () => {
         apiKeyName: 'ci-agent',
         namespaceId: 'ns-1',
         teamId: 'team-1',
+        requestedModel: null,
       });
     });
 

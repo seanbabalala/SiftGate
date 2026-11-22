@@ -41,6 +41,7 @@ export class RateLimitGuard implements CanActivate {
     apiKeyId?: string;
     apiKeyName?: string;
     workspaceId?: string;
+    body?: unknown;
     gatewayApiKey?: {
       id?: string;
       name?: string;
@@ -60,6 +61,8 @@ export class RateLimitGuard implements CanActivate {
       apiKeyName: apiKeyName || null,
       namespaceId: request.gatewayApiKey?.namespace_id || null,
       teamId: request.gatewayApiKey?.team_id || null,
+      // The model name the client asked for; the request body is never stored.
+      requestedModel: requestedModelOf(request.body),
     });
   }
 
@@ -208,4 +211,10 @@ export class RateLimitGuard implements CanActivate {
       }
     }
   }
+}
+
+function requestedModelOf(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null;
+  const model = (body as { model?: unknown }).model;
+  return typeof model === 'string' && model.trim() ? model : null;
 }

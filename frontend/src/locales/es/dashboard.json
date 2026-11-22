@@ -1134,6 +1134,8 @@
   "posture.access.unit": "claves de gateway activas",
   "posture.access.description": "{{providers}} proveedores · {{scopes}} ámbitos de política",
   "posture.access.noKeys": "Crea una clave de gateway para que apps y agentes dejen de usar claves de proveedor.",
+  "posture.access.blocked_one": "{{count}} solicitud bloqueada en las últimas 24 h. Revisa el motivo.",
+  "posture.access.blocked_other": "{{count}} solicitudes bloqueadas en las últimas 24 h. Revisa el motivo.",
   "posture.spend.label": "Límite de gasto",
   "posture.spend.ofTokenLimit": "del límite diario de tokens",
   "posture.spend.ofCostLimit": "del límite diario de costo",

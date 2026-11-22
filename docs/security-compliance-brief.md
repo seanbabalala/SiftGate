@@ -89,6 +89,9 @@ evidence retention is configurable with
   target version before applying it ([Config audit and rollback](CONFIG_AUDIT_ROLLBACK.md)).
 - Call logs can be exported as metadata-only CSV or JSON, or streamed to your
   own [log sinks](LOG_SINKS.md) and OpenTelemetry collectors.
+- Requests refused by a budget, a key permission or a key's rate limit are
+  recorded as metadata-only denial records (reason, status, key and scope,
+  requested model; never content), shown under Request Logs → Blocked requests.
 
 ## Software Supply Chain
 

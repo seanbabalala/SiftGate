@@ -1134,6 +1134,8 @@
   "posture.access.unit": "active gateway keys",
   "posture.access.description": "{{providers}} providers · {{scopes}} policy scopes",
   "posture.access.noKeys": "Create a gateway key so apps and agents stop using provider keys.",
+  "posture.access.blocked_one": "{{count}} request blocked in the last 24 h. Review why.",
+  "posture.access.blocked_other": "{{count}} requests blocked in the last 24 h. Review why.",
   "posture.spend.label": "Spend guardrail",
   "posture.spend.ofTokenLimit": "of daily token limit",
   "posture.spend.ofCostLimit": "of daily cost limit",

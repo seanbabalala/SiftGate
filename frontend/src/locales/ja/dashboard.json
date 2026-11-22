@@ -1134,6 +1134,8 @@
   "posture.access.unit": "件の有効なゲートウェイキー",
   "posture.access.description": "プロバイダ {{providers}} 件 · ポリシースコープ {{scopes}} 件",
   "posture.access.noKeys": "ゲートウェイキーを作成し、アプリやエージェントがプロバイダキーを直接使わないようにします。",
+  "posture.access.blocked_one": "直近 24 時間で {{count}} 件をブロック。理由を確認できます。",
+  "posture.access.blocked_other": "直近 24 時間で {{count}} 件をブロック。理由を確認できます。",
   "posture.spend.label": "支出ガードレール",
   "posture.spend.ofTokenLimit": "日次トークン上限の使用率",
   "posture.spend.ofCostLimit": "日次費用上限の使用率",

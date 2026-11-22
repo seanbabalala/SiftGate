@@ -413,6 +413,8 @@ and SSE `?token=` query parameters.
 | `GET` | `/api/dashboard/logs/sse` | Server-Sent Events stream for live call logs and metadata-only request lifecycle updates (`routed`, `streaming`, `completed`, `failed`), including `first_token_latency_ms` and estimated/final `tokens_per_second` when available |
 | `GET` | `/api/dashboard/sessions` | Metadata-only session summaries grouped by `session_id` / legacy `session_key` |
 | `GET` | `/api/dashboard/sessions/:sessionId` | One session timeline enriched with route decision, shadow result, and guardrails metadata |
+| `GET` | `/api/dashboard/governance/denials` | Metadata-only budget, key-permission and key rate-limit refusals in the active workspace. Filters: `period` (`1h`, `24h`, `7d`, `30d`), `reason`, `api_key_id`, `page`, `limit`. One row covers up to one minute of the same key and reason; `request_count` says how many requests it represents |
+| `GET` | `/api/dashboard/governance/denials/summary` | Refused-request totals by reason and by gateway key (top 10) for `period` |
 | `GET` | `/api/dashboard/route-decisions` | Paginated explainable routing summaries |
 | `GET` | `/api/dashboard/route-decisions/:requestId` | Full route decision trace for one request |
 | `GET` | `/api/dashboard/analytics/cost` | Cost analytics by day, model, node, and tier |

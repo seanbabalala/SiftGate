@@ -1134,6 +1134,8 @@
   "posture.access.unit": "个启用的网关密钥",
   "posture.access.description": "{{providers}} 个供应商 · {{scopes}} 个策略作用域",
   "posture.access.noKeys": "创建网关密钥，让应用和 Agent 不再直接使用供应商 Key。",
+  "posture.access.blocked_one": "最近 24 小时拦截 {{count}} 个请求，查看原因。",
+  "posture.access.blocked_other": "最近 24 小时拦截 {{count}} 个请求，查看原因。",
   "posture.spend.label": "支出护栏",
   "posture.spend.ofTokenLimit": "已用每日 Token 上限",
   "posture.spend.ofCostLimit": "已用每日费用上限",

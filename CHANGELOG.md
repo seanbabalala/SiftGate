@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Record requests the gateway refuses on a governance policy: a budget limit,
+  a key's endpoint, modality, routing-mode or model permission, or a key's own
+  rate limit. Request Logs → Blocked requests lists them, with summary counts
+  and filters, and the Governance Overview's Access control tile shows the last
+  24 hours. Records are metadata only and grouped per key, reason and minute;
+  they stay out of call logs, so success rates, routing samples, alerts and
+  cost reports are unchanged. Anonymous per-IP limits and configuration errors
+  are not recorded. A new `gateway_denials` table is created on startup;
+  existing tables are not changed.
+
 ## 2.13.0 - 2026-11-22
 
 - Reposition the public README around enterprise AI governance: "Self-Hosted AI

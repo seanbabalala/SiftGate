@@ -102,6 +102,7 @@
   "nav.sessions": "工作階段",
   "nav.mcp": "MCP 工具閘道",
   "nav.batches": "批次任務",
+  "nav.tab.blockedRequests": "已攔截請求",
   "nav.evals": "評測報告",
   "workspace.organization": "組織",
   "workspace.workspace": "工作區",
