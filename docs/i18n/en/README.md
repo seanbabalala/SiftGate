@@ -41,8 +41,8 @@ leaves an audit trail without storing prompts or responses.
 ## Quick Start
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # Select Node >=22.13.0 <23 using .nvmrc.
 npm run runtime:check
 npm install

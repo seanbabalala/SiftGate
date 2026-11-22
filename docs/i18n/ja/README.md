@@ -37,8 +37,8 @@
 ## クイックスタート
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # .nvmrc に従って Node >=22.13.0 <23 を選択します。
 npm run runtime:check
 npm install

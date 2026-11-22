@@ -25,8 +25,8 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/seanbabalala/ai-gateway"
-Documentation = "https://github.com/seanbabalala/ai-gateway/tree/main/packages/python"
+Homepage = "https://github.com/seanbabalala/SiftGate"
+Documentation = "https://github.com/seanbabalala/SiftGate/tree/main/packages/python"
 
 [tool.setuptools.packages.find]
 where = ["src"]

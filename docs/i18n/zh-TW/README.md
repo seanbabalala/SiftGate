@@ -37,8 +37,8 @@
 ## 快速開始
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # 依 .nvmrc 選擇 Node >=22.13.0 <23。
 npm run runtime:check
 npm install

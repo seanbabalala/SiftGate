@@ -37,8 +37,8 @@ Versión actual: **v2.12.16**.
 ## Inicio rápido
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # Selecciona Node >=22.13.0 <23 según .nvmrc.
 npm run runtime:check
 npm install

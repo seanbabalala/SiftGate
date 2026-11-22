@@ -10,8 +10,8 @@ select the same release line. The root/frontend npm engine constraints reject
 incompatible installations. Container-only customers do not need host Node.
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 npm run runtime:check
 npm install
 cd frontend && npm install && cd ..

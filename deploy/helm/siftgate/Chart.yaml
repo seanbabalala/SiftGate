@@ -4,9 +4,9 @@ description: Helm chart for the MIT open-source SiftGate Data Plane
 type: application
 version: 2.12.16
 appVersion: "2.12.16"
-home: https://github.com/seanbabalala/ai-gateway
+home: https://github.com/seanbabalala/SiftGate
 sources:
-  - https://github.com/seanbabalala/ai-gateway
+  - https://github.com/seanbabalala/SiftGate
 keywords:
   - ai-gateway
   - llm

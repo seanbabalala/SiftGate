@@ -37,8 +37,8 @@
 ## เริ่มต้นอย่างรวดเร็ว
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # เลือก Node >=22.13.0 <23 ตาม .nvmrc
 npm run runtime:check
 npm install

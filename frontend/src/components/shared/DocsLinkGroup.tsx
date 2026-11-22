@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { CardStatic, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
-const REPO_DOCS_BASE_URL = 'https://github.com/seanbabalala/ai-gateway/blob/main'
+const REPO_DOCS_BASE_URL = 'https://github.com/seanbabalala/SiftGate/blob/main'
 
 export interface DocsLink {
   label: string
