@@ -24,6 +24,19 @@
   limits. SiftGate then creates a scoped Gateway API key and a bound agent
   profile together and shows the rendered setup snippet. The full key is shown
   once outside the snippet and is never stored by the Dashboard.
+- Add opt-in `media_idempotency` for media nodes. With it on, SiftGate sends one
+  hashed `Idempotency-Key` per request, scoped to the gateway key, workspace,
+  namespace, node and operation, and reuses it on transport retries. A caller's
+  own key is validated and hashed, never forwarded as is. Enable it only for an
+  upstream that deduplicates requests.
+- Add opt-in `media_direct_only` for media nodes. Such a node is left out of
+  `model: "auto"` selection and other nodes' fallback pools, and a request that
+  names it has no fallback targets. Use it for local or quota-limited channels.
+- Report native Messages reasoning accurately. For Messages-to-Messages
+  requests, call logs and route explanations record `output_config.effort` even
+  when the request also sets a thinking budget. A request with only a thinking
+  budget shows "Thinking Budget" instead of an inferred tier. Forwarding and
+  routing are unchanged, and existing log rows are not rewritten.
 
 ## 2.13.0 - 2026-11-22
 

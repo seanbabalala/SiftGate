@@ -10,6 +10,7 @@ import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/commo
 import { SpanKind } from '@opentelemetry/api';
 import { ConfigService } from '../config/config.service';
 import { NodeConfig, NodeProtocol } from '../config/gateway.config';
+import { MediaIdempotency } from './media-idempotency';
 import { resolveNodeUsageSchema } from '../catalog/compatibility-profiles';
 import {
   CanonicalRequest,
@@ -121,6 +122,7 @@ interface ResponseCredentialMetadata {
 
 @Injectable()
 export class ProviderClientService {
+  private readonly mediaIdempotency = new MediaIdempotency();
   private readonly logger = new Logger(ProviderClientService.name);
   private readonly allowedAnthropicBetas = new Set([
     'claude-code-20250219',
@@ -411,6 +413,7 @@ export class ProviderClientService {
           options.pricingAttempts,
           upstreamModel,
           canonical.source_format,
+          this.mediaIdempotency.headers(canonical, node),
         );
         const latencyMs = Date.now() - startTime;
 
@@ -1144,6 +1147,7 @@ export class ProviderClientService {
     pricingAttempts?: ProviderAttemptObserver,
     wireModel?: string,
     operation = "media",
+    identityHeaders: Record<string, string> = {},
   ): Promise<Response> {
     if (node.disabled === true) throw new ProviderError(`Node ${node.id} is disabled`, 503, node.id, "http_error");
     const url = `${node.base_url}${endpoint}`;
@@ -1164,6 +1168,14 @@ export class ProviderClientService {
         request.contentType,
         credential,
       );
+
+      // Explicit opt-in only; generated values take precedence over static node headers.
+      for (const [name, value] of Object.entries(identityHeaders)) {
+        for (const existing of Object.keys(headers)) {
+          if (existing.toLowerCase() === name.toLowerCase()) delete headers[existing];
+        }
+        headers[name] = value;
+      }
 
       let pricingReceipt: ProviderAttemptReceipt | undefined;
       try {

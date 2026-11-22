@@ -336,6 +336,15 @@ SiftGate stores only `video_jobs` metadata: local request id, provider job id, n
 
 `GET /v1/videos/:id` returns local job metadata and refreshes from `video_status_endpoint` when configured. `GET /v1/videos/:id/content` and `POST /v1/videos/:id/cancel` proxy to `video_content_endpoint` and `video_cancel_endpoint` only when the selected node declares those endpoints.
 
+### Media node options
+
+Two opt-in node settings apply to image, audio and video requests. Both default to `false`, so existing nodes are unchanged.
+
+- `media_idempotency: true` sends one hashed `Idempotency-Key` per request, scoped to the gateway key, workspace, namespace, node and operation. Enable it only for an upstream that deduplicates requests.
+- `media_direct_only: true` removes the node from `model: "auto"` selection and from other nodes' fallback pools. A request that names it has no fallback targets.
+
+See [Media idempotency](media-idempotency.md) for the key format, retry behavior and limits.
+
 ### Batch API Proxy
 
 `POST /v1/batches` proxies OpenAI-compatible Batch API creation. The gateway forwards provider fields such as `input_file_id`, `endpoint`, `completion_window`, and `metadata`, but stores only local metadata: request id, provider batch id, node, model hint, endpoint, file ids, request counts, status, timestamps, sanitized error, and Gateway API key/namespace attribution.

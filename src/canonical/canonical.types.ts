@@ -192,6 +192,7 @@ export type ReasoningSource =
   | 'responses.reasoning'
   | 'responses.reasoning_effort'
   | 'messages.thinking'
+  | 'messages.output_config.effort'
   | 'gemini.thinking_config'
   | 'canonical';
 

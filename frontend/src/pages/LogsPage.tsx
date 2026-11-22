@@ -1,4 +1,5 @@
 import { formatCacheMoney } from '@/lib/cache-reference-display'
+import { formatReasoningEffort } from '@/lib/reasoning-effort-display'
 import { useLogCostSummaries } from '@/hooks/use-log-cost-summaries'
 import { ReportCostCell } from '@/components/pricing/report-cost-cell'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
@@ -582,7 +583,7 @@ function LogDetailRow({
               <div>
                 <span className="text-[var(--foreground-dim)]">{t('detail.reasoningEffort')}: </span>
                 <span className="font-mono text-[var(--foreground-muted)]">
-                  {log.reasoning_effort ?? t('common.na')}
+                  {formatReasoningEffort(log.reasoning_effort, log.reasoning_budget_tokens, t('detail.reasoningBudget'), t('common.na'))}
                 </span>
               </div>
               <div>

@@ -1077,6 +1077,19 @@ describe('RoutingService — rerank', () => {
 });
 
 describe('RoutingService — images and audio', () => {
+  it('keeps direct-only image nodes out of auto and all fallback paths', () => {
+    const svc = makeRoutingService({ nodes: [
+      { id: 'existing', image_models: ['existing-image'] },
+      { id: 'private', image_models: ['private-image', 'private-alias'], media_direct_only: true },
+    ] });
+    expect(svc.resolveMediaRoute('image_generation', 'auto').primary).toEqual({ node: 'existing', model: 'existing-image' });
+    expect(svc.resolveMediaRoute('image_generation', 'auto').fallbacks).toEqual([]);
+    expect(svc.resolveMediaRoute('image_generation', 'existing-image').fallbacks).toEqual([]);
+    expect(svc.resolveMediaRoute('image_generation', 'private-image').primary.node).toBe('private');
+    expect(svc.resolveMediaRoute('image_generation', 'private-image').fallbacks).toEqual([]);
+    expect(svc.resolveMediaRoute('image_generation', 'private-alias').fallbacks).toEqual([]);
+    expect(() => svc.resolveMediaRoute('image_generation', 'private-image', target => target.node !== 'private')).toThrow('not allowed');
+  });
   const mediaNodes = [
     {
       id: 'cheap-media',
