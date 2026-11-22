@@ -2,7 +2,7 @@
 
 [Inicio de la documentación](../../README.md) · [README del proyecto](../../../README.md)
 
-Versión actual: **v2.12.16**.
+Versión actual: **v2.13.0**.
 
 **Gateway de IA autoalojado para la gobernanza de IA empresarial.** SiftGate coloca un único punto de control, operado por tu equipo, delante de cada llamada de IA de la empresa: aplicaciones de negocio, agentes de programación y herramientas MCP. Las claves de los proveedores permanecen en tus servidores, el acceso sigue las políticas, el gasto se presupuesta y se reparte por equipo, y cada solicitud deja un registro de auditoría sin almacenar prompts ni respuestas de forma predeterminada.
 
