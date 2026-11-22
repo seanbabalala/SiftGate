@@ -2,42 +2,59 @@
 
 [文件首頁](../../README.md) · [專案 README](../../../README.md)
 
-目前版本：**v2.11.3**。
+目前版本：**v2.12.16**。
 
-SiftGate 是自託管 AI traffic data plane，適合已經不滿足於直接散發供應商
-Key 或只做簡單代理轉發的團隊。它把應用程式、Coding Agent、MCP 工具、
-供應商憑證、路由策略、預算成本、快取證據和生產維運放進同一個本地控制面。
+**企業級自架 AI 治理閘道。** SiftGate 為企業的每一次 AI 呼叫提供一個由你自行維運的統一管控入口，涵蓋業務應用、Coding Agent 與 MCP 工具。供應商 Key 留在你的伺服器上，存取遵循政策，支出先有預算、後可分攤，每個請求都留下稽核紀錄，但預設不儲存 Prompt 與回應。
 
 <p align="center">
-  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate AI traffic data plane" width="100%" />
+  <img src="../../assets/homepage/siftgate-hero.svg" alt="SiftGate：企業級自架 AI 治理閘道" width="100%" />
 </p>
 
-## 最新產品定位
+## 企業為什麼需要 SiftGate
 
-| SiftGate 亮點 | 為什麼重要 |
+| AI 規模化後出現的問題 | SiftGate 帶來的改變 |
 | --- | --- |
-| AI traffic data plane | 策略、路由、憑證選擇、預算、成本、快取、稽核和證據都在自託管請求路徑中完成。 |
-| Agent 與 MCP 治理 | Cursor、Cline、Roo Code、Continue、Codex、Claude Code、OpenCode、通用 OpenAI/Anthropic Agent，以及 HTTP JSON-RPC、Streamable HTTP、舊版 SSE、stdio MCP 工具可共用受管入口。 |
-| 快取感知憑證池 | 單一 Provider Node 可配置多個上游 Key，支援 `cache_aware`、最少進行中、加權輪詢、黏性親和、冷卻和失敗重試。 |
-| 路由解釋 | 可查看模型/節點為何被選中、跳過、過濾、重試、降級或拒絕，同時預設不保存 prompt/response。 |
-| 預設只保存中繼資料 | 預設不保存 prompt、response、原始標頭、供應商金鑰、工具載荷、媒體位元組、原始碼、diff、隱藏推理或解析後的 secret。 |
-| 完整生產路徑 | 可從 SQLite/memory state 起步，再接 PostgreSQL、Redis、Docker、Kubernetes、Helm、OIDC、secret references、log sinks 和 OpenTelemetry。 |
+| Shadow AI 與 Key 散落 | 供應商 Key 只留在閘道內；團隊與個人使用受限、可撤銷的 Gateway API Key。 |
+| 安全審查卡住上線 | 預設只存中繼資料：不存 Prompt、回應、原始碼、工具載荷或密鑰。 |
+| 帳單只有一個總數 | 全域、命名空間、團隊、Key 四級預算，成本分攤匯出，快取感知 Key 池。 |
+| 一家供應商故障，全員停擺 | Fallback 鏈、熔斷、憑證故障切換，每個請求都有路由說明。 |
 
-## 30 秒理解 SiftGate
+## 四大治理支柱
 
-多數閘道只回答「把請求轉給哪個模型」。SiftGate 建立的是可治理、可解釋的
-AI 流量控制閉環：
+| 支柱 | 涵蓋內容 |
+| --- | --- |
+| 存取與權限 | 受限 Key、Workspace、Team、Policy Namespace（交集為空即拒絕）、依 Key 的模型池、Agent Profile、MCP Tool Gateway、RBAC 與 OIDC。 |
+| 資料保護與稽核 | 只存中繼資料的日誌與路由紀錄，本地護欄處理 PII、密鑰與 Prompt 注入，雜湊鏈管理稽核，版本化設定回滾。 |
+| 成本管控 | 每日 Token 與費用預算、Workspace 價格簿、成本報表、CSV/JSON 成本分攤、異常證據、快取節省。 |
+| 可靠性與維運 | 智慧路由、Fallback、熔斷、路由說明，PostgreSQL/Redis/Kubernetes 正式環境路徑，Sigstore 簽章發行套件，經審查的升級計畫。 |
 
-1. 驗證 Gateway API Key，解析 Workspace、Team、Policy Namespace。
-2. 檢查 endpoint、modality、model、node、budget 和 rate limit 權限。
-3. 依兼容性、成本、延遲、健康狀態、快取證據和 fallback 規則路由。
-4. 選擇正確的上游 provider credential，包括快取感知親和。
-5. 回傳 provider-compatible 回應，並記錄可匯出的安全營運證據。
+## 評估路徑
 
-## Provider Credential Pools
+1. 決策參考：[企業 AI 治理方案（簡體中文）](../../enterprise-overview.zh-cn.md)
+2. 安全審查：[安全與合規簡報（簡體中文）](../../security-compliance-brief.zh-cn.md)
+3. 30 分鐘示範：[PoC 示範劇本（簡體中文）](../../poc-playbook.zh-cn.md)
 
-Provider Node 可以使用單一 `api_key`，也可以使用一等公民的 `credentials[]`
-憑證池。憑證池會先在同一個邏輯節點內輪換與重試上游 Key，再進入節點級 fallback。
+## 快速開始
+
+```bash
+git clone https://github.com/seanbabalala/ai-gateway.git
+cd ai-gateway
+# 依 .nvmrc 選擇 Node >=22.13.0 <23。
+npm run runtime:check
+npm install
+cd frontend && npm install && cd ..
+cp gateway.config.example.yaml gateway.config.yaml
+cp .env.example .env
+npm run build
+# 啟動前先在私有 YAML 中設定 dashboard.password（或 OIDC）。
+npm start
+```
+
+開啟 `http://localhost:2099/dashboard`，新增一個 Provider Node，建立一個 Gateway API Key，再向 `http://localhost:2099/v1/chat/completions` 發送請求。需要帶版本、使用一次性啟用碼的 Docker 安裝，請使用[客戶安裝套件（簡體中文）](../../customer-install.zh-cn.md)。
+
+## 供應商憑證池
+
+一個 Provider Node 可以放多個上游 Key。`cache_aware` 會讓建立或讀取供應商 Prompt 快取的請求繼續命中同一個 Key，遇到 429、5xx 或逾時則切換到其他 Key。
 
 ```yaml
 credential_pool:
@@ -45,85 +62,18 @@ credential_pool:
   strategy: cache_aware
   sticky_by: agent_session
   cooldown_ms: 60000
-  max_failures: 3
   retry_on_status: [429, 500, 502, 503, 504]
 ```
-
-當 coding plan 或 Agent 工作負載在同一供應商/模型面有多個上游 Key 時，
-建議使用 `cache_aware`。SiftGate 會盡量讓建立或讀取 provider prompt cache 的
-請求繼續命中同一條上游 Key，並在 429/5xx/timeout 時切換到其他 Key。
-
-## 開源對比定位
-
-SiftGate 不只是便宜模型路由器，也不是 API 分銷面板。它是自託管 AI traffic
-data plane，重點在 BYOK 治理、路由證據、Agent/MCP 控制、快取感知 Key 池和
-生產維運。
-
-<p align="center">
-  <img src="../../assets/comparison/competitive-matrix.svg" alt="SiftGate competitive matrix" width="100%" />
-</p>
-
-完整對比見：[Comparison](../../COMPARISON.md)。
-
-## 證據資產
-
-Provider smoke evidence 會區分本地協議測試，以及需要營運方真實 Key 的 live
-provider check。見：[Provider Smoke Matrix](../../PROVIDER_SMOKE_MATRIX.md)。
-
-<p align="center">
-  <img src="../../assets/providers/provider-smoke-matrix.svg" alt="SiftGate provider smoke matrix" width="100%" />
-</p>
-
-Provider Catalog Dashboard 會展示 active catalog、transport-only preset、
-compatibility profiles、pricing review 狀態和 catalog sync governance。
-
-<p align="center">
-  <img src="../../assets/dashboard/provider-catalog-dashboard.png" alt="SiftGate Provider Catalog Dashboard" width="100%" />
-</p>
-
-Codex/Claude Code + MiniMax MCP 的端到端路徑見：
-[Agent + MCP Demo](../../AGENT_MCP_DEMO.md)。
-
-<p align="center">
-  <img src="../../assets/demo/agent-mcp-demo.svg" alt="SiftGate Agent and MCP demo" width="100%" />
-</p>
-
-## 快速開始
-
-```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
-npm install
-cd frontend && npm install && cd ..
-cp gateway.config.example.yaml gateway.config.yaml
-cp .env.example .env
-npm run build
-npm start
-```
-
-開啟 `http://localhost:2099/dashboard`，新增一個 Provider Node，建立一個
-Gateway API Key，然後向 `http://localhost:2099/v1/chat/completions` 發送請求。
-
-## 首次設定路徑
-
-1. 確認或建立目前 Workspace。
-2. 新增一個 Provider Node。
-3. 建立一個 Dashboard 管理的 Gateway API Key。
-4. 視需要綁定 Policy Namespace 或 Team。
-5. 檢查每日 Budget 的作用域與來源。
-6. 從 Playground、SDK 或 OpenAI-compatible 客戶端發送第一個請求。
-7. 查看 Logs、Sessions 和 Route Explanation。
-8. 只在需要時設定 Semantic Controls、Traffic Experiments、Evals、Shadow Traffic 或 MCP Tool Gateway。
 
 ## 文件地圖
 
 | 方向 | 文件入口 |
 | --- | --- |
-| 本地試用和 Dashboard | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
-| 生產維運 | [Docker Quickstart](../../DOCKER_QUICKSTART.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Validation](../../CONFIG_VALIDATION.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
-| 供應商和協議 | [Provider Catalog](../../PROVIDER_CATALOG.md), [Adding Providers](../../ADDING_PROVIDERS.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Provider Extensibility](../../PROVIDER_EXTENSIBILITY.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md), [Batch API](../../BATCH_API.md) |
-| 路由和治理 | [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Policy Namespaces and Shadow Traffic](../../NAMESPACES_AND_SHADOW.md), [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md) |
-| Agent 和 MCP 流量 | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Gateway Profiles](../../AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [Agent Platform Preview](../../AGENT_PLATFORM_PREVIEW.md), [MCP Tool Gateway](../../MCP_GATEWAY.md) |
-| 進階控制和證據 | [Semantic Controls](../../SEMANTIC_PLATFORM.md), [Caching](../../CACHING.md), [Stream, Cache, and Batching](../../STREAM_CACHE_BATCHING.md), [Intelligence Loop](../../INTELLIGENCE_LOOP.md), [Evaluation Framework](../../EVALUATION_FRAMEWORK.md), [Performance](../../PERFORMANCE.md) |
-| 觀測和控制平面 | [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Control Plane Contract](../../CONTROL_PLANE.md), [Security](../../SECURITY.md) |
-| 開發和遷移 | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Migration Compatibility](../../MIGRATION_COMPAT.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |
+| 企業評估 | [Enterprise overview](../../enterprise-overview.md), [Security and compliance brief](../../security-compliance-brief.md), [PoC playbook](../../poc-playbook.md), [Comparison](../../COMPARISON.md) |
+| 本地試用與控制台 | [Quickstart](../../QUICKSTART.md), [Dashboard](../../DASHBOARD.md), [OSS Concepts](../../OSS_CONCEPTS.md), [Playground](../../PLAYGROUND.md) |
+| 正式環境維運 | [Customer install](../../customer-install.md), [Production](../../PRODUCTION.md), [Kubernetes and Helm](../../KUBERNETES.md), [State Backends](../../STATE_BACKEND.md), [Secret Management](../../SECRET_MANAGEMENT.md), [Config Audit and Rollback](../../CONFIG_AUDIT_ROLLBACK.md) |
+| Agent 與 MCP 工具 | [Coding Agent Gateway](../../CODING_AGENT_GATEWAY.md), [Agent Integrations](../../AGENT_INTEGRATIONS.md), [MCP Tool Gateway](../../MCP_GATEWAY.md), [Agent + MCP Demo](../../AGENT_MCP_DEMO.md) |
+| 成本治理 | [Cost Platform](../../COST_CHARGEBACK_PLATFORM.md), [Billing Loop](../../BILLING_LOOP.md), [Policy Namespaces](../../NAMESPACES_AND_SHADOW.md) |
+| 供應商與路由 | [Provider Catalog](../../PROVIDER_CATALOG.md), [Provider Compatibility](../../PROVIDER_COMPATIBILITY.md), [Routing Recommendations](../../ROUTING_RECOMMENDATIONS.md), [Multimodal Capabilities](../../MULTIMODAL_CAPABILITIES.md) |
+| 觀測與告警 | [Operator Observability](../../OPERATOR_OBSERVABILITY.md), [Webhook Alerts](../../WEBHOOK_ALERTS.md), [Log Sinks](../../LOG_SINKS.md), [Security](../../SECURITY.md) |
+| 開發與擴充 | [Architecture](../../ARCHITECTURE.md), [API Reference](../../API_REFERENCE.md), [SDKs](../../SDKS.md), [Plugins](../../PLUGINS.md), [Release Checklist](../../RELEASE_CHECKLIST.md) |

@@ -1,10 +1,21 @@
 # SiftGate Documentation
 
-SiftGate is a self-hosted AI Gateway for multi-provider model traffic, coding
-agents, MCP tools, cost governance, policy enforcement, and metadata-only
-operations. The root [README](../README.md) is the product overview; this page
-is the documentation map for operators, platform teams, contributors, and
-self-hosters.
+SiftGate is a self-hosted AI gateway for enterprise AI governance: one control
+point for access policy, data protection, cost control and audit across
+business apps, coding agents and MCP tools. The root [README](../README.md) is
+the product overview; this page is the documentation map for decision makers,
+security reviewers, operators, platform teams, contributors and self-hosters.
+
+## Start By Role
+
+| You are | Read first |
+| --- | --- |
+| Decision maker (CTO, platform owner, architect) | [Enterprise overview](enterprise-overview.md) ([中文](enterprise-overview.zh-cn.md)), [Comparison](COMPARISON.md) |
+| Security, legal or procurement reviewer | [Security and compliance brief](security-compliance-brief.md) ([中文](security-compliance-brief.zh-cn.md)), [Security](SECURITY.md), [Publication security](PUBLICATION_SECURITY.md) |
+| Evaluator running a pilot | [PoC playbook](poc-playbook.md) ([中文](poc-playbook.zh-cn.md)), [Quickstart](QUICKSTART.md), [Customer installation](customer-install.md) |
+| Platform operator | [Production](PRODUCTION.md), [Kubernetes and Helm](KUBERNETES.md), [Operator observability](OPERATOR_OBSERVABILITY.md), [Control Room](customer-control.md) |
+| Developer integrating apps or agents | [API reference](API_REFERENCE.md), [Coding Agent Gateway](CODING_AGENT_GATEWAY.md), [MCP Tool Gateway](MCP_GATEWAY.md), [SDKs](SDKS.md) |
+| Contributor or release maintainer | [Architecture](ARCHITECTURE.md), [Release checklist](RELEASE_CHECKLIST.md), [Engineering baseline](BASELINE.md) |
 
 ## Languages
 
@@ -132,6 +143,15 @@ Contributors and release maintainers should also read
 | Migration from v1 to v2 | [MIGRATION_V1_TO_V2.md](MIGRATION_V1_TO_V2.md) |
 | Migration from LiteLLM | [MIGRATION_LITELLM.md](MIGRATION_LITELLM.md) |
 | Release checklist | [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) |
+
+## Engineering And Acceptance Records
+
+Maintainers keep design, delivery and acceptance records in this directory for
+traceability, for example the `pricing-*.md` and `customer-lifecycle-*.md`
+files. They describe the state at a specific development checkpoint. For
+current behavior, use the guides above, [Pricing operations](pricing-operations.md),
+and the [engineering baseline](BASELINE.md), which takes precedence over older
+records.
 
 ## Privacy Baseline
 

@@ -35,6 +35,11 @@ expectFileIncludes('README.md', `img.shields.io/badge/release-v${releaseVersion}
 expectFileIncludes('README.md', `/releases/tag/v${releaseVersion}`);
 expectFileIncludes('CHANGELOG.md', `## ${releaseVersion} -`);
 expectFileIncludes('docs/BASELINE.md', `Release: **v${releaseVersion}**`);
+// Localized entrypoints state the current release in their own language; keep
+// the version token aligned so the public docs cannot drift behind a release.
+for (const locale of ['en', 'zh', 'zh-TW', 'ja', 'ko', 'th', 'es']) {
+  expectFileIncludes(`docs/i18n/${locale}/README.md`, `**v${releaseVersion}**`);
+}
 expectFileIncludes('test/unit/release-version-sync.spec.ts', `expect(rootPackage.version).toBe('${releaseVersion}')`);
 
 if (failures.length > 0) {

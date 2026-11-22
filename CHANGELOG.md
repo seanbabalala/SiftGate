@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Reposition the public README around enterprise AI governance: "Self-Hosted AI
+  Gateway for Enterprise AI Governance", four governance pillars (access and
+  policy, data protection and audit, cost control, reliability and operations),
+  a 30-minute evaluation path and role-based reading. Detailed comparison,
+  benchmark caveats and acknowledgements now live in `docs/COMPARISON.md` and
+  `docs/PERFORMANCE.md` instead of the front page.
+- Add enterprise documents in English and Simplified Chinese: an enterprise
+  overview, a security and compliance brief for questionnaire-style review, and
+  a scripted 30-minute PoC playbook with pass criteria.
+- Bring all seven localized documentation entrypoints up to the current
+  release and the same governance structure; `npm run release:check` now
+  verifies their release version so they cannot drift again.
+- Update the homepage hero copy to the governance positioning. Layout and
+  artwork are unchanged; its media review entry records the new hash.
+
 ## 2.12.16 - 2026-11-11
 
 - Publish the 2.12.15 fixes, whose tag did not publish because the amd64 native

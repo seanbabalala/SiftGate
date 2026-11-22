@@ -39,10 +39,10 @@
       "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
     },
     "docs/assets/homepage/siftgate-hero.svg": {
-      "sha256": "05723e4cf3a2316eb302f2525ae69404736e1f3f1cfec02b8ebcb1a5f36da745",
-      "reviewed_on": "2026-10-10",
-      "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
-      "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+      "sha256": "ac2ba5ead09b87dfda8fd63a0de05856348fc058193f84acee8cce0576df77c2",
+      "reviewed_on": "2026-11-22",
+      "privacy_review": "Text-only copy update to the existing product illustration (enterprise governance headline, labels and metric captions); no credentials, personal names, emails, screenshots or customer requests. Pending maintainer review in the PR.",
+      "source_note": "Existing repository asset with layout, colors and shapes preserved; only visible copy and title/desc metadata changed. Privacy approval does not grant additional copyright or trademark rights."
     },
     "docs/assets/performance/benchmark-evidence.svg": {
       "sha256": "6177a30e5840b126edb0a56d163c98900ba72807e20031559d79c90e1b1d7f95",
