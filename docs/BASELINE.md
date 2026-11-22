@@ -1,7 +1,28 @@
 # Current Engineering Baseline
 
-Reviewed: 2026-11-11
-Release: **v2.12.16** (availability requires the matching successful release workflow)
+Reviewed: 2026-11-22
+Release: **v2.13.0** (availability requires the matching successful release workflow)
+
+## v2.13.0 Release Scope
+
+Position SiftGate as a self-hosted AI gateway for enterprise AI governance. The
+README, the enterprise overview, the security and compliance brief and the
+30-minute PoC playbook describe four pillars: access and policy, data protection
+and audit, cost control, and reliability and operations.
+
+The Dashboard follows the same domains. The sidebar drops from 31 entries to 15
+plus a collapsed Labs group, related pages become tabs, and every existing route
+and URL keeps working. The Governance Overview opens with a posture strip, and
+each Test Request probe shows its policy, candidates, selected route and cost.
+
+Fixes: Playground probes on file-backed SQLite now flush the write-behind call
+log before reading their own evidence. The header search now filters Request
+Logs through a workspace-scoped `search` over stored metadata only. Icons move
+to their own bundle chunk, which leaves the shared vendor budget room.
+
+Native upgrade/Fleet/recovery includes the signed published v2.12.16 baseline.
+No database schema, migration, configuration or API-key format changes.
+Publication does not switch a running gateway.
 
 ## v2.12.16 Release Scope
 

@@ -2,11 +2,11 @@ apiVersion: v2
 name: siftgate
 description: Helm chart for the MIT open-source SiftGate Data Plane
 type: application
-version: 2.12.16
-appVersion: "2.12.16"
-home: https://github.com/seanbabalala/ai-gateway
+version: 2.13.0
+appVersion: "2.13.0"
+home: https://github.com/seanbabalala/SiftGate
 sources:
-  - https://github.com/seanbabalala/ai-gateway
+  - https://github.com/seanbabalala/SiftGate
 keywords:
   - ai-gateway
   - llm

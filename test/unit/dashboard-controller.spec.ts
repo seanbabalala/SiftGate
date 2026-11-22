@@ -10,6 +10,7 @@ import { GUARDS_METADATA } from "@nestjs/common/constants";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { Brackets } from "typeorm";
 import { DashboardController } from "../../src/dashboard/dashboard.controller";
 import { DashboardGuard } from "../../src/auth/dashboard.guard";
 import { DASHBOARD_REQUIRED_ROLE_KEY } from "../../src/auth/dashboard-rbac";
@@ -4711,6 +4712,121 @@ describe("DashboardController — api_key filtering on logs", () => {
       "log.namespace_id = :namespaceId",
       { namespaceId: "team-alpha" },
     );
+  });
+
+  function searchGroup(qb: any) {
+    const call = qb.andWhere.mock.calls.find(
+      ([condition]: [unknown]) => condition instanceof Brackets,
+    );
+    if (!call) return null;
+    const group = {
+      where: jest.fn().mockReturnThis(),
+      orWhere: jest.fn().mockReturnThis(),
+    };
+    (call[0] as Brackets).whereFactory(group as any);
+    return group;
+  }
+
+  it("groups the metadata search in brackets on getLogs and escapes LIKE wildcards", async () => {
+    const qb = mockQueryBuilder();
+    qb.getManyAndCount.mockResolvedValue([[], 0]);
+    const { controller } = makeDashboard({ callLogRepo: mockRepo(qb), qb });
+
+    await controller.getLogs(
+      1,
+      50,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "  GPT_4o%  ",
+    );
+
+    const group = searchGroup(qb);
+    expect(group).not.toBeNull();
+    const conditions = [
+      ...group!.where.mock.calls,
+      ...group!.orWhere.mock.calls,
+    ].map(([condition]) => condition);
+    expect(conditions).toEqual([
+      "LOWER(log.request_id) LIKE :logSearch ESCAPE '\\'",
+      "LOWER(log.model) LIKE :logSearch ESCAPE '\\'",
+      "LOWER(log.node_id) LIKE :logSearch ESCAPE '\\'",
+      "LOWER(log.api_key_name) LIKE :logSearch ESCAPE '\\'",
+      "LOWER(log.client_source) LIKE :logSearch ESCAPE '\\'",
+      "LOWER(log.trace_id) LIKE :logSearch ESCAPE '\\'",
+      "LOWER(log.session_id) LIKE :logSearch ESCAPE '\\'",
+    ]);
+    expect(group!.where).toHaveBeenCalledTimes(1);
+    expect(group!.where.mock.calls[0][1]).toEqual({
+      logSearch: "%gpt\\_4o\\%%",
+    });
+  });
+
+  it("does not add a search condition for a blank search", async () => {
+    const qb = mockQueryBuilder();
+    qb.getManyAndCount.mockResolvedValue([[], 0]);
+    const { controller } = makeDashboard({ callLogRepo: mockRepo(qb), qb });
+
+    await controller.getLogs(
+      1,
+      50,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "   ",
+    );
+
+    expect(searchGroup(qb)).toBeNull();
+  });
+
+  it("applies the same search to the summary and the export", async () => {
+    const summaryQb = mockQueryBuilder();
+    const { controller: summaryController } = makeDashboard({
+      callLogRepo: mockRepo(summaryQb),
+      qb: summaryQb,
+    });
+    await summaryController.getLogsSummary(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "7d",
+      "req-abc",
+    );
+    expect(searchGroup(summaryQb)?.where.mock.calls[0][1]).toEqual({
+      logSearch: "%req-abc%",
+    });
+
+    const exportQb = mockQueryBuilder();
+    exportQb.getMany.mockResolvedValue([]);
+    const { controller: exportController } = makeDashboard({
+      callLogRepo: mockRepo(exportQb),
+      qb: exportQb,
+    });
+    const res: any = { setHeader: jest.fn(), send: jest.fn() };
+    await exportController.exportLogs(
+      "csv",
+      "7d",
+      7,
+      undefined,
+      undefined,
+      undefined,
+      res,
+      "Mock-OpenAI",
+    );
+    expect(searchGroup(exportQb)?.where.mock.calls[0][1]).toEqual({
+      logSearch: "%mock-openai%",
+    });
   });
 });
 

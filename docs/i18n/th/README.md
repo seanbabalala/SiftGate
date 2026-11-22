@@ -2,7 +2,7 @@
 
 [หน้าหลักเอกสาร](../../README.md) · [README ของโปรเจกต์](../../../README.md)
 
-รีลีสปัจจุบัน: **v2.12.16**
+รีลีสปัจจุบัน: **v2.13.0**
 
 **AI gateway แบบ self-hosted สำหรับธรรมาภิบาล AI ในองค์กร** SiftGate วางจุดควบคุมเดียวที่องค์กรดูแลเองไว้หน้าการเรียก AI ทุกครั้ง ทั้งจากแอปธุรกิจ Coding Agent และ MCP tools โดย provider key อยู่บนเซิร์ฟเวอร์ขององค์กร การเข้าถึงเป็นไปตามนโยบาย ค่าใช้จ่ายมีงบประมาณและปันส่วนให้แต่ละทีมได้ และทุก request มี audit trail โดยค่าเริ่มต้นไม่บันทึก prompt และ response
 
@@ -37,8 +37,8 @@
 ## เริ่มต้นอย่างรวดเร็ว
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # เลือก Node >=22.13.0 <23 ตาม .nvmrc
 npm run runtime:check
 npm install

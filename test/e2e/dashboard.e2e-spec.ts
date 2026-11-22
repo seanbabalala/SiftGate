@@ -114,6 +114,85 @@ describe('Dashboard (e2e)', () => {
     );
   });
 
+  it('GET /api/dashboard/logs?search= → matches metadata case-insensitively and treats wildcards literally', async () => {
+    const marker = `srch${Date.now()}`;
+    const base = {
+      source_format: 'chat_completions',
+      tier: 'standard',
+      score: 0.5,
+      input_tokens: 1,
+      output_tokens: 1,
+      cost_usd: 0,
+      latency_ms: 10,
+      status_code: 200,
+      workspace_id: DEFAULT_WORKSPACE_ID,
+    };
+    await harness.callLogRepo.save([
+      harness.callLogRepo.create({
+        ...base,
+        request_id: `${marker}-by-model`,
+        node_id: 'mock-openai',
+        model: `${marker}_Model-X`,
+      }),
+      harness.callLogRepo.create({
+        ...base,
+        request_id: `${marker}-by-key`,
+        node_id: 'mock-openai',
+        model: 'gpt-4o-mini',
+        api_key_name: `${marker}-Team-Key`,
+      }),
+      harness.callLogRepo.create({
+        ...base,
+        request_id: `${marker}-wildcard-decoy`,
+        node_id: 'mock-openai',
+        model: `${marker}AModel-X`,
+      }),
+      harness.callLogRepo.create({
+        ...base,
+        request_id: `${marker}-other-workspace`,
+        node_id: 'mock-openai',
+        model: `${marker}_Model-X`,
+        workspace_id: 'workspace-search-isolation',
+      }),
+    ]);
+
+    const byModel = await harness.agent
+      .get('/api/dashboard/logs')
+      .query({ period: '15m', limit: 50, search: `${marker.toUpperCase()}_MODEL` });
+    expect(byModel.status).toBe(200);
+    // `_` is literal: the decoy with `A` in that position must not match, and
+    // the identical row in another workspace stays out of scope.
+    expect(byModel.body.data.map((log: { request_id: string }) => log.request_id)).toEqual([
+      `${marker}-by-model`,
+    ]);
+
+    const byKey = await harness.agent
+      .get('/api/dashboard/logs')
+      .query({ period: '15m', limit: 50, search: `  ${marker}-team-key  ` });
+    expect(byKey.status).toBe(200);
+    expect(byKey.body.data.map((log: { request_id: string }) => log.request_id)).toEqual([
+      `${marker}-by-key`,
+    ]);
+
+    const percent = await harness.agent
+      .get('/api/dashboard/logs')
+      .query({ period: '15m', limit: 50, search: `${marker}%` });
+    expect(percent.status).toBe(200);
+    expect(percent.body.data).toEqual([]);
+
+    const summary = await harness.agent
+      .get('/api/dashboard/logs/summary')
+      .query({ period: 'today', search: marker });
+    expect(summary.status).toBe(200);
+    expect(summary.body.total.requests).toBe(3);
+    expect(
+      summary.body.hourly_trend.reduce(
+        (sum: number, bucket: { requests: number }) => sum + bucket.requests,
+        0,
+      ),
+    ).toBe(3);
+  });
+
   it('GET /api/dashboard/workspaces → returns default organization and workspace', async () => {
     const res = await harness.agent.get('/api/dashboard/workspaces');
 

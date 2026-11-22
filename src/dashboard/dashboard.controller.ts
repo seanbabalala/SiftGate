@@ -54,12 +54,14 @@ import {
 import { Request, Response } from "express";
 import { InjectRepository } from "@nestjs/typeorm";
 import {
+  Brackets,
   DataSource,
   FindOptionsWhere,
   In,
   MoreThanOrEqual,
   Repository,
   type EntityManager,
+  type WhereExpressionBuilder,
 } from "typeorm";
 import { Observable, filter, interval, map, merge } from "rxjs";
 import { withCoordinatedRepository } from "../database/coordinated-repository";
@@ -201,6 +203,18 @@ const DASHBOARD_PROTOCOLS = [
   "messages",
   "gemini",
 ] as const;
+// Metadata identifiers the Request Logs search may match. Content is never
+// stored in call logs, so it can never be searched.
+const LOG_SEARCH_COLUMNS = [
+  "request_id",
+  "model",
+  "node_id",
+  "api_key_name",
+  "client_source",
+  "trace_id",
+  "session_id",
+] as const;
+const LOG_SEARCH_MAX_LENGTH = 200;
 const DASHBOARD_MODEL_BUCKETS = [
   "models",
   "embedding_models",
@@ -2592,6 +2606,31 @@ export class DashboardController implements BeforeApplicationShutdown {
     return qb;
   }
 
+  /**
+   * Free-text log search over identifiers the log already stores: request id,
+   * model, node, key name and trace/session ids. It never reads request or
+   * response content, which call logs do not store. The terms are grouped in
+   * brackets so they cannot widen the workspace scope.
+   */
+  private applyLogSearchFilter<T extends WhereExpressionBuilder>(
+    qb: T,
+    search?: string,
+  ): T {
+    const term = search?.trim().slice(0, LOG_SEARCH_MAX_LENGTH).toLowerCase();
+    if (!term) return qb;
+    const pattern = `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    qb.andWhere(
+      new Brackets((group) => {
+        LOG_SEARCH_COLUMNS.forEach((column, index) => {
+          const condition = `LOWER(log.${column}) LIKE :logSearch ESCAPE '\\'`;
+          if (index === 0) group.where(condition, { logSearch: pattern });
+          else group.orWhere(condition, { logSearch: pattern });
+        });
+      }),
+    );
+    return qb;
+  }
+
   private applyRouteDecisionScopeFilter<
     T extends { where: Function; andWhere: Function },
   >(
@@ -4120,6 +4159,12 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiQuery({ name: "api_key_id", required: false })
   @ApiQuery({ name: "namespace", required: false })
   @ApiQuery({ name: "period", required: false, example: "today" })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    description:
+      "Case-insensitive match on request id, model, node, key name, client source, trace id or session id.",
+  })
   @ApiOkResponse({
     description:
       "Request, token, cost, success-rate, and cache-hit metrics for the selected log filters, including a per-key breakdown and a zero-filled 24-hour trend when period=today.",
@@ -4132,6 +4177,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     @Query("api_key_id") apiKeyId?: string,
     @Query("namespace") namespaceId?: string,
     @Query("period") period?: string,
+    @Query("search") search?: string,
   ) {
     const keyGroupExpression =
       "COALESCE(log.api_key_id, log.api_key_name, '__unassigned__')";
@@ -4180,6 +4226,7 @@ export class DashboardController implements BeforeApplicationShutdown {
       qb.andWhere("log.status_code = :status", { status: Number(status) });
     }
     this.applyLogScopeFilter(qb, apiKey, apiKeyId, namespaceId);
+    this.applyLogSearchFilter(qb, search);
 
     const hourlyTrendPromise =
       normalizedPeriod === "today"
@@ -4190,6 +4237,7 @@ export class DashboardController implements BeforeApplicationShutdown {
             apiKey,
             apiKeyId,
             namespaceId,
+            search,
           })
         : Promise.resolve([]);
     const [rows, hourlyTrend] = await Promise.all([
@@ -4277,6 +4325,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     apiKey?: string;
     apiKeyId?: string;
     namespaceId?: string;
+    search?: string;
   }) {
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
@@ -4328,6 +4377,7 @@ export class DashboardController implements BeforeApplicationShutdown {
       filters.apiKeyId,
       filters.namespaceId,
     );
+    this.applyLogSearchFilter(qb, filters.search);
 
     const rows = await qb.getRawMany<{
       hour: string | number | null;
@@ -4368,6 +4418,12 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiQuery({ name: "api_key_id", required: false })
   @ApiQuery({ name: "namespace", required: false })
   @ApiQuery({ name: "period", required: false, example: "7d" })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    description:
+      "Case-insensitive match on request id, model, node, key name, client source, trace id or session id.",
+  })
   @ApiOkResponse({
     description: "Paginated call logs and pagination metadata.",
   })
@@ -4381,6 +4437,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     @Query("api_key_id") apiKeyId?: string,
     @Query("namespace") namespaceId?: string,
     @Query("period") period?: string,
+    @Query("search") search?: string,
   ) {
     const qb = this.callLogRepo
       .createQueryBuilder("log")
@@ -4394,6 +4451,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     if (status)
       qb.andWhere("log.status_code = :status", { status: Number(status) });
     this.applyLogScopeFilter(qb, apiKey, apiKeyId, namespaceId);
+    this.applyLogSearchFilter(qb, search);
 
     const safeLimit = Math.min(Math.max(limit, 1), 200);
     const safePage = Math.max(page, 1);
@@ -4530,6 +4588,12 @@ export class DashboardController implements BeforeApplicationShutdown {
   @ApiQuery({ name: "api_key", required: false })
   @ApiQuery({ name: "api_key_id", required: false })
   @ApiQuery({ name: "namespace", required: false })
+  @ApiQuery({
+    name: "search",
+    required: false,
+    description:
+      "Case-insensitive match on request id, model, node, key name, client source, trace id or session id.",
+  })
   @ApiOkResponse({ description: "A CSV or JSON file download." })
   async exportLogs(
     @Query("format") format: string = "csv",
@@ -4539,6 +4603,7 @@ export class DashboardController implements BeforeApplicationShutdown {
     @Query("api_key_id") apiKeyId: string | undefined,
     @Query("namespace") namespaceId: string | undefined,
     @Res() res: Response,
+    @Query("search") search?: string,
   ) {
     const safeDays = Math.min(Math.max(days, 1), 365);
     const exportPeriod = this.normalizeLogPeriod(period) || `${safeDays}d`;
@@ -4551,6 +4616,7 @@ export class DashboardController implements BeforeApplicationShutdown {
       .where("log.timestamp >= :since", { since })
       .orderBy("log.timestamp", "DESC");
     this.applyLogScopeFilter(qb, apiKey, apiKeyId, namespaceId);
+    this.applyLogSearchFilter(qb, search);
     const logs = (await qb.getMany()).map((log) =>
       this.enrichCallLogCostEstimates(log),
     );

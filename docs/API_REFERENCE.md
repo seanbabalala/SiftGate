@@ -407,9 +407,9 @@ and SSE `?token=` query parameters.
 | `POST` | `/api/auth/logout` | Clear the dashboard session cookie |
 | `GET` | `/api/auth/status` | Check whether dashboard auth is required |
 | `GET` | `/api/dashboard/stats` | Aggregate calls, tokens, cost, latency, success rate, and distributions |
-| `GET` | `/api/dashboard/logs` | Paginated call logs |
-| `GET` | `/api/dashboard/logs/summary` | Aggregate request, token, cost, success, and cache metrics; `period=today` also returns a zero-filled, privacy-safe `hourly_trend` with 24 local-hour buckets |
-| `GET` | `/api/dashboard/logs/export` | Export logs as CSV or JSON |
+| `GET` | `/api/dashboard/logs` | Paginated call logs. Optional `search` matches request ID, model, node, key name, client source, trace ID or session ID (case-insensitive; `%` and `_` are literal) |
+| `GET` | `/api/dashboard/logs/summary` | Aggregate request, token, cost, success, and cache metrics for the same filters, including `search`; `period=today` also returns a zero-filled, privacy-safe `hourly_trend` with 24 local-hour buckets |
+| `GET` | `/api/dashboard/logs/export` | Export logs as CSV or JSON; honors `search` |
 | `GET` | `/api/dashboard/logs/sse` | Server-Sent Events stream for live call logs and metadata-only request lifecycle updates (`routed`, `streaming`, `completed`, `failed`), including `first_token_latency_ms` and estimated/final `tokens_per_second` when available |
 | `GET` | `/api/dashboard/sessions` | Metadata-only session summaries grouped by `session_id` / legacy `session_key` |
 | `GET` | `/api/dashboard/sessions/:sessionId` | One session timeline enriched with route decision, shadow result, and guardrails metadata |

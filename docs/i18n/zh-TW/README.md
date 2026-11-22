@@ -2,7 +2,7 @@
 
 [文件首頁](../../README.md) · [專案 README](../../../README.md)
 
-目前版本：**v2.12.16**。
+目前版本：**v2.13.0**。
 
 **企業級自架 AI 治理閘道。** SiftGate 為企業的每一次 AI 呼叫提供一個由你自行維運的統一管控入口，涵蓋業務應用、Coding Agent 與 MCP 工具。供應商 Key 留在你的伺服器上，存取遵循政策，支出先有預算、後可分攤，每個請求都留下稽核紀錄，但預設不儲存 Prompt 與回應。
 
@@ -37,8 +37,8 @@
 ## 快速開始
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # 依 .nvmrc 選擇 Node >=22.13.0 <23。
 npm run runtime:check
 npm install

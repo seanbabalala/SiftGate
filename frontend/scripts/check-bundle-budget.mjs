@@ -6,10 +6,13 @@ const assetsDir = path.join(process.cwd(), 'dist', 'assets')
 
 // Data-router navigation protection adds 17.5 KiB to shared vendor (measured 123.47 KiB).
 // The 125 KiB cap replaces 120 KiB; pricing itself stays in a capped lazy route.
+// lucide-react has its own chunk (measured 12.47 KiB), which took shared vendor
+// from 124.60 KiB to 111.81 KiB; new icons are charged to the icons budget.
 const budgets = [
   { label: 'dashboard entry', prefix: 'index-', suffix: '.js', gzipKb: 20 },
   { label: 'React vendor', prefix: 'react-vendor-', suffix: '.js', gzipKb: 70 },
   { label: 'shared vendor', prefix: 'vendor-', suffix: '.js', gzipKb: 125 },
+  { label: 'icons vendor', prefix: 'icons-vendor-', suffix: '.js', gzipKb: 16 },
   { label: 'pricing route', prefix: 'pricing-page-', suffix: '.js', gzipKb: 24 },
   { label: 'request cost route', prefix: 'request-cost-page-', suffix: '.js', gzipKb: 8 },
   { label: 'budget recovery route', prefix: 'recovery-page-', suffix: '.js', gzipKb: 12 },

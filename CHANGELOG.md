@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.13.0 - 2026-11-22
 
 - Reposition the public README around enterprise AI governance: "Self-Hosted AI
   Gateway for Enterprise AI Governance", four governance pillars (access and
@@ -49,6 +49,18 @@
   Simplified Chinese. Pricing reconciliation disclaimers are unchanged.
 - Rename the overview's "Webhook Alerts" section to "Alerts", since connectors
   also cover Feishu, WeCom and Telegram.
+- Fix the header search: it opened Request Logs without filtering. The logs
+  list, summary and export now accept `search`, a case-insensitive match on
+  request ID, model, node, key name, client source, trace ID or session ID
+  that stays inside the active workspace. Request Logs has a matching search
+  field kept in the URL. Only stored metadata is searched.
+- Move lucide-react icons into their own `icons-vendor` chunk. The shared
+  vendor chunk drops from 124.60 kB to 111.81 kB gzip, leaving room under its
+  unchanged 125 kB budget.
+- Point repository links at `github.com/seanbabalala/SiftGate`. The image name
+  `ghcr.io/seanbabalala/ai-gateway` is unchanged.
+- Include the signed published v2.12.16 in native upgrade/Fleet/recovery
+  acceptance. No database schema change.
 
 ## 2.12.16 - 2026-11-11
 

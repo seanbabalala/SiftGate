@@ -72,6 +72,12 @@
       "image": "ghcr.io/seanbabalala/ai-gateway@sha256:0240a6ad5b40e766798c9936633402d89170902318a966cc1ca71a3a02bf9e60",
       "installer_sha256": "7306e0eb95b92037422b5f9f49be5c2b04670dd1dc222cddf85d4963ec8f59b2",
       "source_commit": "811f1abb9845edbe345f9fc5c8055f206842c88f"
+    },
+    {
+      "version": "2.12.16",
+      "image": "ghcr.io/seanbabalala/ai-gateway@sha256:69052a419994c6affe3657b813194df3bde369a971b51555734ed5c31f8b4542",
+      "installer_sha256": "c32bcaf210599c193db4c030266ca804df8c2b972efdae281c0090c1eb1e1eb7",
+      "source_commit": "a1b1510f14d77ece0cd09d626add13b44bbbea3b"
     }
   ],
   "source_kit_protocols": [
@@ -166,6 +172,10 @@
     {
       "kind": "fix",
       "summary": "The host operator refreshes a private executor lease with its heartbeat; observation seals a running backup or upgrade as interrupted only after the lease expires, so a job whose executor still works is never turned into needs_attention by one observation. A crashed executor stays reconcilable within one lease window and is never replayed or auto-restarted, and an escaping executor error records a bounded reason. No schema or configuration change."
+    },
+    {
+      "kind": "feature",
+      "summary": "Dashboard navigation is grouped by governance domain with page tabs; every existing route and URL is unchanged. The Governance Overview adds a metadata-only posture strip and Test Request shows route evidence. Playground probes flush write-behind call logs before reading their evidence, and Request Logs search matches stored metadata only, inside the active workspace. Native upgrade acceptance includes published v2.12.16; no new schema change."
     }
   ]
 }

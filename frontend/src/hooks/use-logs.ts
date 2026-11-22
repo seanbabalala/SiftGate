@@ -12,6 +12,7 @@ export interface LogFilters {
   api_key_id?: string
   namespace?: string
   period?: string
+  search?: string
 }
 
 export function useLogs(page: number, limit: number, filters: LogFilters = {}) {
@@ -31,6 +32,7 @@ export function useLogs(page: number, limit: number, filters: LogFilters = {}) {
         api_key: filters.api_key,
         namespace: filters.namespace,
         period: filters.period,
+        search: filters.search,
       }), undefined, 'GET', signal),
   })
 }
@@ -50,6 +52,7 @@ export function useLogsSummary(filters: LogFilters = {}) {
         api_key: filters.api_key,
         namespace: filters.namespace,
         period: filters.period,
+        search: filters.search,
       }), undefined, 'GET', signal),
     staleTime: 15_000,
   })

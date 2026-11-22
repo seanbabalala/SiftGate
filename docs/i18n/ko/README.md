@@ -2,7 +2,7 @@
 
 [문서 홈](../../README.md) · [프로젝트 README](../../../README.md)
 
-현재 릴리스: **v2.12.16**.
+현재 릴리스: **v2.13.0**.
 
 **엔터프라이즈 AI 거버넌스를 위한 셀프 호스팅 AI 게이트웨이.** SiftGate는 업무 애플리케이션, 코딩 에이전트, MCP 도구에서 발생하는 모든 AI 호출 앞에 직접 운영하는 단일 통제 지점을 둡니다. 공급자 키는 자체 서버에 머물고, 접근은 정책을 따르며, 지출은 예산으로 관리되고 팀별로 배분됩니다. 모든 요청에 감사 기록이 남지만 프롬프트와 응답은 기본적으로 저장하지 않습니다.
 
@@ -37,8 +37,8 @@
 ## 빠른 시작
 
 ```bash
-git clone https://github.com/seanbabalala/ai-gateway.git
-cd ai-gateway
+git clone https://github.com/seanbabalala/SiftGate.git
+cd SiftGate
 # .nvmrc에 맞춰 Node >=22.13.0 <23을 선택합니다.
 npm run runtime:check
 npm install

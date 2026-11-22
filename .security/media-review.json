@@ -29,7 +29,7 @@
     "docs/assets/dashboard/governance-overview.png": {
       "sha256": "131f35fb5497103b20cfdfc7334828075ed73afe39cb80b11f31d3f6e18e8f26",
       "reviewed_on": "2026-11-22",
-      "privacy_review": "Screenshot of a disposable local sandbox gateway with synthetic traffic from a mock upstream: placeholder node names (demo-openai, demo-backup), synthetic key names, default workspace, localhost only. No credentials, real provider data, personal names, emails or customer requests. Pending maintainer review in the PR.",
+      "privacy_review": "Screenshot of a disposable local sandbox gateway with synthetic traffic from a mock upstream: placeholder node names (demo-openai, demo-backup), synthetic key names, default workspace, localhost only. No credentials, real provider data, personal names, emails or customer requests. Reviewed 2026-11-22 before release at this hash. Reviewer opened the full image and confirmed every cell is synthetic.",
       "source_note": "Captured from the SiftGate Dashboard built from this branch; product UI and brand assets only. Privacy approval does not grant additional copyright or trademark rights."
     },
     "docs/assets/dashboard/provider-catalog-dashboard.png": {
@@ -47,7 +47,7 @@
     "docs/assets/homepage/siftgate-hero.svg": {
       "sha256": "ac2ba5ead09b87dfda8fd63a0de05856348fc058193f84acee8cce0576df77c2",
       "reviewed_on": "2026-11-22",
-      "privacy_review": "Text-only copy update to the existing product illustration (enterprise governance headline, labels and metric captions); no credentials, personal names, emails, screenshots or customer requests. Pending maintainer review in the PR.",
+      "privacy_review": "Text-only copy update to the existing product illustration (enterprise governance headline, labels and metric captions); no credentials, personal names, emails, screenshots or customer requests. Reviewed 2026-11-22 before release at this hash. Reviewer read the full rendered SVG and its text and found product copy only.",
       "source_note": "Existing repository asset with layout, colors and shapes preserved; only visible copy and title/desc metadata changed. Privacy approval does not grant additional copyright or trademark rights."
     },
     "docs/assets/performance/benchmark-evidence.svg": {

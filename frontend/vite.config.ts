@@ -35,6 +35,11 @@ export default defineConfig({
           if (normalizedId.includes('/framer-motion/')) {
             return 'motion-vendor'
           }
+          // Icons grow with every page. Keeping them out of the shared vendor
+          // chunk stops a new icon from consuming the vendor budget.
+          if (normalizedId.includes('/lucide-react/')) {
+            return 'icons-vendor'
+          }
           if (
             normalizedId.includes('/i18next/') ||
             normalizedId.includes('/react-i18next/') ||
