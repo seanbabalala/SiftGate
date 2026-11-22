@@ -114,7 +114,13 @@ The Dashboard follows the same structure. Its sidebar groups work into
 **Access & Policy**, **Agents & Tools**, **Models & Routing**, **Cost Control**
 and **Audit & Operations**, with previews and evaluation tools in a collapsed
 **Labs** group. Related pages appear as tabs inside each section, and every
-existing URL still works. See the [Dashboard guide](docs/DASHBOARD.md#navigation).
+existing URL still works. The Governance Overview opens with the posture a
+reviewer asks about first: data protection, access control, spend guardrail
+and runtime health. See the [Dashboard guide](docs/DASHBOARD.md#navigation).
+
+<p align="center">
+  <img src="docs/assets/dashboard/governance-overview.png" alt="SiftGate Governance Overview with data protection, access control, spend guardrail and runtime posture" width="100%" />
+</p>
 
 ## See It In A 30-Minute Evaluation
 

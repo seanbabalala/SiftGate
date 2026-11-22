@@ -58,6 +58,22 @@ for (const snippet of [
   assert(page.includes(snippet), `Playground page is missing ${snippet}.`)
 }
 
+const evidence = read('src/components/playground/playground-route-evidence.tsx')
+assert(page.includes('<PlaygroundRouteEvidence result={result} />'), 'Playground results must show governance evidence.')
+for (const snippet of [
+  'useRouteDecision(requestId)',
+  'result.route_decision?.available',
+  'summary.candidate_count',
+  'summary.filtered_count',
+  'summary.selected',
+  "t('playground.evidence.unavailable')",
+]) {
+  assert(evidence.includes(snippet), `Playground governance evidence is missing ${snippet}.`)
+}
+for (const forbidden of ['body_preview', 'apiPost', 'dangerouslySetInnerHTML']) {
+  assert(!evidence.includes(forbidden), `Playground governance evidence must stay metadata-only and read-only; found ${forbidden}.`)
+}
+
 for (const forbidden of [
   'provider_key',
   'api_key_secret',

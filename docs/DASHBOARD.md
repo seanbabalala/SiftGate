@@ -121,13 +121,13 @@ of its pages is active and otherwise remembers the operator's choice.
 
 | Page | Purpose |
 | --- | --- |
-| Overview | First-run setup path, related OSS docs, live calls, cost, cache savings, Intelligence Loop summary, latency, budget, provider health, guardrails finding summary, and recent activity |
+| Governance Overview | Governance posture (data protection, access control, spend guardrail, runtime), 24h calls, spend, cache savings and latency, traffic distribution by tier or provider, governance health (configuration, guardrails, alerts, shared state), recent traffic with route-decision and cost links, and the first-run checklist, which moves to the top until setup is complete |
+| Test Request (Playground) | Operator-triggered safe probes for chat, responses, messages, embeddings, rerank, images, audio, video, and realtime capability checks, with governance evidence for each probe: policy scope, candidates evaluated, selected route, usage and cost, linked to Route Explanation |
 | Analytics | Daily cost trends, provider/model breakdowns, provider-cache savings trends, hit-rate rankings, and cost-mix visualization |
 | Traffic Experiments | Read-only setup YAML and live A/B split analytics from routing `split` variants, without automatic winner promotion |
 | Budget | Scope-based Global, Policy Namespace, Team, and API Key budget source-of-truth, inherited/unset state, reset actions, model pricing, and actual-vs-no-cache cost comparison details |
 | Cost Platform | Internal chargeback reports, CSV/JSON exports, cost anomalies, provider price sync guardrails, and feedback aggregation |
 | Semantic Controls | Semantic cache status/invalidation, prompt template metadata, setup YAML, context optimizer evidence, intent counts, Guardrails v2 findings, and semantic privacy controls |
-| Playground | Operator-triggered safe probes for chat, responses, messages, embeddings, rerank, images, audio, video, and realtime capability checks |
 | Agents | Coding Agent Gateway profiles for Cursor, Cline, Roo Code, Continue, Codex, Claude Code, OpenCode, Generic OpenAI, Generic Anthropic, and compatible chatbot setup with redacted render snippets and metadata-only recent coding-agent sessions |
 | Members | Local workspace membership governance with Admin, Operator, and Viewer roles |
 | MCP Tool Gateway | Local MCP servers, setup YAML, static tool metadata, recent metadata-only calls, and error summaries |

@@ -29,6 +29,26 @@
 - Align First run, Host operations and Release updates with the console's
   heading scale, 8px controls and card surfaces. Their markup and behavior are
   unchanged.
+- Rebuild the Governance Overview around a posture strip (data protection,
+  access control, spend guardrail, runtime), four key metrics, traffic
+  distribution with a tier/provider switch, and one governance health card for
+  configuration, guardrails, alerts and shared state. Recent traffic rows link
+  to their route decision and cost detail. The first-run checklist stays on top
+  until setup is complete, then moves to the bottom. The cache comparison basis
+  is kept and now opens on demand.
+- Test Request (Playground) shows governance evidence for each probe: policy
+  scope, candidates evaluated and filtered, the selected route, and usage and
+  cost, linked to Route Explanation.
+- Fix Playground probes on file-backed SQLite reporting no call log, zero
+  tokens and no route decision: the probe now flushes the write-behind call log
+  and route trace queues before looking up its own evidence.
+- Rewrite user-facing copy that only stated what something is not (release
+  checks, connector delivery, sample-node enablement, example limits) into
+  direct guidance in all seven locales, remove stale "v2.6" and "OSS v2.8
+  alpha.1" references, and fix two Traditional Chinese strings that were
+  Simplified Chinese. Pricing reconciliation disclaimers are unchanged.
+- Rename the overview's "Webhook Alerts" section to "Alerts", since connectors
+  also cover Feishu, WeCom and Telegram.
 
 ## 2.12.16 - 2026-11-11
 

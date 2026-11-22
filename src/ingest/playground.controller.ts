@@ -181,6 +181,9 @@ export class PlaygroundController {
     await this.applyPlaygroundScope(canonical, input);
 
     const execution = await this.execute(canonical, endpoint, stream);
+    // File-backed SQLite writes call logs and route traces behind the request.
+    // Flush them so this probe can link its own metadata-only evidence.
+    await this.pipeline.drainPendingLogWrites();
     const log = await this.findPlaygroundLog(sessionKey);
     const decision = log
       ? await this.routeDecisionRepo.findOne({

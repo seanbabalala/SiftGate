@@ -776,7 +776,7 @@ function runMigrateV2Command(args: string[], cli: CliIO): number {
   }
 
   if (!parsedArgs.dryRun) {
-    cli.stderr("v1.9.2 only supports migrate-v2 --dry-run. No data mutation is available yet.");
+    cli.stderr("This release only supports migrate-v2 --dry-run; it reports the migration plan without changing data.");
     cli.stderr(formatMigrateV2Usage());
     return 1;
   }

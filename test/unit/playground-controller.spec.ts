@@ -30,6 +30,7 @@ function makePipeline(overrides: Record<string, unknown> = {}): any {
       res.write('data: {"delta":"ok"}\n\n');
       res.end('data: [DONE]\n\n');
     }),
+    drainPendingLogWrites: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -253,6 +254,40 @@ describe('PlaygroundController', () => {
       },
     });
     expect(result.response_summary.body_preview).toContain('Realtime preview is disabled');
+  });
+
+  it('flushes write-behind call logs before linking the probe evidence', async () => {
+    const order: string[] = [];
+    const persisted = { value: false };
+    const pipeline = makePipeline({
+      drainPendingLogWrites: jest.fn().mockImplementation(async () => {
+        order.push('drain');
+        persisted.value = true;
+      }),
+    });
+    const callLogRepo = {
+      findOne: jest.fn().mockImplementation(async () => {
+        order.push('lookup');
+        return persisted.value
+          ? { request_id: 'req_play_2', session_key: 'playground-test', input_tokens: 3, output_tokens: 2, cost_usd: 0.0001, latency_ms: 20 }
+          : null;
+      }),
+    };
+    const { controller } = makeController({
+      pipeline,
+      callLogRepo,
+      routeDecisionRepo: { findOne: jest.fn().mockResolvedValue({ request_id: 'req_play_2' }) },
+    });
+
+    const result = await controller.run({ endpoint: 'chat_completions', model: 'auto' });
+
+    expect(order).toEqual(['drain', 'lookup']);
+    expect(result.route_decision).toEqual({
+      request_id: 'req_play_2',
+      link: '/route-decisions/req_play_2',
+      available: true,
+    });
+    expect(result.privacy.standard_call_log_metadata).toBe(true);
   });
 
   it('rejects unsupported playground endpoints', async () => {
