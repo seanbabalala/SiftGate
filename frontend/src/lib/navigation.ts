@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Bell,
   BellRing,
   Bot,
   BookOpen,
@@ -19,8 +20,8 @@ import {
   Layers3,
   LayoutDashboard,
   Network,
+  PlayCircle,
   ReceiptText,
-  Rocket,
   Scale,
   ScrollText,
   Server,
@@ -81,7 +82,7 @@ export const navDomains: NavDomain[] = [
         labelKey: 'nav.dashboard',
         tabs: [
           { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard' },
-          { to: '/launchpad', icon: Rocket, labelKey: 'nav.launchpad' },
+          { to: '/launchpad', icon: PlayCircle, labelKey: 'nav.launchpad' },
         ],
       },
     ],
@@ -232,7 +233,7 @@ export const navDomains: NavDomain[] = [
         tabs: [
           { to: '/alerts', icon: BellRing, labelKey: 'nav.alertConnectors' },
           { to: '/control-room', icon: Activity, labelKey: 'nav.controlRoom', minRole: 'admin' },
-          { to: '/updates', icon: Rocket, labelKey: 'nav.releaseUpdates' },
+          { to: '/updates', icon: Bell, labelKey: 'nav.releaseUpdates' },
         ],
       },
     ],
