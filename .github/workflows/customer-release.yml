@@ -16,7 +16,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   verify:
-    timeout-minutes: 60
+    # Native acceptance runs upgrade, Fleet and recovery once per published
+    # source release, about 4-5 minutes each on arm64. v2.13.0 (13 sources)
+    # hit the old 60-minute limit on arm64 after amd64 passed in 45 minutes.
+    # test_source_acceptance.py keeps this budget ahead of the source count.
+    timeout-minutes: 120
     env:
       GH_TOKEN: ${{ github.token }}
     strategy:
