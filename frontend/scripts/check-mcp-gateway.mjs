@@ -7,7 +7,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const checks = [
   ['src/App.tsx', '/mcp'],
   ['src/App.tsx', 'McpGatewayPage'],
-  ['src/components/layout/Sidebar.tsx', 'nav.mcp'],
+  ['src/lib/navigation.ts', 'nav.mcp'],
   ['src/hooks/use-mcp.ts', '/api/dashboard/mcp'],
   ['src/pages/McpGatewayPage.tsx', 'mcp.privacy.description'],
   ['src/pages/McpGatewayPage.tsx', 'SetupGuidePanel'],

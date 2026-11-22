@@ -7,7 +7,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const checks = [
   ['src/App.tsx', '/semantic-platform'],
   ['src/App.tsx', 'SemanticPlatformPage'],
-  ['src/components/layout/Sidebar.tsx', 'nav.semanticPlatform'],
+  ['src/lib/navigation.ts', 'nav.semanticPlatform'],
   ['src/hooks/use-semantic-platform.ts', '/api/dashboard/semantic-platform'],
   ['src/hooks/use-semantic-platform.ts', '/api/dashboard/semantic-platform/prompt-templates'],
   ['src/hooks/use-semantic-platform.ts', '/api/dashboard/semantic-platform/semantic-cache/invalidate'],

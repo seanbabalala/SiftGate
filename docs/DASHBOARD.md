@@ -86,6 +86,37 @@ evidence review, and advanced setup surfaces. Optional items are clearly marked
 so a fresh OSS install is not blocked when it does not need Policy Namespaces or
 advanced features yet.
 
+## Navigation
+
+The sidebar groups the Dashboard by governance domain. Each entry opens a
+section; sections with several pages show them as tabs above the page. Every
+page keeps its existing URL, so bookmarks, log deep links and alert links keep
+working.
+
+| Domain | Sidebar entry | Pages (tabs) |
+| --- | --- | --- |
+| Overview | Governance Overview | Governance Overview (`/`), First run (`/launchpad`) |
+| Access & Policy | Gateway Keys | `/api-keys` |
+| | Policy Namespaces | `/namespaces` |
+| | Workspaces & Members | Workspaces (`/workspaces`), Members (`/members`) |
+| | Semantic Controls | `/semantic-platform` |
+| Agents & Tools | Coding Agents | Agent Profiles (`/agents`), Sessions (`/sessions`) |
+| | MCP Tool Gateway | `/mcp` |
+| Models & Routing | Providers | Connected Providers (`/nodes`), Provider Catalog (`/catalog`) |
+| | Routing | Routing Rules (`/routing`), Route Explain (`/route-decisions`) |
+| | Test Request | `/playground` |
+| Cost Control | Budgets & Chargeback | Budget Rules (`/budget`), Cost Review (`/cost-platform`), Usage Analytics (`/analytics`) |
+| | Pricing | Price books, Cost report, Admission preview, Media tasks, Event sources, and a Reconciliation menu for retained evidence, group evidence and budget recovery (`/pricing/*`) |
+| Audit & Operations | Request Logs | Request Logs (`/logs`), Batches (`/batches`) |
+| | Audit Trail | Audit Log (`/audit`), Config Audit (`/config-audit`) |
+| | Operations & Alerts | Alert connectors (`/alerts`), Host operations (`/control-room`, admins), Release updates (`/updates`) |
+| Labs (collapsed) | Traffic Experiments, Shadow, Eval Reports, Benchmarks, Agent Registry | `/experiments`, `/shadow`, `/evals`, `/benchmarks`, `/agent-platform` |
+
+Tabs that need a higher workspace role (pricing media and reconciliation pages
+for Operators, Host operations for Admins) are hidden from lower roles; the
+pages still enforce their own access checks. Labs opens automatically while one
+of its pages is active and otherwise remembers the operator's choice.
+
 ## Pages
 
 | Page | Purpose |

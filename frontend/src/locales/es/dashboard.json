@@ -105,7 +105,7 @@
   "configHealth.title": "Estado de configuración",
   "configHealth.upstreams": "Upstreams",
   "dashboard.description": "Revisa configuración, tráfico en vivo, confiabilidad y costos en un solo lugar.",
-  "dashboard.title": "Resumen del gateway",
+  "dashboard.title": "Resumen de gobernanza",
   "onboarding.actions.addProvider": "Agregar proveedor",
   "onboarding.actions.createKey": "Crear clave de gateway",
   "onboarding.actions.hideChecklist": "Ocultar lista",

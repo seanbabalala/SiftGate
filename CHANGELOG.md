@@ -16,6 +16,19 @@
   verifies their release version so they cannot drift again.
 - Update the homepage hero copy to the governance positioning. Layout and
   artwork are unchanged; its media review entry records the new hash.
+- Regroup the Dashboard sidebar by governance domain: Access & Policy, Agents &
+  Tools, Models & Routing, Cost Control, Audit & Operations, and a collapsed
+  Labs group, down from 31 entries in five groups to 15 entries plus 5 Labs
+  pages. Related pages now appear as tabs above the page, so every existing
+  route and URL keeps working. Pricing's six header links become tabs with a
+  Reconciliation menu; role-gated tabs follow the existing Operator/Admin
+  checks.
+- The overview is now titled "Governance Overview" and the sidebar subtitle
+  "AI Governance" in all seven locales. The active sidebar entry scrolls into
+  view instead of hiding under the scroll hint.
+- Align First run, Host operations and Release updates with the console's
+  heading scale, 8px controls and card surfaces. Their markup and behavior are
+  unchanged.
 
 ## 2.12.16 - 2026-11-11
 

@@ -253,7 +253,7 @@ const disallowedPlaceholderPattern =
 const pageSource = read('src/pages/AgentProfilesPage.tsx')
 const hookSource = read('src/hooks/use-agent-profiles.ts')
 const appSource = read('src/App.tsx')
-const sidebarSource = read('src/components/layout/Sidebar.tsx')
+const sidebarSource = read('src/lib/navigation.ts')
 const typeSource = read('src/types/api.ts')
 const packageJson = read('package.json')
 

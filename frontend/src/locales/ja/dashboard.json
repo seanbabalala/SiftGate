@@ -105,7 +105,7 @@
   "configHealth.title": "設定ヘルス",
   "configHealth.upstreams": "アップストリーム",
   "dashboard.description": "設定、ライブトラフィック、信頼性、コストを一か所で確認します。",
-  "dashboard.title": "ゲートウェイ概要",
+  "dashboard.title": "ガバナンス概要",
   "onboarding.actions.addProvider": "プロバイダを追加",
   "onboarding.actions.createKey": "ゲートウェイキーを作成",
   "onboarding.actions.hideChecklist": "リストを閉じる",

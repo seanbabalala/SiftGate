@@ -105,7 +105,7 @@
   "configHealth.title": "配置健康度",
   "configHealth.upstreams": "上游",
   "dashboard.description": "在一个页面检查配置、实时流量、可靠性和成本。",
-  "dashboard.title": "网关总览",
+  "dashboard.title": "治理总览",
   "onboarding.actions.addProvider": "添加供应商",
   "onboarding.actions.createKey": "创建网关密钥",
   "onboarding.actions.hideChecklist": "收起清单",

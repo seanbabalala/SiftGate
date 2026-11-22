@@ -16,7 +16,7 @@ function assert(condition, message) {
 }
 
 const app = read('src/App.tsx')
-const sidebar = read('src/components/layout/Sidebar.tsx')
+const sidebar = read('src/lib/navigation.ts')
 const hook = read('src/hooks/use-sessions.ts')
 const page = read('src/pages/SessionsPage.tsx')
 const types = read('src/types/api.ts')

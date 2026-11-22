@@ -252,7 +252,13 @@ function collectEnglishFallbacks() {
 }
 
 function validateCriticalKeyGroups() {
-  const sidebarSource = readFileSync(join(root, 'src/components/layout/Sidebar.tsx'), 'utf8')
+  // The sidebar renders the navigation model, so validate both the component's
+  // literal keys and every label key declared by the model.
+  const sidebarSource = [
+    readFileSync(join(root, 'src/components/layout/Sidebar.tsx'), 'utf8'),
+    readFileSync(join(root, 'src/lib/navigation.ts'), 'utf8'),
+    readFileSync(join(root, 'src/components/layout/DomainTabs.tsx'), 'utf8'),
+  ].join('\n')
   const dashboardSource = readFileSync(join(root, 'src/pages/DashboardPage.tsx'), 'utf8')
   const checklistKeys = collectTKeys(dashboardSource).filter(
     (key) => key.startsWith('onboarding.steps.') ||

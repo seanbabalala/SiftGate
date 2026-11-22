@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const page = readFileSync(join(root, 'src/pages/NamespacesPage.tsx'), 'utf8')
 const app = readFileSync(join(root, 'src/App.tsx'), 'utf8')
-const sidebar = readFileSync(join(root, 'src/components/layout/Sidebar.tsx'), 'utf8')
+const sidebar = readFileSync(join(root, 'src/lib/navigation.ts'), 'utf8')
 const hooks = readFileSync(join(root, 'src/hooks/use-namespaces.ts'), 'utf8')
 const apiTypes = readFileSync(join(root, 'src/types/api.ts'), 'utf8')
 const apiClient = readFileSync(join(root, 'src/lib/api.ts'), 'utf8')
