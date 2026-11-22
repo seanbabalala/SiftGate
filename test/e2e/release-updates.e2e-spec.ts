@@ -1,6 +1,15 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { createE2EHarness, E2EHarness } from './setup';
 import { AuthService } from '../../src/auth/auth.service';
 import { RELEASE_PAGE, RELEASES_URL } from '../../src/releases/release-updates.types';
+
+// The synthetic published release must always be newer than this checkout,
+// so derive it from package.json instead of pinning a version that a future
+// release bump would make "current".
+const [major, minor] = (JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf8')).version as string)
+  .split('.').map(Number);
+const NEXT = `${major}.${minor + 1}.0`;
 
 describe('release update notice API', () => {
   let h: E2EHarness;
@@ -28,11 +37,11 @@ describe('release update notice API', () => {
   it('only contacts the fixed public metadata endpoint and reports an unverified notice', async () => {
     h.fetchMock.setHandler(async url => {
       expect(url).toBe(RELEASES_URL);
-      return new Response(JSON.stringify([{tag_name:'v2.13.0',draft:false,prerelease:false,name:'Synthetic release',body:'<script>text only</script>',published_at:'2026-10-09T00:00:00Z',html_url:RELEASE_PAGE+'/tag/v2.13.0',assets:['-install.tar.gz','-install.tar.gz.sha256','-release.json','-release.sigstore.jsonl'].map(s=>({name:'siftgate-v2.13.0'+s,size:100,state:'uploaded'}))}]),{status:200,headers:{etag:'"test"'}});
+      return new Response(JSON.stringify([{tag_name:'v'+NEXT,draft:false,prerelease:false,name:'Synthetic release',body:'<script>text only</script>',published_at:'2026-10-09T00:00:00Z',html_url:RELEASE_PAGE+'/tag/v'+NEXT,assets:['-install.tar.gz','-install.tar.gz.sha256','-release.json','-release.sigstore.jsonl'].map(s=>({name:'siftgate-v'+NEXT+s,size:100,state:'uploaded'}))}]),{status:200,headers:{etag:'"test"'}});
     });
     await h.agent.put('/api/dashboard/release-updates/preferences').send({enabled:true,interval_hours:6,notify_connectors:false});
     const r = await h.agent.post('/api/dashboard/release-updates/check').send({});
-    expect(r.status).toBe(201); expect(r.body).toMatchObject({state:'available',update_available:true,automatic_install:false,latest:{version:'2.13.0',publisher_verified:false,compatibility:'not_checked'}});
+    expect(r.status).toBe(201); expect(r.body).toMatchObject({state:'available',update_available:true,automatic_install:false,latest:{version:NEXT,publisher_verified:false,compatibility:'not_checked'}});
     expect(h.fetchMock.calls).toHaveLength(1);
     expect(h.fetchMock.calls[0].headers).not.toHaveProperty('Authorization');
     expect((await h.agent.post('/api/dashboard/release-updates/check').send({})).status).toBe(429);
