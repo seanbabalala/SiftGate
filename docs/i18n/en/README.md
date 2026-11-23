@@ -27,8 +27,8 @@ leaves an audit trail without storing prompts or responses.
 
 | Pillar | What it covers |
 | --- | --- |
-| Access and policy | Scoped keys, Workspaces, Teams and Policy Namespaces with fail-closed intersections, per-key model pools, Agent Profiles, MCP Tool Gateway, RBAC and OIDC. |
-| Data protection and audit | Metadata-only logs and traces, local guardrails for PII, secrets and prompt injection, hash-chained management audit, versioned config rollback. |
+| Access and policy | Scoped keys, Workspaces, Teams and Policy Namespaces with fail-closed intersections, per-key model pools, Agent Profiles with Quick connect, MCP Tool Gateway, RBAC and OIDC, and a Blocked requests record of every refusal by key and reason. |
+| Data protection and audit | Metadata-only logs and traces, local guardrails for PII, secrets and prompt injection, hash-chained management audit, versioned config rollback, and a read-only privacy posture of every setting that keeps content. |
 | Cost control | Daily token and cost budgets, workspace price books, cost report, chargeback CSV/JSON, anomaly evidence, cache savings. |
 | Reliability and operations | Smart routing, fallbacks, circuit breakers, route explanation, PostgreSQL/Redis/Kubernetes path, Sigstore-signed release kits, reviewed upgrade plans. |
 

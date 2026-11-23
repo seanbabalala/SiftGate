@@ -23,8 +23,8 @@
 
 | 支柱 | 覆盖内容 |
 | --- | --- |
-| 接入与权限 | 受限 Key、Workspace、Team、Policy Namespace（交集为空即拒绝）、按 Key 的模型池、Agent Profile、MCP Tool Gateway、RBAC 与 OIDC。 |
-| 数据保护与审计 | 只存元数据的日志与路由记录，本地护栏处理 PII、密钥和 Prompt 注入，哈希链管理审计，版本化配置回滚。 |
+| 接入与权限 | 受限 Key、Workspace、Team、Policy Namespace（交集为空即拒绝）、按 Key 的模型池、Agent Profile 与快速接入、MCP Tool Gateway、RBAC 与 OIDC，每次拒绝都按 Key 和原因记入“已拦截请求”。 |
+| 数据保护与审计 | 只存元数据的日志与路由记录，本地护栏处理 PII、密钥和 Prompt 注入，哈希链管理审计，版本化配置回滚，只读隐私态势列出所有会保存内容的设置。 |
 | 成本管控 | 每日 Token 与费用预算、Workspace 价格簿、成本报表、CSV/JSON 成本分摊、异常证据、缓存节省。 |
 | 可靠性与运维 | 智能路由、Fallback、熔断、路由解释，PostgreSQL/Redis/Kubernetes 生产路径，Sigstore 签名发行包，经评审的升级计划。 |
 

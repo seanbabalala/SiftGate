@@ -83,6 +83,9 @@ intersection of Gateway API key, Team and Policy Namespace rules, and an empty
 intersection fails closed. Per-key model pools route an exact chat model across
 approved nodes. The Dashboard has authentication on by default, fixed
 admin/operator/viewer roles, Workspaces, invitations and optional OIDC.
+Quick connect creates a scoped key and a bound coding agent profile in one step.
+Every request refused by a key permission, a key's rate limit or a budget is
+recorded as metadata under **Blocked requests**, by key, reason and minute.
 
 **2. Data protection and audit.** Call logs, route traces, sessions, MCP calls,
 batch jobs and guardrail findings record metadata, not content. The optional
@@ -90,7 +93,9 @@ local guardrails plugin redacts or blocks PII, secrets, prompt injection and
 policy matches, and records findings as metadata. Management actions go to a
 hash-chained audit log, and configuration changes are versioned with
 validation-first rollback. Full Gateway API keys are shown once; provider
-secrets never appear in Dashboard APIs, logs or exports.
+secrets never appear in Dashboard APIs, logs or exports. A read-only privacy
+posture lists every setting that would keep prompt or response content and
+whether the running configuration has turned it on.
 
 **3. Cost control.** Daily token and cost budgets at global, namespace, team
 and key scope reject over-budget requests with `budget_exceeded`. Workspace
@@ -115,11 +120,12 @@ The Dashboard follows the same structure. Its sidebar groups work into
 and **Audit & Operations**, with previews and evaluation tools in a collapsed
 **Labs** group. Related pages appear as tabs inside each section, and every
 existing URL still works. The Governance Overview opens with the posture a
-reviewer asks about first: data protection, access control, spend guardrail
+reviewer asks about first: whether any setting keeps content, how many
+requests policy refused in the last 24 hours, spend against the daily limit,
 and runtime health. See the [Dashboard guide](docs/DASHBOARD.md#navigation).
 
 <p align="center">
-  <img src="docs/assets/dashboard/governance-overview.png" alt="SiftGate Governance Overview with data protection, access control, spend guardrail and runtime posture" width="100%" />
+  <img src="docs/assets/dashboard/governance-overview.png" alt="SiftGate Governance Overview: metadata-only data protection, requests blocked in the last 24 hours, spend against the daily limit, runtime, traffic by tier and guardrail findings" width="100%" />
 </p>
 
 ## See It In A 30-Minute Evaluation
@@ -127,16 +133,22 @@ and runtime health. See the [Dashboard guide](docs/DASHBOARD.md#navigation).
 Each scenario below is part of the [PoC playbook](docs/poc-playbook.md), which
 scripts the full demo with pass criteria.
 
-**Govern a coding agent with a scoped key.** Create a Gateway API key in the
-Dashboard, render an Agent Profile, and point the tool at SiftGate. The
-engineer's machine never holds a provider key, and `coding-auto` maps to
-policy-respecting smart routing.
+**Govern a coding agent with a scoped key.** In **Coding Agents → Quick
+connect**, pick the tool, then gateway routing or one model, and optionally a
+policy scope, daily cost and per-minute limit. SiftGate creates the scoped
+Gateway API key and a bound Agent Profile together and renders the setup
+snippet. The engineer's machine never holds a provider key, and `coding-auto`
+maps to policy-respecting smart routing.
 
 ```env
 ANTHROPIC_BASE_URL=http://localhost:2099
 ANTHROPIC_AUTH_TOKEN=<SIFTGATE_GATEWAY_API_KEY>
 ANTHROPIC_MODEL=coding-auto
 ```
+
+<p align="center">
+  <img src="docs/assets/dashboard/agent-quick-connect.png" alt="Quick connect for coding agents: choose Claude Code, Codex, Cursor, Cline or another supported tool" width="100%" />
+</p>
 
 **Pool provider keys without losing prompt cache.** Several upstream keys live
 inside one logical node. `cache_aware` keeps a session on the key that already
@@ -172,13 +184,27 @@ Dashboard to see the selected and rejected candidates, policy filters,
 credential hit, cache effect, fallback reason, latency and cost estimate. The
 prompt and response were never written to disk.
 
+<p align="center">
+  <img src="docs/assets/dashboard/route-explanation.png" alt="Route evidence for one request: the final selection after an upstream-error fallback, routing strategy and score, the decision path and its modality checks" width="100%" />
+</p>
+
+**Show what the gateway refused, and why.** Point a key with a narrow scope at
+a model, endpoint or budget it does not cover. Each refusal is recorded as
+metadata in **Request Logs → Blocked requests**, grouped per key, reason and
+minute, with filters for both. Refusals stay out of call logs, so success
+rates, routing samples and cost reports are unchanged.
+
+<p align="center">
+  <img src="docs/assets/dashboard/blocked-requests.png" alt="Blocked requests: refusals by reason (budget, rate limit, endpoint, model, modality, routing mode) and by key" width="100%" />
+</p>
+
 ## What Each Team Gets
 
 | Role | What SiftGate gives them |
 | --- | --- |
 | CTO and platform owner | One provider-neutral entry point for apps, agents and tools; switch or mix providers without client changes. |
-| CISO and security review | Metadata-only defaults, provider-key isolation, fail-closed Dashboard auth, RBAC and OIDC, hash-chained audit, signed releases. |
-| Finance and FinOps | Budgets at global, namespace, team and key scope, chargeback exports by team and project, cost and cache-savings evidence. |
+| CISO and security review | Metadata-only defaults, a privacy posture of every content-keeping setting, provider-key isolation, fail-closed Dashboard auth, RBAC and OIDC, hash-chained audit, signed releases. |
+| Finance and FinOps | Budgets at global, namespace, team and key scope, refused-request evidence per key, chargeback exports by team and project, cost and cache-savings evidence. |
 | Engineering and SRE | OpenAI- and Anthropic-compatible endpoints, automatic failover, route explanations, alerts to Feishu, WeCom, Telegram or webhooks. |
 
 ## Architecture
@@ -233,6 +259,7 @@ feature is explicitly configured to retain content.
 
 The open-source gateway is complete on its own. AI requests never need to pass
 through a hosted service, and no control plane is required.
+
 ## From PoC To Production
 
 | Stage | Recommended setup |

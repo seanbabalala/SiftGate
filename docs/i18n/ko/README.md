@@ -23,8 +23,8 @@
 
 | 축 | 다루는 범위 |
 | --- | --- |
-| 액세스 및 정책 | 범위 제한 키, Workspace, Team, Policy Namespace(교집합이 비면 거부), 키별 모델 풀, Agent Profile, MCP Tool Gateway, RBAC와 OIDC. |
-| 데이터 보호 및 감사 | 메타데이터만 남기는 로그와 라우팅 기록, PII·시크릿·프롬프트 인젝션용 로컬 가드레일, 해시 체인 관리 감사, 버전 관리되는 설정 롤백. |
+| 액세스 및 정책 | 범위 제한 키, Workspace, Team, Policy Namespace(교집합이 비면 거부), 키별 모델 풀, Agent Profile과 빠른 연결, MCP Tool Gateway, RBAC와 OIDC. 모든 거부는 키와 사유별로 '차단된 요청'에 기록. |
+| 데이터 보호 및 감사 | 메타데이터만 남기는 로그와 라우팅 기록, PII·시크릿·프롬프트 인젝션용 로컬 가드레일, 해시 체인 관리 감사, 버전 관리되는 설정 롤백, 내용을 저장하는 모든 설정을 보여 주는 읽기 전용 개인정보 보호 상태. |
 | 비용 관리 | 일일 토큰·비용 예산, Workspace 가격표, 비용 보고서, CSV/JSON 비용 배분, 이상 징후 증거, 캐시 절감액. |
 | 안정성 및 운영 | 스마트 라우팅, 폴백, 서킷 브레이커, 라우팅 설명, PostgreSQL/Redis/Kubernetes 운영 경로, Sigstore 서명 릴리스 키트, 검토된 업그레이드 계획. |
 

@@ -20,23 +20,47 @@
       "privacy_review": "Existing product/provider icon; no customer identity, account detail or credential content.",
       "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
     },
+    "docs/assets/brand/siftgate-social-preview.png": {
+      "sha256": "0125436838e6de62a1374230bb43ace91ecc891d747569f3be93d7d183c8c4df",
+      "reviewed_on": "2026-11-23",
+      "privacy_review": "Generated 1280x640 repository social preview card: the SiftGate mark, the product headline, the four governance pillars and a one-line compatibility note on a brand-colored background. No screenshot, customer identity, account detail, credential or third-party logo. Shown in full to the maintainer before commit and approved on 2026-11-23.",
+      "source_note": "Rendered from an HTML layout with headless Chrome using the existing siftgate-mark.svg paths and brand colors, for upload as the GitHub social preview. Privacy approval does not grant additional copyright or trademark rights."
+    },
     "docs/assets/comparison/competitive-matrix.svg": {
       "sha256": "7e313af9b15a80a9a19a33ae635d06c499e1a2069bc6760b68bdf09da75b0f61",
       "reviewed_on": "2026-10-10",
       "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
       "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
     },
+    "docs/assets/dashboard/agent-quick-connect.png": {
+      "sha256": "40d16d9a5b23980b0aaddafe5497f8ce6d7ac7da600af94e6d3fdd2409bd4375",
+      "reviewed_on": "2026-11-23",
+      "privacy_review": "Screenshot of a disposable local sandbox gateway (127.0.0.1:2299, SQLite, separate from any live deployment) with synthetic traffic from a local mock upstream: placeholder node names (openai-primary, azure-openai-eu, anthropic-claude, deepseek-backup), synthetic key and namespace names, synthetic request ids, default workspace. no prompt, PII value, credential, real provider data, personal name, email or customer request appears. The tool logos are the reviewed icons already shipped in frontend/public/agents. Shown in full to the maintainer before commit and approved on 2026-11-23.",
+      "source_note": "Captured with headless Chrome from the SiftGate v2.14.0 Dashboard at 1440 CSS px and 2x scale, downscaled to 1440 px; synthetic rows were spread over the last 24 hours so daily views read like a working day. Product UI and brand assets only. Privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/dashboard/blocked-requests.png": {
+      "sha256": "49c9b49becfe051153020103e0a06295676bd9b02b5100dcb565eae039ba915e",
+      "reviewed_on": "2026-11-23",
+      "privacy_review": "Screenshot of a disposable local sandbox gateway (127.0.0.1:2299, SQLite, separate from any live deployment) with synthetic traffic from a local mock upstream: placeholder node names (openai-primary, azure-openai-eu, anthropic-claude, deepseek-backup), synthetic key and namespace names, synthetic request ids, default workspace. Guardrail findings show rule names only; no prompt, PII value, credential, real provider data, personal name, email or customer request appears. Shown in full to the maintainer before commit and approved on 2026-11-23.",
+      "source_note": "Captured with headless Chrome from the SiftGate v2.14.0 Dashboard at 1440 CSS px and 2x scale, downscaled to 1440 px; synthetic rows were spread over the last 24 hours so daily views read like a working day. Product UI and brand assets only. Privacy approval does not grant additional copyright or trademark rights."
+    },
     "docs/assets/dashboard/governance-overview.png": {
-      "sha256": "131f35fb5497103b20cfdfc7334828075ed73afe39cb80b11f31d3f6e18e8f26",
-      "reviewed_on": "2026-11-22",
-      "privacy_review": "Screenshot of a disposable local sandbox gateway with synthetic traffic from a mock upstream: placeholder node names (demo-openai, demo-backup), synthetic key names, default workspace, localhost only. No credentials, real provider data, personal names, emails or customer requests. Reviewed 2026-11-22 before release at this hash. Reviewer opened the full image and confirmed every cell is synthetic.",
-      "source_note": "Captured from the SiftGate Dashboard built from this branch; product UI and brand assets only. Privacy approval does not grant additional copyright or trademark rights."
+      "sha256": "17816c13d9e76b1d7a377b26fd51c1432b4cba9d907a6ac62aedeaf815c01239",
+      "reviewed_on": "2026-11-23",
+      "privacy_review": "Screenshot of a disposable local sandbox gateway (127.0.0.1:2299, SQLite, separate from any live deployment) with synthetic traffic from a local mock upstream: placeholder node names (openai-primary, azure-openai-eu, anthropic-claude, deepseek-backup), synthetic key and namespace names, synthetic request ids, default workspace. Guardrail findings show rule names only; no prompt, PII value, credential, real provider data, personal name, email or customer request appears. Shown in full to the maintainer before commit and approved on 2026-11-23.",
+      "source_note": "Captured with headless Chrome from the SiftGate v2.14.0 Dashboard at 1440 CSS px and 2x scale, downscaled to 1440 px; synthetic rows were spread over the last 24 hours so daily views read like a working day. Product UI and brand assets only. Privacy approval does not grant additional copyright or trademark rights."
     },
     "docs/assets/dashboard/provider-catalog-dashboard.png": {
       "sha256": "d61a8535a5240320272cac4e1209e024dd180f7bdc2453af83f0d4c4235d93d4",
       "reviewed_on": "2026-10-10",
       "privacy_review": "Product-only illustration or sanitized catalog screenshot; no credentials, personal names, emails or customer requests.",
       "source_note": "Existing repository asset preserved without modification; privacy approval does not grant additional copyright or trademark rights."
+    },
+    "docs/assets/dashboard/route-explanation.png": {
+      "sha256": "46d5245d376e2bca48b8944676755d548b0ecf1a18ea7e9ff5bcf6dd40b48e18",
+      "reviewed_on": "2026-11-23",
+      "privacy_review": "Screenshot of a disposable local sandbox gateway (127.0.0.1:2299, SQLite, separate from any live deployment) with synthetic traffic from a local mock upstream: placeholder node names (openai-primary, azure-openai-eu, anthropic-claude, deepseek-backup), synthetic key and namespace names, synthetic request ids, default workspace. Guardrail findings show rule names only; no prompt, PII value, credential, real provider data, personal name, email or customer request appears. Shown in full to the maintainer before commit and approved on 2026-11-23.",
+      "source_note": "Captured with headless Chrome from the SiftGate v2.14.0 Dashboard at 1440 CSS px and 2x scale, downscaled to 1440 px; synthetic rows were spread over the last 24 hours so daily views read like a working day. Product UI and brand assets only. Privacy approval does not grant additional copyright or trademark rights."
     },
     "docs/assets/demo/agent-mcp-demo.svg": {
       "sha256": "79019f97c80c160036c13255efa277190c13c520575ff7a2ac3f060bb7ac49c8",
