@@ -23,8 +23,8 @@
 
 | เสาหลัก | ครอบคลุม |
 | --- | --- |
-| การเข้าถึงและนโยบาย | key ที่จำกัดขอบเขต, Workspace, Team, Policy Namespace (ถ้าส่วนร่วมว่างจะปฏิเสธทันที), model pool ราย key, Agent Profile, MCP Tool Gateway, RBAC และ OIDC |
-| การปกป้องข้อมูลและการตรวจสอบ | log และ route trace แบบ metadata-only, guardrails ภายในสำหรับ PII, secret และ prompt injection, management audit แบบ hash chain, rollback ของ config แบบมีเวอร์ชัน |
+| การเข้าถึงและนโยบาย | key ที่จำกัดขอบเขต, Workspace, Team, Policy Namespace (ถ้าส่วนร่วมว่างจะปฏิเสธทันที), model pool ราย key, Agent Profile พร้อมการเชื่อมต่อด่วน, MCP Tool Gateway, RBAC และ OIDC และทุกการปฏิเสธจะถูกบันทึกใน "คำขอที่ถูกบล็อก" ตาม key และเหตุผล |
+| การปกป้องข้อมูลและการตรวจสอบ | log และ route trace แบบ metadata-only, guardrails ภายในสำหรับ PII, secret และ prompt injection, management audit แบบ hash chain, rollback ของ config แบบมีเวอร์ชัน และ privacy posture แบบอ่านอย่างเดียวที่แสดงทุกการตั้งค่าที่เก็บเนื้อหา |
 | การควบคุมต้นทุน | งบ token และค่าใช้จ่ายรายวัน, price book ราย Workspace, cost report, การปันส่วนแบบ CSV/JSON, หลักฐานความผิดปกติ, ยอดประหยัดจาก cache |
 | ความเสถียรและการปฏิบัติการ | smart routing, fallback, circuit breaker, route explanation, เส้นทาง PostgreSQL/Redis/Kubernetes, release kit ที่ลงนามด้วย Sigstore, แผนอัปเกรดที่ผ่านการตรวจทาน |
 
