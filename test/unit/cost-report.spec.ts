@@ -120,5 +120,6 @@ contract('PostgreSQL cost reports',async()=>{if(!pg)throw Error('No private PG')
 
 describe('report money boundaries',()=>{
  it('keeps exponent-format legacy amounts without rounding a tiny nonzero value into free',()=>{expect(legacyReportMoney(2e-8)).toBe('0.000000020000000000');expect(legacyReportMoney(1e-20)).toBeNull();expect(legacyReportMoney(1e30)).toBeNull();expect(legacyReportMoney(0)).toBe('0.000000000000000000')});
+ it('rounds binary-float digits beyond the 18-digit report scale instead of dropping the row',()=>{expect(legacyReportMoney(0.00039779999999999997)).toBe('0.000397800000000000');expect(legacyReportMoney(0.0006230600000000002)).toBe('0.000623060000000000');expect(legacyReportMoney(7.499999999999999e-8)).toBe('0.000000075000000000');expect(legacyReportMoney(0.1+0.2)).toBe('0.300000000000000040');expect(legacyReportMoney(1.5e-18)).toBe('0.000000000000000002');expect(legacyReportMoney(5e-19)).toBeNull()});
  it('sums beyond the individual component input bound without float loss',()=>{expect(sumCostReportMoney('999999999999999999999999999999.999999999999999999','0.000000000000000001')).toBe('1000000000000000000000000000000.000000000000000000')});
 });

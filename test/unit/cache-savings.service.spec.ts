@@ -209,6 +209,52 @@ describe('CacheSavingsService', () => {
     });
   });
 
+  it('compares rows whose float cost prints with more than 18 decimals', async () => {
+    // SQLite returns 0.0003978 as 0.00039779999999999997. One such row used
+    // to mark the whole window "partial" and hide the savings figure.
+    const rows = [
+      {
+        request_id: 'req_float_artifact',
+        timestamp: new Date('2026-05-06T01:00:00Z'),
+        node_id: 'openai',
+        model: 'gpt-4o-mini',
+        input_tokens: 1800,
+        output_tokens: 300,
+        cache_read_input_tokens: 1200,
+        cache_creation_input_tokens: 0,
+        cost_usd: 0.00039014999999999997,
+        cost_without_cache_usd: 0.00044970000000000003,
+      },
+      {
+        request_id: 'req_plain',
+        timestamp: new Date('2026-05-06T02:00:00Z'),
+        node_id: 'openai',
+        model: 'gpt-4o',
+        input_tokens: 1400,
+        output_tokens: 500,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cost_usd: 0.0085,
+        cost_without_cache_usd: 0.0085,
+      },
+    ];
+    const { service } = makeService(rows);
+
+    const result = await service.getSummary('1d', 'model');
+
+    expect(result.summary).toMatchObject({
+      comparison_status: 'complete',
+      comparable_requests: 2,
+      unavailable_reference_requests: 0,
+    });
+    expect(result.summary.exact).toEqual({
+      comparable_actual_usd: '0.008890150000000000',
+      comparable_no_cache_usd: '0.008949700000000000',
+      comparable_savings_usd: '0.000059550000000000',
+    });
+    expect(result.summary.savings_usd).toBeCloseTo(0.00006, 6);
+  });
+
   it('preserves old recorded costs rather than retroactively applying newly configured cache prices', async () => {
     const rows = [
       {

@@ -296,6 +296,13 @@ export function Sidebar({ collapsed = false, isMobile = false, mobileOpen = fals
           })}
         </nav>
         {showScrollHint && (
+          // Fade the nav out under the hint so the pill never sits on top of a readable label.
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-14 bg-gradient-to-b from-transparent to-[var(--sidebar-bg)]"
+          />
+        )}
+        {showScrollHint && (
           <div
             aria-hidden="true"
             className={cn(

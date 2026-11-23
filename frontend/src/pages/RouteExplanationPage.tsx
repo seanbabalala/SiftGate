@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { formatReasoningEffort } from '@/lib/reasoning-effort-display'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -182,13 +182,16 @@ function compatibilityBadge(candidate: RouteDecisionCandidate) {
 function ScoreMeter({
   label,
   value,
+  detail,
 }: {
   label: string
   value: number | null
+  /** The raw metric behind the score (cost, latency, context fit), shown under the bar. */
+  detail?: ReactNode
 }) {
   const width = value === null ? 0 : Math.max(0, Math.min(100, value * 100))
   return (
-    <div className="min-w-[92px]">
+    <div className="min-w-[100px]">
       <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--foreground-dim)]">
         <span>{label}</span>
         <span className="font-mono">{value === null ? '-' : value.toFixed(2)}</span>
@@ -199,6 +202,9 @@ function ScoreMeter({
           style={{ width: `${width}%` }}
         />
       </div>
+      {detail && (
+        <div className="mt-1 font-mono text-[10px] leading-4 text-[var(--foreground-muted)]">{detail}</div>
+      )}
     </div>
   )
 }
@@ -750,25 +756,25 @@ function CandidateTable({ candidates }: { candidates: RouteDecisionCandidate[] }
     )
   }
 
+  // Six columns at px-3 fit a 1440 px Dashboard. Cost, latency and context sit
+  // under their own score meters instead of three more columns.
+  const cell = 'px-3'
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>{t('routeExplanation.table.candidate')}</TableHead>
-          <TableHead>{t('routeExplanation.table.circuit')}</TableHead>
-          <TableHead>{t('routeExplanation.table.decision')}</TableHead>
-          <TableHead>{t('routeExplanation.table.capability')}</TableHead>
-          <TableHead>{t('routeExplanation.table.cache')}</TableHead>
-          <TableHead>{t('routeExplanation.table.tradeoffScores')}</TableHead>
-          <TableHead className="text-right">{t('routeExplanation.table.cost')}</TableHead>
-          <TableHead className="text-right">{t('routeExplanation.table.latency')}</TableHead>
-          <TableHead>{t('routeExplanation.table.context')}</TableHead>
+          <TableHead className={cell}>{t('routeExplanation.table.candidate')}</TableHead>
+          <TableHead className={cell}>{t('routeExplanation.table.circuit')}</TableHead>
+          <TableHead className={cell}>{t('routeExplanation.table.decision')}</TableHead>
+          <TableHead className={cell}>{t('routeExplanation.table.capability')}</TableHead>
+          <TableHead className={cell}>{t('routeExplanation.table.cache')}</TableHead>
+          <TableHead className={cell}>{t('routeExplanation.table.tradeoffScores')}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {candidates.map((candidate) => (
           <TableRow key={`${candidate.node}:${candidate.model}:${candidate.position}`}>
-            <TableCell>
+            <TableCell className={cell}>
               <div className="flex min-w-0 items-center gap-2">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--background-secondary)]">
                   <NodeIcon
@@ -782,7 +788,7 @@ function CandidateTable({ candidates }: { candidates: RouteDecisionCandidate[] }
                   <div className="truncate font-mono text-[12px] font-semibold text-[var(--foreground)]">
                     {candidate.node}
                   </div>
-                  <div className="mt-0.5 max-w-[220px] truncate font-mono text-[11px] text-[var(--foreground-dim)]">
+                  <div className="mt-0.5 max-w-[170px] truncate font-mono text-[11px] text-[var(--foreground-dim)]">
                     <Tooltip content={candidate.model}>
                       <span>{candidate.model}</span>
                     </Tooltip>
@@ -795,12 +801,12 @@ function CandidateTable({ candidates }: { candidates: RouteDecisionCandidate[] }
                 </div>
               )}
             </TableCell>
-            <TableCell>
+            <TableCell className={cell}>
               <Badge variant={circuitBadge(candidate.circuit_state, candidate.circuit_available)}>
                 {candidate.circuit_state}
               </Badge>
             </TableCell>
-            <TableCell>
+            <TableCell className={cell}>
               <div className="flex flex-wrap gap-1.5">
                 {candidate.selected && <Badge variant="emerald">{t('routeExplanation.badges.selected')}</Badge>}
                 {candidate.fallback && <Badge variant="blue">{t('routeExplanation.badges.fallback')}</Badge>}
@@ -818,9 +824,9 @@ function CandidateTable({ candidates }: { candidates: RouteDecisionCandidate[] }
                 </div>
               )}
             </TableCell>
-            <TableCell>
+            <TableCell className={cell}>
               {candidate.capability_evidence ? (
-                <div className="max-w-[260px] space-y-2">
+                <div className="w-[200px] space-y-2">
                   <div className="flex flex-wrap gap-1">
                     <Badge variant={capabilityBadge(candidate)}>
                       {formatEvidenceValue(
@@ -940,9 +946,10 @@ function CandidateTable({ candidates }: { candidates: RouteDecisionCandidate[] }
                 <Badge variant="zinc">{t('routeExplanation.values.unknown')}</Badge>
               )}
             </TableCell>
-            <TableCell>
+            <TableCell className={cell}>
               {candidate.cache_evidence ? (
-                <div className="max-w-[190px] space-y-2">
+                // A fixed width keeps each cache badge on one line instead of one word per line.
+                <div className="w-[180px] space-y-2 [&_span]:whitespace-nowrap">
                   <div className="flex flex-wrap gap-1">
                     <Badge variant={cacheBadge(candidate)} className="gap-1">
                       <Sparkles className="h-3 w-3" />
@@ -1027,38 +1034,46 @@ function CandidateTable({ candidates }: { candidates: RouteDecisionCandidate[] }
                 <Badge variant="zinc">{t('routeExplanation.values.unknown')}</Badge>
               )}
             </TableCell>
-            <TableCell>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                <ScoreMeter label={t('routeExplanation.scores.cost')} value={candidate.scores.cost} />
-                <ScoreMeter label={t('routeExplanation.scores.latency')} value={candidate.scores.latency} />
-                <ScoreMeter label={t('routeExplanation.scores.context')} value={candidate.scores.context} />
+            <TableCell className={cell}>
+              {/* Two meters per row at any viewport: a viewport breakpoint cannot see this cell's width. */}
+              <div className="grid w-[212px] grid-cols-2 gap-x-3 gap-y-3">
+                <ScoreMeter
+                  label={t('routeExplanation.scores.cost')}
+                  value={candidate.scores.cost}
+                  detail={candidate.metrics.estimated_cost_usd === null ? null : formatCost(candidate.metrics.estimated_cost_usd)}
+                />
+                <ScoreMeter
+                  label={t('routeExplanation.scores.latency')}
+                  value={candidate.scores.latency}
+                  detail={candidate.metrics.avg_latency_ms === null ? null : (
+                    <>
+                      <div>{formatLatency(candidate.metrics.avg_latency_ms)}</div>
+                      {candidate.metrics.p95_latency_ms !== null && (
+                        <div className="text-[var(--foreground-dim)]">
+                          {t('routeExplanation.table.p95', { value: formatLatency(candidate.metrics.p95_latency_ms) })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                />
+                <ScoreMeter
+                  label={t('routeExplanation.scores.context')}
+                  value={candidate.scores.context}
+                  detail={
+                    <>
+                      <Badge variant={contextBadge(candidate.metrics.context_fit)}>
+                        {formatContextFit(candidate.metrics.context_fit, t)}
+                      </Badge>
+                      {candidate.metrics.max_context_tokens !== null && (
+                        <div className="mt-1 text-[var(--foreground-dim)]">
+                          {t('routeExplanation.table.maxContext', { value: candidate.metrics.max_context_tokens.toLocaleString() })}
+                        </div>
+                      )}
+                    </>
+                  }
+                />
                 <ScoreMeter label={t('routeExplanation.scores.cache')} value={candidate.scores.cache ?? null} />
               </div>
-            </TableCell>
-            <TableCell className="text-right font-mono text-[11px] text-[var(--foreground-muted)]">
-              {candidate.metrics.estimated_cost_usd === null
-                ? '-'
-                : formatCost(candidate.metrics.estimated_cost_usd)}
-            </TableCell>
-            <TableCell className="text-right font-mono text-[11px] text-[var(--foreground-muted)]">
-              {candidate.metrics.avg_latency_ms === null
-                ? '-'
-                : formatLatency(candidate.metrics.avg_latency_ms)}
-              {candidate.metrics.p95_latency_ms !== null && (
-                <div className="text-[10px] text-[var(--foreground-dim)]">
-                  {t('routeExplanation.table.p95', { value: formatLatency(candidate.metrics.p95_latency_ms) })}
-                </div>
-              )}
-            </TableCell>
-            <TableCell>
-              <Badge variant={contextBadge(candidate.metrics.context_fit)}>
-                {formatContextFit(candidate.metrics.context_fit, t)}
-              </Badge>
-              {candidate.metrics.max_context_tokens !== null && (
-                <div className="mt-1 font-mono text-[10px] text-[var(--foreground-dim)]">
-                  {t('routeExplanation.table.maxContext', { value: candidate.metrics.max_context_tokens.toLocaleString() })}
-                </div>
-              )}
             </TableCell>
           </TableRow>
         ))}
