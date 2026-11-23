@@ -23,8 +23,8 @@
 
 | 支柱 | 涵蓋內容 |
 | --- | --- |
-| 存取與權限 | 受限 Key、Workspace、Team、Policy Namespace（交集為空即拒絕）、依 Key 的模型池、Agent Profile、MCP Tool Gateway、RBAC 與 OIDC。 |
-| 資料保護與稽核 | 只存中繼資料的日誌與路由紀錄，本地護欄處理 PII、密鑰與 Prompt 注入，雜湊鏈管理稽核，版本化設定回滾。 |
+| 存取與權限 | 受限 Key、Workspace、Team、Policy Namespace（交集為空即拒絕）、依 Key 的模型池、Agent Profile 與快速接入、MCP Tool Gateway、RBAC 與 OIDC，每次拒絕都依 Key 和原因記入「已攔截請求」。 |
+| 資料保護與稽核 | 只存中繼資料的日誌與路由紀錄，本地護欄處理 PII、密鑰與 Prompt 注入，雜湊鏈管理稽核，版本化設定回滾，唯讀隱私態勢列出所有會保存內容的設定。 |
 | 成本管控 | 每日 Token 與費用預算、Workspace 價格簿、成本報表、CSV/JSON 成本分攤、異常證據、快取節省。 |
 | 可靠性與維運 | 智慧路由、Fallback、熔斷、路由說明，PostgreSQL/Redis/Kubernetes 正式環境路徑，Sigstore 簽章發行套件，經審查的升級計畫。 |
 

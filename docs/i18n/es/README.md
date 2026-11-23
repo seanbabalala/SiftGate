@@ -23,8 +23,8 @@ Versión actual: **v2.14.0**.
 
 | Pilar | Qué cubre |
 | --- | --- |
-| Acceso y políticas | Claves acotadas, Workspaces, Teams y Policy Namespaces con intersecciones que deniegan si quedan vacías, pools de modelos por clave, Agent Profiles, MCP Tool Gateway, RBAC y OIDC. |
-| Protección de datos y auditoría | Logs y trazas de ruta solo con metadatos, guardrails locales para PII, secretos e inyección de prompts, auditoría de gestión encadenada por hash y rollback de configuración versionada. |
+| Acceso y políticas | Claves acotadas, Workspaces, Teams y Policy Namespaces con intersecciones que deniegan si quedan vacías, pools de modelos por clave, Agent Profiles con conexión rápida, MCP Tool Gateway, RBAC y OIDC, y un registro de Solicitudes bloqueadas por clave y motivo. |
+| Protección de datos y auditoría | Logs y trazas de ruta solo con metadatos, guardrails locales para PII, secretos e inyección de prompts, auditoría de gestión encadenada por hash, rollback de configuración versionada y un estado de privacidad de solo lectura con cada ajuste que guarda contenido. |
 | Control de costos | Presupuestos diarios de tokens y costo, libros de precios por Workspace, informe de costos, imputación en CSV/JSON, evidencia de anomalías y ahorro por caché. |
 | Confiabilidad y operaciones | Enrutamiento inteligente, fallbacks, circuit breakers, explicación de rutas, camino a PostgreSQL/Redis/Kubernetes, kits de versión firmados con Sigstore y planes de actualización revisados. |
 
