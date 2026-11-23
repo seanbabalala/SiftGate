@@ -23,9 +23,26 @@ export function subtractCostReportMoney(left: string, right: string): string {
 export function legacyReportMoney(value: number): string | null {
   if (!Number.isFinite(value) || value < 0) return null;
   const text = String(value), [coefficient, exponent] = text.toLowerCase().split('e');
-  if (exponent === undefined) return /^\d{1,30}(?:\.\d{1,18})?$/.test(text) ? sumCostReportMoney('0', text) : null;
+  if (exponent === undefined) return reportScale(text);
   const [whole, part = ''] = coefficient.split('.'), digits = whole + part, position = whole.length + Number(exponent);
   if (position > 30 || position < -17) return null;
   const expanded = position <= 0 ? `0.${'0'.repeat(-position)}${digits}` : position >= digits.length ? digits + '0'.repeat(position - digits.length) : `${digits.slice(0, position)}.${digits.slice(position)}`;
-  return /^\d{1,30}(?:\.\d{1,18})?$/.test(expanded) ? sumCostReportMoney('0', expanded) : null;
+  return reportScale(expanded);
+}
+
+/**
+ * Fit a plain decimal to the 18-digit report scale. Binary floats such as
+ * 0.0003978 print as 0.00039779999999999997; round those extra digits half-up
+ * instead of discarding the row. A nonzero amount that would round to zero
+ * stays unknown, so a tiny cost is never reported as free.
+ */
+function reportScale(text: string): string | null {
+  const match = /^(\d{1,30})(?:\.(\d+))?$/.exec(text);
+  if (!match) return null;
+  const [, whole, fraction = ''] = match;
+  if (fraction.length <= 18) return sumCostReportMoney('0', text);
+  const kept = BigInt(whole + fraction.slice(0, 18)) + (fraction.charCodeAt(18) >= 53 ? 1n : 0n);
+  if (kept === 0n) return null;
+  const digits = String(kept).padStart(19, '0');
+  return sumCostReportMoney('0', `${digits.slice(0, -18)}.${digits.slice(-18)}`);
 }

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Fix Cache Savings reading "—" on SQLite installs. A float cost such as
+  0.0003978 is returned as `0.00039779999999999997`, and the report rejected
+  any amount with more than 18 decimals, so one such row marked the whole
+  window as partial. Those digits now round half-up at the 18-digit report
+  scale. A nonzero amount that would round to zero stays unknown, so a tiny
+  cost is never reported as free. Legacy cost estimates in the cost report use
+  the same rule. Stored rows are not rewritten.
+- Route evidence: the candidate table fits a 1440 px Dashboard without
+  overlapping text. Cost, latency (with p95) and context now sit under their
+  score meters instead of three extra columns, and cache badges stay on one
+  line.
+- Sidebar: when the navigation overflows, it fades out under the "Scroll for
+  more" hint instead of the hint covering a menu label.
+
 ## 2.14.0 - 2026-11-22
 
 - Record requests the gateway refuses on a governance policy: a budget limit,
